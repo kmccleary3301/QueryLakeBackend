@@ -1,0 +1,39 @@
+{
+    "use_llama_cpp": false,
+    "default_llm_config": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+        "lora_path": null,
+        "temperature": 0.3,
+        "typical": 0.7,
+        "verbose": true,
+        "max_seq_len": 2095,
+        "fused_attn": false
+    },
+    "config_example_all_parameters_exllama": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ", 
+        "lora_path": null,
+        "temperature": 0.3,
+        "typical": 0.7,
+        "verbose": true,
+        "max_seq_len": 2095,
+        "fused_attn": false,
+        "beams": 1, 
+        "beam_length": 40, 
+        "alpha_value": 1.0,
+        "compress_pos_emb": 4.0,
+        "set_auto_map": "3, 2",
+        "stop_sequences": ["### Input", "### Response", "### Instruction", "Human:", "Assistant", "User:", "AI:"]
+    },
+    "config_example_llamacpp": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/llama2_7b_chat/llama-2-7b-chat.Q4_K_M.gguf", 
+        "n_ctx": 6000,
+        "n_gpu_layers": 512,
+        "n_batch": 30,
+        "temperature": 0.9,
+        "max_tokens": 4095,
+        "n_parts": 1
+    }
+}

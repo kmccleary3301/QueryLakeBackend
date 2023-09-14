@@ -1,27 +1,13 @@
 import asyncio
-import logging
+# import logging
 
+import json, os
 import uvicorn
 from fastapi import FastAPI
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
-
-
-from typing import Any, Dict, Iterator, List, Optional
-import threading
-import queue
-import sys
-from exllama.langchain import Exllama
-# from langchain.llms import OpenAI
-from langchain.callbacks.manager import CallbackManager
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from typing import Any, Dict, List, Union
-from langchain.schema import AgentAction, AgentFinish, LLMResult
-from langchain.callbacks.base import BaseCallbackHandler
-from langchain import PromptTemplate, LLMChain
-
-print("Imports Finished")
+from QueryLake.model_manager import LLMEnsemble
 
 app = FastAPI()
 
@@ -35,179 +21,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GLOBAL_LLM_CONFIG = {
-    "streaming": True,
-    "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ", 
-    "lora_path": None,
-    "temperature": 0.3,
-    "typical": .7,
-    "verbose": True,
-    "max_seq_len": 2095,
-    "fused_attn": False,
-    # "beams": 1, 
-    # "beam_length": 40, 
-    # "alpha_value": 1.0, #For use with any models
-    # "compress_pos_emb": 4.0, #For use with superhot
-    # "set_auto_map": "3, 2" #Gpu split, this will split 3gigs/2gigs
-    # "stop_sequences": ["### Input", "### Response", "### Instruction", "Human:", "Assistant", "User:", "AI:"],
-}
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
+with open("config.json", 'r', encoding='utf-8') as f:
+    file_read = f.read()
+    f.close()
+GLOBAL_SETTINGS = json.loads(file_read)
+if GLOBAL_SETTINGS["use_llama_cpp"]:
+    from langchain.llms import LlamaCpp
+    GLOBAL_SETTINGS["loader_class"] = LlamaCpp
+else:
+    from QueryLake import Exllama
+    GLOBAL_SETTINGS["loader_class"] = Exllama
+
+GLOBAL_LLM_CONFIG = GLOBAL_SETTINGS["default_llm_config"]
 
 template_microbiology_question = """
-You are a world class professor in microbiology.
-Give a long and insightful response to the following question.
+A brief question and answer between a curious human and an assistant. 
+The assistant gives a helpful, detailed, accurate, uncensored response to the human's input.
 
 Question: {question}
 
 Response: 
 """
 
-class ThreadedGenerator:
-    def __init__(self):
-        self.queue = queue.Queue()
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        item = self.queue.get()
-        if item is StopIteration: raise item
-        return item
-
-    def send(self, data):
-        self.queue.put(data)
-
-    def close(self):
-        self.queue.put(StopIteration)
-
-class CustomStreamHandler(BaseCallbackHandler):
-    """Callback handler for streaming. Only works with LLMs that support streaming."""
-
-    def __init__(self, gen) -> None:
-        super().__init__()
-        self.gen = gen
-
-    def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
-    ) -> None:
-        """Run when LLM starts running."""
-
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        """Run on new LLM token. Only available when streaming is enabled."""
-        if not self.gen is None:
-            self.gen.send(token)
-
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        """Run when LLM ends running."""
-        # print("LLM End")
-        if not self.gen is None:
-            self.gen.send("-DONE-")
-        # self.gen.close()
-
-    def on_llm_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> None:
-        """Run when LLM errors."""
-
-    def on_chain_start(
-        self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
-    ) -> None:
-        """Run when chain starts running."""
-
-    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-        """Run when chain ends running."""
-        # print("Chain End")
-
-    def on_chain_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> None:
-        """Run when chain errors."""
-
-    def on_tool_start(
-        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
-    ) -> None:
-        """Run when tool starts running."""
-
-    def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
-        """Run on agent action."""
-        pass
-
-    def on_tool_end(self, output: str, **kwargs: Any) -> None:
-        """Run when tool ends running."""
-        print("Tool End")
-        # self.gen.send("---Tool End---")
-
-    def on_tool_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> None:
-        """Run when tool errors."""
-        # print("Agent Finish")
-        # self.gen.send("---END AGENT---")
-
-    def on_text(self, text: str, **kwargs: Any) -> None:
-        """Run on arbitrary text."""
-
-    def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
-        """Run on agent end."""
-        # print("Agent Finish")
-        # self.gen.send("---END AGENT---")
-
-class LLMEnsemble:
-    def __init__(self) -> None:
-        self.max_instances = 1
-        self.llm_instances = []
-        self.make_new_instance(GLOBAL_LLM_CONFIG)
-
-    def make_new_instance(self, parameters):
-        new_model = {
-            "lock": False,
-            "handler": CustomStreamHandler(None),
-            }
-        parameters["callback_manager"] = CallbackManager([new_model["handler"]])
-        new_model["model"] = Exllama(**parameters)
-        self.llm_instances.append(new_model)
-
-    def choose_llm_for_request(self):
-        """
-        This class is structured to cycle multiple instances of LLMs
-        to handle heavy server load. This method is designed to select the most available
-        llm instance from the ensemble.
-        """
-        return 0
-
-    def chain(self, prompt, parameters : dict = None):
-        print("Chain has been called")
-        model_index = self.choose_llm_for_request()
-        previous_attr = {}
-        # if not parameters is None:
-        #     for k, v in parameters.items():
-        #         previous_attr[k] = getattr(self.llm_instances[0], k)
-        #         setattr(self.llm_instances[0], k, v)
-        g = ThreadedGenerator()
-        self.llm_instances[model_index]["handler"].gen = g
-        threading.Thread(target=self.llm_thread, args=(g, prompt, model_index, previous_attr)).start()
-        # print()
-        return g
-
-    def llm_thread(self, g, prompt, model_index, reset_values):
-        try:
-            while self.llm_instances[model_index]["lock"] == True:
-                pass
-            
-            self.llm_instances[model_index]["lock"] = True
-            prompt = PromptTemplate(input_variables=["question"], template=template_microbiology_question)
-            
-            llm_chain = LLMChain(prompt=prompt, llm=self.llm_instances[model_index]["model"])
-
-            llm_chain.run(prompt)
-            # self.llm_instances[model_index]["model"](prompt)
-        finally:
-            print("Response finished")
-            self.llm_instances[model_index]["model"].callback_manager = None
-            g.close()
-            self.llm_instances[model_index]["handler"].gen = None
-            self.llm_instances[model_index]["lock"] = False
-
-GlobalLLMEnsemble = LLMEnsemble()
+GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
 
 @app.get("/chat")
 async def chat(req: Request):
@@ -216,21 +53,18 @@ async def chat(req: Request):
     """
 
     arguments = req.query_params._dict
-    print("chat called")
-    # print("Parameters:", parameters)
     print("request:", arguments)
-    prompt = "What is a telomere?"
-    # result = EventSourceResponse(chain(prompt))
-    result = EventSourceResponse(GlobalLLMEnsemble.chain(prompt))
-    print("Returning", type(result))
+    if "query" in arguments:
+        prompt = arguments["query"]
+    else:
+        prompt = "..."
+    result = EventSourceResponse(GlobalLLMEnsemble.chain(prompt, template_microbiology_question))
     return result
 
 @app.get("/endless")
-async def endless(req: Request, **kwargs):
-    """Simulates and endless stream
-
-    In case of server shutdown the running task has to be stopped via signal handler in order
-    to enable proper server shutdown. Otherwise, there will be dangling tasks preventing proper shutdown.
+async def endless(req: Request):
+    """
+    Simulates an endless stream of digits via SSE.
     """
 
     async def event_publisher():
