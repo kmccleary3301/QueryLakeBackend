@@ -1,6 +1,9 @@
 # QueryLake Backend
 
 This is a FastAPI and Uvicorn backend for QueryLake.
+
+Make sure you have installed CUDA Toolkit [11.7](https://developer.nvidia.com/cuda-11-7-0-download-archive) or [11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive).
+
 Run the following commands to set up a conda environment.
 
 ```
