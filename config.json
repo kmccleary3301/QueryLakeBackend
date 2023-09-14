@@ -6,7 +6,7 @@
         "lora_path": null,
         "temperature": 0.3,
         "typical": 0.7,
-        "verbose": true,
+        "verbose": false,
         "max_seq_len": 2095,
         "fused_attn": false
     },

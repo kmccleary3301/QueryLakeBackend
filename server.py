@@ -45,6 +45,7 @@ Response:
 """
 
 GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
+print("Model Loaded")
 
 @app.get("/chat")
 async def chat(req: Request):

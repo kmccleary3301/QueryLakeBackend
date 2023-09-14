@@ -32,33 +32,32 @@ class LLMEnsemble:
         return 0
 
     def chain(self, prompt, template, parameters : dict = None):
-        print("Chain has been called")
+        """
+        This function is for a model request. It creates a threaded generator, 
+        substitutes in into the models callback manager, starts the function
+        llm_thread in a thread, then returns the threaded generator.
+        """
         model_index = self.choose_llm_for_request()
         previous_attr = {}
-        # if not parameters is None:
-        #     for k, v in parameters.items():
-        #         previous_attr[k] = getattr(self.llm_instances[0], k)
-        #         setattr(self.llm_instances[0], k, v)
         g = ThreadedGenerator()
         self.llm_instances[model_index]["handler"].gen = g
         threading.Thread(target=self.llm_thread, args=(g, prompt, template, model_index, previous_attr)).start()
-        # print()
         return g
 
     def llm_thread(self, g, prompt, template, model_index, reset_values):
+        """
+        This function is run in a thread, outside of normal execution.
+        """
+
         try:
             while self.llm_instances[model_index]["lock"] == True:
                 pass
-            
             self.llm_instances[model_index]["lock"] = True
             prompt_template = PromptTemplate(input_variables=["question"], template=template)
             final_prompt = prompt_template.format(question=prompt)
             llm_chain = LLMChain(prompt=prompt_template, llm=self.llm_instances[model_index]["model"])
-
             llm_chain.run(final_prompt)
-            # self.llm_instances[model_index]["model"](prompt)
         finally:
-            print("Response finished")
             self.llm_instances[model_index]["model"].callback_manager = None
             g.close()
             self.llm_instances[model_index]["handler"].gen = None

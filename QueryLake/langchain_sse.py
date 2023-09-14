@@ -56,7 +56,6 @@ class CustomStreamHandler(BaseCallbackHandler):
 
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
         """Run when chain ends running."""
-        # print("Chain End")
 
     def on_chain_error(
         self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
@@ -70,24 +69,17 @@ class CustomStreamHandler(BaseCallbackHandler):
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
         """Run on agent action."""
-        pass
 
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
         """Run when tool ends running."""
-        print("Tool End")
-        # self.gen.send("---Tool End---")
 
     def on_tool_error(
         self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
     ) -> None:
         """Run when tool errors."""
-        # print("Agent Finish")
-        # self.gen.send("---END AGENT---")
 
     def on_text(self, text: str, **kwargs: Any) -> None:
         """Run on arbitrary text."""
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
         """Run on agent end."""
-        # print("Agent Finish")
-        # self.gen.send("---END AGENT---")
