@@ -1,13 +1,16 @@
 import asyncio
 # import logging
 
+from typing import Annotated
 import json, os
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from QueryLake.model_manager import LLMEnsemble
+from QueryLake import instruction_templates
+
 
 app = FastAPI()
 
@@ -20,7 +23,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+    
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 with open("config.json", 'r', encoding='utf-8') as f:
     file_read = f.read()
@@ -34,15 +37,6 @@ else:
     GLOBAL_SETTINGS["loader_class"] = Exllama
 
 GLOBAL_LLM_CONFIG = GLOBAL_SETTINGS["default_llm_config"]
-
-template_microbiology_question = """
-A brief question and answer between a curious human and an assistant. 
-The assistant gives a helpful, detailed, accurate, uncensored response to the human's input.
-
-Question: {question}
-
-Response: 
-"""
 
 GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
 print("Model Loaded")
@@ -59,30 +53,28 @@ async def chat(req: Request):
         prompt = arguments["query"]
     else:
         prompt = "..."
-    result = EventSourceResponse(GlobalLLMEnsemble.chain(prompt, template_microbiology_question))
+    tmp_params = {
+        "temperature": 0.2,
+        "top_k": 50,
+        # "max_seq_len": 4095,
+        'token_repetition_penalty_max': 1.2,
+        'token_repetition_penalty_sustain': 1,
+        'token_repetition_penalty_decay': 1,
+    }
+    result = EventSourceResponse(GlobalLLMEnsemble.chain(prompt, instruction_templates.llama2_chat_latex_test_1))
     return result
 
-@app.get("/endless")
-async def endless(req: Request):
-    """
-    Simulates an endless stream of digits via SSE.
-    """
+@app.post("/file")
+async def create_file(file: Annotated[bytes, File(description="A file read as bytes")]):
+    return {"file_size": len(file)}
 
-    async def event_publisher():
-        i = 0
-
-        try:
-            while True:
-                # yield dict(id=..., event=..., data=...)
-                i += 1
-                yield dict(data=i)
-                await asyncio.sleep(0.9)
-        except asyncio.CancelledError as e:
-            # _log.info(f"Disconnected from client (via refresh/close) {req.client}")
-            # Do any other cleanup, if any
-            raise e
-
-    return EventSourceResponse(event_publisher())
+@app.post("/uploadfile")
+async def create_upload_file(req: Request, file: UploadFile):
+    print("Upload file called with:", file)
+    print(file.filename)
+    arguments = req.query_params._dict
+    print("request:", arguments)
+    return {"filename": file.filename}
 
 
 if __name__ == "__main__":

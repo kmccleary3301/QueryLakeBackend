@@ -2,7 +2,7 @@ from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from typing import Any, Dict, List, Optional
 from langchain.pydantic_v1 import Field, root_validator
-from exllama.model import ExLlama, ExLlamaCache, ExLlamaConfig
+from .exllama_model import ExLlama, ExLlamaCache, ExLlamaConfig
 from exllama.tokenizer import ExLlamaTokenizer
 from exllama.generator import ExLlamaGenerator
 from exllama.lora import ExLlamaLora
@@ -225,7 +225,103 @@ class Exllama(LLM):
             elif banned_seq.startswith(sequence):
                 return self.MatchStatus.PARTIAL_MATCH
         return self.MatchStatus.NO_MATCH
+    
+    def refresh_params(self, parameters : dict) -> None:
+        self.__dict__.update(parameters)
+        values = self.__dict__
+        model_path = values["model_path"]
+        lora_path = values["lora_path"]
         
+        tokenizer_path = os.path.join(model_path, "tokenizer.model")
+        model_config_path = os.path.join(model_path, "config.json")
+        model_path = Exllama.get_model_path_at(model_path)
+        
+        config = ExLlamaConfig(model_config_path)
+        tokenizer = ExLlamaTokenizer(tokenizer_path)
+        config.model_path = model_path
+        
+        ##Set logging function if verbose or set to empty lambda
+        verbose = values['verbose']
+        if not verbose:
+            values['logfunc'] = lambda *args, **kwargs: None
+        logfunc = values['logfunc']
+        
+        model_param_names = [
+            "temperature",
+            "top_k",
+            "top_p",
+            "min_p",
+            "typical",
+            "token_repetition_penalty_max",
+            "token_repetition_penalty_sustain",
+            "token_repetition_penalty_decay",
+            "beams",
+            "beam_length",
+        ]
+        
+        config_param_names = [
+            "max_seq_len",
+            "compress_pos_emb",
+            "gpu_peer_fix",
+            "alpha_value"
+        ]
+        
+        tuning_parameters = [
+            "matmul_recons_thd",
+            "fused_mlp_thd",
+            "sdp_thd",
+            "matmul_fused_remap",
+            "rmsnorm_no_half2",
+            "rope_no_half2",
+            "matmul_no_half2",
+            "silu_no_half2",
+            "concurrent_streams",
+            "fused_attn",
+        ]
+        
+        configure_config = Exllama.configure_object(config_param_names, values, logfunc)
+        configure_config(config)
+        configure_tuning = Exllama.configure_object(tuning_parameters, values, logfunc)
+        configure_tuning(config)
+        configure_model = Exllama.configure_object(model_param_names, values, logfunc)
+        
+        ##Special parameter, set auto map, it's a function
+        if values['set_auto_map']:
+            config.set_auto_map(values['set_auto_map'])
+            logfunc(f"set_auto_map {values['set_auto_map']}")
+            
+        self.client.config = config
+
+        if "max_seq_len" in parameters:
+            self.client.reload_params()
+
+        # The following two lines prevent a CUDA memory leak
+        del self.exllama_cache
+        del self.generator
+
+        self.exllama_cache = ExLlamaCache(self.client)
+        self.generator = ExLlamaGenerator(self.client, tokenizer, self.exllama_cache)
+
+        ##Load and apply lora to generator
+        if lora_path is not None:
+            lora_config_path = os.path.join(lora_path, "adapter_config.json")
+            lora_path = Exllama.get_model_path_at(lora_path)
+            lora = ExLlamaLora(self.client, lora_config_path, lora_path)
+            self.generator.lora = lora
+            logfunc(f"Loaded LORA @ {lora_path}")
+
+        ##Configure the model and generator
+        values["stop_sequences"] = [x.strip().lower() for x in values["stop_sequences"]]
+        
+        configure_model(self.generator.settings)
+        setattr(self.generator.settings, "stop_sequences", values["stop_sequences"])
+        logfunc(f"stop_sequences {values['stop_sequences']}")
+        
+        disallowed = values.get("disallowed_tokens")
+        if disallowed:
+            self.generator.disallow_tokens(disallowed)
+            print(f"Disallowed Tokens: {self.generator.disallowed_tokens}")
+
     def stream(
         self,
         prompt: str,

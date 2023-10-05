@@ -5,6 +5,7 @@ from langchain.callbacks.manager import CallbackManager
 from langchain import PromptTemplate, LLMChain
 
 import threading
+import copy
 
 class LLMEnsemble:
     def __init__(self, default_config, model_class) -> None:
@@ -23,6 +24,15 @@ class LLMEnsemble:
         new_model["model"] = self.model_class(**parameters)
         self.llm_instances.append(new_model)
 
+    def delete_model(self, model_index : int) -> None:
+        """
+        Properly deletes a model and clears the memory.
+        """
+        if str(type(self.llm_instances[model_index]["model"].client)) == "ExLlama":
+             self.llm_instances[model_index]["model"].client.free_unmanaged()
+             del self.llm_instances[model_index]["model"]
+             del self.llm_instances[model_index]
+
     def choose_llm_for_request(self):
         """
         This class is structured to cycle multiple instances of LLMs
@@ -30,6 +40,13 @@ class LLMEnsemble:
         llm instance from the ensemble.
         """
         return 0
+    
+    def validate_parameters(self, parameters : dict) -> bool:
+        """
+        Should return true or false if new model parameters are valid.
+        NTF
+        """
+        return True
 
     def chain(self, prompt, template, parameters : dict = None):
         """
@@ -37,19 +54,29 @@ class LLMEnsemble:
         substitutes in into the models callback manager, starts the function
         llm_thread in a thread, then returns the threaded generator.
         """
+
+        if not (parameters is None or parameters == {}):
+            if not self.validate_parameters(parameters):
+                return None
+        
         model_index = self.choose_llm_for_request()
-        previous_attr = {}
         g = ThreadedGenerator()
         self.llm_instances[model_index]["handler"].gen = g
-        threading.Thread(target=self.llm_thread, args=(g, prompt, template, model_index, previous_attr)).start()
+        threading.Thread(target=self.llm_thread, args=(g, prompt, template, model_index, parameters)).start()
         return g
 
-    def llm_thread(self, g, prompt, template, model_index, reset_values):
+
+    def llm_thread(self, g, prompt, template, model_index, parameters):
         """
         This function is run in a thread, outside of normal execution.
         """
-
         try:
+            previous_values = {}
+            if not (parameters is None or parameters == {}):
+                for key, _ in parameters.items():
+                    previous_values[key] = self.llm_instances[model_index]["model"].__dict__[key]
+                self.llm_instances[model_index]["model"].refresh_params(parameters)
+            
             while self.llm_instances[model_index]["lock"] == True:
                 pass
             self.llm_instances[model_index]["lock"] = True
@@ -62,3 +89,7 @@ class LLMEnsemble:
             g.close()
             self.llm_instances[model_index]["handler"].gen = None
             self.llm_instances[model_index]["lock"] = False
+            if previous_values != {}: # Reset the model parameters to normal if they were changed.
+                # self.llm_instances[model_index]["model"].__dict__.update(previous_values)
+                self.llm_instances[model_index]["model"].refresh_params(previous_values)
+            del previous_values

@@ -1,0 +1,10 @@
+{
+    "streaming": true,
+    "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+    "lora_path": null,
+    "temperature": 0.3,
+    "typical": 0.7,
+    "verbose": true,
+    "max_seq_len": 2095,
+    "fused_attn": false
+}
