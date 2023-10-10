@@ -28,6 +28,7 @@ class CustomStreamHandler(BaseCallbackHandler):
     def __init__(self, gen) -> None:
         super().__init__()
         self.gen = gen
+        self.tokens_generated = 0
 
     def on_llm_start(
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
@@ -37,7 +38,9 @@ class CustomStreamHandler(BaseCallbackHandler):
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Run on new LLM token. Only available when streaming is enabled."""
         if not self.gen is None:
-            self.gen.send(urllib.parse.quote(token, safe='_!"#$%&\'()*+,/:;=?@[]'))
+            # self.gen.send(urllib.parse.quote(token, safe='_!"#$%&\'()*+,/:;=?@[]'))
+            self.gen.send(token.encode("utf-8").hex())
+        self.tokens_generated += 1
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Run when LLM ends running."""

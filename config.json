@@ -4,7 +4,21 @@
         "streaming": true,
         "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
         "temperature": 0.3,
-        "max_seq_len": 4096
+        "max_seq_len": 4096,
+        "repetition_penalty": 1.15,
+        "max_len": 4096,
+        "truncation": true,
+        "padding": true
+    },
+    "mistral_example_config": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+        "temperature": 0.3,
+        "max_seq_len": 4096,
+        "token_repetition_penalty_max": 1.15,
+        "max_len": 4096,
+        "truncation": true,
+        "padding": true
     },
     "config_example_all_parameters_exllama": {
         "streaming": true,

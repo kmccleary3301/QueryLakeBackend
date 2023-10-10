@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, UploadFile
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
-from QueryLake.model_manager import LLMEnsemble
+from QueryLake.model_manager_old import LLMEnsemble
 from QueryLake import instruction_templates, authentication
 # from QueryLake.sql_db import User, File, 
 # from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -17,9 +17,7 @@ from QueryLake import instruction_templates, authentication
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
-from QueryLake import sql_db
-from QueryLake import database_admin_operations
-import time
+
 
 
 app = FastAPI()
@@ -33,8 +31,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
+    
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 with open("config.json", 'r', encoding='utf-8') as f:
     file_read = f.read()
@@ -50,8 +47,6 @@ else:
 
 GLOBAL_LLM_CONFIG = GLOBAL_SETTINGS["default_llm_config"]
 
-ACTIVE_SESSIONS = {}
-
 GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
 # engine = create_engine("sqlite:///database.db")
 engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
@@ -59,6 +54,7 @@ SQLModel.metadata.create_all(engine)
 # session_factory = sessionmaker(bind=engine)
 # Session = scoped_session(session_factory)
 database = Session(engine)
+token_tracker = authentication.TokenTracker(database)
 
 # SQLALCHEMY_DATABASE_URL = 'sqlite+pysqlite:///.db.sqlite3:' 
 # engine_2 = create_engine(SQLALCHEMY_DATABASE_URL,
@@ -75,8 +71,6 @@ database = Session(engine)
 
 # SQLModel.metadata.create_all(engine)
 print("Model Loaded")
-
-
 
 @app.get("/chat")
 async def chat(req: Request):
@@ -101,13 +95,15 @@ async def chat(req: Request):
 
     get_user_id = authentication.get_user_id(database, arguments["username"], arguments["password_prehash"])
     if get_user_id < 0:
-        return EventSourceResponse("Invalid Authentication") # This response doesn't work. It ends the call obviously, but doesn't communicate it to the user.
+        return EventSourceResponse("Invalid Authentication")
 
     result = EventSourceResponse(GlobalLLMEnsemble.chain(
                                     user_name=arguments["username"],
-                                    session_hash=arguments["session_hash"],
+                                    token_tracker=token_tracker,
                                     database=database,
-                                    question=prompt,
+                                    prompt=prompt,
+                                    system_instruction=instruction_templates.latex_basic_system_instruction,
+                                    template=instruction_templates.llama2_chat_latex_test_1
                                 ))
     return result
 
@@ -137,7 +133,7 @@ async def create_upload_file(req: Request, file: UploadFile):
 @app.post("/create_account")
 def create_account(req: Request):
     arguments = req.query_params._dict
-    result = authentication.add_user(database=database, username=arguments["name"], password=arguments["password"])
+    result = authentication.add_user(database=database, name=arguments["name"], password=arguments["password"])
     # Add some code for session rotations.
     return result
 
@@ -154,28 +150,10 @@ def authenticate(req: Request):
     print(arguments)
     return {"result": authentication.hash_function(arguments["input"])}
 
-@app.post("/create_session")
-def create_session(req: Request):
-    arguments = req.query_params._dict
-    get_user_id = authentication.get_user_id(database, arguments["username"], arguments["password_prehash"])
-    if get_user_id < 0:
-        return {"success": False, "note": "Failed to authenticate user"}
-    get_access_token = database.exec(select(sql_db.access_token).where(sql_db.access_token.author_user_name == arguments["username"])).first()
-    session_hash = authentication.get_random_hash()
-    new_session = sql_db.chat_session_new(
-        hash_id=session_hash,
-        model="Llama-2-7b-Chat-GPTQ",
-        author_user_name=arguments["username"],
-        creation_timestamp=time.time(),
-        access_token_id=get_access_token.id,
-    )
-
-    database.add(new_session)
-    database.commit()
-    return {"success": True, "session_hash": session_hash}
-
-
 
 if __name__ == "__main__":
-    # database_admin_operations.add_llama2_to_db(database)
+    # with Session(engine) as session:
+    #     statement = select(sql_db.Hero).where(sql_db.Hero.name == "Spider-Boy")
+    #     hero = session.exec(statement).first()
+    #     print(hero)
     uvicorn.run(app, host="0.0.0.0", port=5000, log_level="trace", log_config=None)  # type: ignore

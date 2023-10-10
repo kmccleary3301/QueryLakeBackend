@@ -10,7 +10,7 @@ import copy
 
 from sqlmodel import Session, select
 from .authentication import TokenTracker
-from .sql_db import model_query_raw, access_token, chat_session_new, model, chat_entry_model_response, chat_entry_user_question
+from .sql_db import model_query_raw, access_token
 import time
 
 class LLMEnsemble:
@@ -55,12 +55,13 @@ class LLMEnsemble:
         return True
 
     def chain(self, 
-              user_name,
+              user_name, 
+              token_tracker : TokenTracker,
               database: Session,
-              session_hash,
-              question,
-              parameters : dict = None,
-              context=None):
+              prompt, 
+              template, 
+              system_instruction, 
+              parameters : dict = None):
         """
         This function is for a model request. It creates a threaded generator, 
         substitutes in into the models callback manager, starts the function
@@ -75,24 +76,27 @@ class LLMEnsemble:
         g = ThreadedGenerator()
         self.llm_instances[model_index]["handler"].gen = g
         threading.Thread(target=self.llm_thread, args=(g, 
-                                                       user_name,
-                                                       database, 
-                                                       session_hash,
-                                                       question,
+                                                       user_name, 
+                                                       token_tracker,
+                                                       database,
+                                                       prompt, 
+                                                       template, 
+                                                       system_instruction, 
                                                        model_index, 
-                                                       parameters, context)).start()
+                                                       parameters)).start()
         return g
 
 
     def llm_thread(self, 
                    g, 
-                   user_name,
+                   user_name, 
+                   token_tracker : TokenTracker,
                    database: Session,
-                   session_hash,
-                   question,
+                   prompt, 
+                   template, 
+                   system_instruction, 
                    model_index, 
-                   parameters,
-                   context):
+                   parameters):
         """
         This function is run in a thread, outside of normal execution.
         """
@@ -105,54 +109,20 @@ class LLMEnsemble:
             
             while self.llm_instances[model_index]["lock"] == True:
                 pass
-
-
             start_time = time.time()
             self.llm_instances[model_index]["lock"] = True
-            session = database.exec(select(chat_session_new).where(chat_session_new.hash_id == session_hash)).first()
-            
-            model_entry_db = database.exec(select(model).where(model.name == session.model)).first()
-            
-            system_instruction_prompt = model_entry_db.system_instruction_wrapper.replace("{system_instruction}", model_entry_db.default_system_instruction)
-            final_prompt = ""
-            if not context is None:
-                final_prompt += model_entry_db.context_wrapper.replace("{context}", context)
-
-            bot_responses_previous = database.exec(select(chat_entry_model_response).where(chat_entry_model_response.chat_session_id == session.id)).all()
-
-            bot_responses_previous = sorted(bot_responses_previous, key=lambda x: x.timestamp)
-
-            print("Sorted responses:")
-            print(bot_responses_previous)
-
-
-
-            for bot_response in bot_responses_previous:
-                question_previous = database.exec(select(chat_entry_user_question).where(chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
-                final_prompt += model_entry_db.user_question_wrapper.replace("{question}", question_previous.content)
-                final_prompt += model_entry_db.bot_response_wrapper.replace("{response}", bot_response.content)
-            
-
-            final_prompt += model_entry_db.user_question_wrapper.replace("{question}", question)
-
-
-            prompt_template = PromptTemplate(input_variables=["question"], template=system_instruction_prompt+"\n{question}")
-            prompt_medium = prompt_template.format(question=final_prompt)
-            # final_prompt = prompt_template.format(question=prompt)
+            prompt_template = PromptTemplate(input_variables=["question"], template=template)
+            final_prompt = prompt_template.format(question=prompt)
             llm_chain = LLMChain(prompt=prompt_template, llm=self.llm_instances[model_index]["model"])
             # llm_chain.run({"question": prompt, "system_instruction": system_instruction})
-
-            print("final_prompt")
-            print(prompt_medium)
-
-            response = llm_chain.run(prompt_medium)
-            end_time = time.time()
-
             tokens_add = self.llm_instances[model_index]["handler"].tokens_generated
             first_key = database.exec(select(access_token).where(access_token.author_user_name == user_name)).first()
 
             first_key.tokens_used += tokens_add
             database.commit()
+
+            response = llm_chain.run(final_prompt)
+            end_time = time.time()
             request_data = {
                 "prompt": final_prompt,
                 "response" : response,
@@ -162,33 +132,12 @@ class LLMEnsemble:
                 "timestamp": time.time(),
                 "time_taken": end_time-start_time,
                 "model_settings": str(self.llm_instances[model_index]["model"].__dict__),
-                # "author": user_name,
                 "access_token_id": first_key.id
             }
             new_request = model_query_raw(**request_data)
             database.add(new_request)
             database.commit()
-
-            
             # new_user = sql_db.User(**user_data)
-            question_entry = chat_entry_user_question(
-                chat_session_id=session.id,
-                timestamp=time.time(),
-                content=question,
-            )
-            database.add(question_entry)
-            database.commit()
-            database.flush()
-
-            model_response = chat_entry_model_response(
-                chat_session_id=session.id,
-                timestamp=time.time(),
-                content=response,
-                chat_entry_response_to=question_entry.id,
-                #model query raw id.
-            )
-            database.add(model_response)
-            database.commit()
         finally:
             
 
