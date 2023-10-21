@@ -43,6 +43,7 @@ class model(SQLModel, table=True):
 class chat_session_new(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
+    title: Optional[str] = Field(default=None)
     hash_id: str = Field(index=True, unique=True)
     model: str = Field(foreign_key="model.name")
 
@@ -80,11 +81,16 @@ class user(SQLModel, table=True):
     password_salt: str
     creation_timestamp: float
     is_admin: Optional[bool] = Field(default=False)
+    public_key: str
+    private_key_encryption_salt: str
+    private_key_secured: str # Encrypted with salt(password_prehash, encryption_salt)
 
 class organization(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
     name: str
     creation_timestamp: float
+    public_key: str
 
 class chat_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -118,44 +124,58 @@ class model_query_raw(SQLModel, table=True):
 
 class document_raw(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    server_location: str
+    hash_id: str = Field(index=True, unique=True)
+    file_name: str
+    server_zip_archive_path: str = Field(unique=True)
     creation_timestamp: float
     integrity_sha256: str = Field(index=True)
     size_bytes: int
-    type: str
-    organization_document_collection_id: Optional[int] = Field(default=None, foreign_key="organization_document_collection.id", index=True)
-    user_document_collection_id: Optional[int] = Field(default=None, foreign_key="user_document_collection.id", index=True)
-    global_document_collection_id: Optional[int] = Field(default=None, foreign_key="global_document_collection.id", index=True)
+    encryption_key_secure: Optional[str] = Field(default=None)
+    organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.hash_id", index=True)
+    user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
+    global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
 
 class organization_document_collection(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
     name: str
     author_organization_id: int = Field(foreign_key="organization.id", index=True)
     creation_timestamp: float
     public: Optional[bool] = Field(default=False)
     description: Optional[str] = Field(default="")
-    document_count: int
+    document_count: int = Field(default=0)
 
 class user_document_collection(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
     name: str
     author_user_name: str = Field(foreign_key="user.name", index=True)
     creation_timestamp: float
     public: Optional[bool] = Field(default=False)
     description: Optional[str] = Field(default="")
-    document_count: int
+    document_count: int = Field(default=0)
 
 class global_document_collection(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
     name: str
     description: Optional[str] = Field(default="")
-    document_count: int
+    document_count: int = Field(default=0)
 
 class organization_membership(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     role: str
     organization_id: int = Field(foreign_key="organization.id", index=True)
     user_name: str = Field(foreign_key="user.name", index=True)
+    invite_sender_user_name: Optional[str] = Field(default=None, foreign_key="user.name")
+    
+    # This is the organization private key encrypted with the user's public key
+    # Although the private key is unique to the organization, it cannot be stored in plaintext
+    # This way, it is exchanged securely between users, and only decrypted for file retrieval
+    # Or when an invite is extended
+    organization_private_key_secure: str 
+
+    invite_still_open: Optional[bool] = Field(default=True)
 
 class view_priviledge(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

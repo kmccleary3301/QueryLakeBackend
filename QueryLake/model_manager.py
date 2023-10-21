@@ -9,7 +9,6 @@ import threading
 import copy
 
 from sqlmodel import Session, select
-from .authentication import TokenTracker
 from .sql_db import model_query_raw, access_token, chat_session_new, model, chat_entry_model_response, chat_entry_user_question
 import time
 
@@ -96,6 +95,7 @@ class LLMEnsemble:
         """
         This function is run in a thread, outside of normal execution.
         """
+        first_of_session = False
         try:
             previous_values = {}
             # if not (parameters is None or parameters == {}):
@@ -122,19 +122,32 @@ class LLMEnsemble:
 
             bot_responses_previous = sorted(bot_responses_previous, key=lambda x: x.timestamp)
 
-            print("Sorted responses:")
-            print(bot_responses_previous)
+            if len(bot_responses_previous) == 0:
+                session.title = question.split(r"[.|?|!|\n|\t]")[-1]
 
+            system_instruction_prompt_token_count = self.llm_instances[model_index]["model"].get_num_tokens(system_instruction_prompt)
 
-
-            for bot_response in bot_responses_previous:
-                question_previous = database.exec(select(chat_entry_user_question).where(chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
-                final_prompt += model_entry_db.user_question_wrapper.replace("{question}", question_previous.content)
-                final_prompt += model_entry_db.bot_response_wrapper.replace("{response}", bot_response.content)
+            cutoff_space = self.llm_instances[model_index]["model"].config.max_seq_len - 1000
             
+            chat_history, sum_tokens = [], system_instruction_prompt_token_count
+
+            for bot_response in bot_responses_previous[::-1]:
+                question_previous = database.exec(select(chat_entry_user_question).where(chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
+                chat_entry = ""
+                
+                chat_entry += model_entry_db.user_question_wrapper.replace("{question}", question_previous.content)
+                chat_entry += model_entry_db.bot_response_wrapper.replace("{response}", bot_response.content)
+
+                chat_entry_token_count = self.llm_instances[model_index]["model"].get_num_tokens(chat_entry)
+                sum_tokens += chat_entry_token_count
+                if sum_tokens > cutoff_space:
+                    break
+                chat_history.append(chat_entry)
+            
+            for entry in chat_history[::-1]:
+                final_prompt += entry
 
             final_prompt += model_entry_db.user_question_wrapper.replace("{question}", question)
-
 
             prompt_template = PromptTemplate(input_variables=["question"], template=system_instruction_prompt+"\n{question}")
             prompt_medium = prompt_template.format(question=final_prompt)
@@ -142,8 +155,8 @@ class LLMEnsemble:
             llm_chain = LLMChain(prompt=prompt_template, llm=self.llm_instances[model_index]["model"])
             # llm_chain.run({"question": prompt, "system_instruction": system_instruction})
 
-            print("final_prompt")
-            print(prompt_medium)
+            # print("final_prompt")
+            # print(prompt_medium)
 
             response = llm_chain.run(prompt_medium)
             end_time = time.time()
@@ -190,8 +203,6 @@ class LLMEnsemble:
             database.add(model_response)
             database.commit()
         finally:
-            
-
             self.llm_instances[model_index]["handler"].tokens_generated = 0
             self.llm_instances[model_index]["model"].callback_manager = None
             g.close()

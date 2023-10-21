@@ -8,3 +8,4 @@ exllama @ git+https://github.com/jllllll/exllama
 sentencepiece>=0.1.99
 flash-attn
 pypdf
+pycryptodome

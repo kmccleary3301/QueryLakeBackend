@@ -1,4 +1,4 @@
-from .authentication import add_model
+from .api_admin import add_model
 
 def add_llama2_to_db(database):
     add_model(database,

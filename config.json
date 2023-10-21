@@ -3,10 +3,11 @@
     "default_llm_config": {
         "streaming": true,
         "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
-        "temperature": 0.3,
+        "temperature": 0,
+        "top_k": 1,
+        "top_p": 1,
         "max_seq_len": 4096,
         "repetition_penalty": 1.15,
-        "max_len": 4096,
         "truncation": true,
         "padding": true
     },

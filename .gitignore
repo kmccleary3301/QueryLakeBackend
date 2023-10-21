@@ -1,3 +1,4 @@
 QueryLake/__pycache__
+QueryLake/api_functions/__pycache__
 user_data.db
-user_db/files/*
+user_db

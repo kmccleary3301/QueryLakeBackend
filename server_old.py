@@ -9,7 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from QueryLake.model_manager_old import LLMEnsemble
-from QueryLake import instruction_templates, authentication
+from QueryLake import instruction_templates
 # from QueryLake.sql_db import User, File, 
 # from sqlmodel import Field, Session, SQLModel, create_engine, select
 # from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -17,6 +17,8 @@ from QueryLake import instruction_templates, authentication
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
+
+from QueryLakeBackend.QueryLake import api
 
 
 
@@ -54,7 +56,7 @@ SQLModel.metadata.create_all(engine)
 # session_factory = sessionmaker(bind=engine)
 # Session = scoped_session(session_factory)
 database = Session(engine)
-token_tracker = authentication.TokenTracker(database)
+token_tracker = api.TokenTracker(database)
 
 # SQLALCHEMY_DATABASE_URL = 'sqlite+pysqlite:///.db.sqlite3:' 
 # engine_2 = create_engine(SQLALCHEMY_DATABASE_URL,
@@ -93,7 +95,7 @@ async def chat(req: Request):
         'token_repetition_penalty_decay': 1,
     }
 
-    get_user_id = authentication.get_user_id(database, arguments["username"], arguments["password_prehash"])
+    get_user_id = api.get_user_id(database, arguments["username"], arguments["password_prehash"])
     if get_user_id < 0:
         return EventSourceResponse("Invalid Authentication")
 
@@ -121,8 +123,8 @@ async def create_upload_file(req: Request, file: UploadFile):
     print("request:", arguments)
     # return {"filename": file.filename}
     # try:
-    result = authentication.file_save(database=database, 
-                                      name=arguments["name"], 
+    result = api.file_save(database=database, 
+                                      username=arguments["name"], 
                                       password_prehash=arguments["password_prehashed"], 
                                       file=file)
     print(result)
@@ -133,14 +135,14 @@ async def create_upload_file(req: Request, file: UploadFile):
 @app.post("/create_account")
 def create_account(req: Request):
     arguments = req.query_params._dict
-    result = authentication.add_user(database=database, name=arguments["name"], password=arguments["password"])
+    result = api.add_user(database=database, name=arguments["name"], password=arguments["password"])
     # Add some code for session rotations.
     return result
 
 @app.post("/login")
 def login(req: Request):
     arguments = req.query_params._dict
-    result = authentication.auth_user(database=database, username=arguments["name"], password=arguments["password"])
+    result = api.login(database=database, username=arguments["name"], password=arguments["password"])
     # Add some code for session rotations.
     return result
 
@@ -148,7 +150,7 @@ def login(req: Request):
 def authenticate(req: Request):
     arguments = req.query_params._dict
     print(arguments)
-    return {"result": authentication.hash_function(arguments["input"])}
+    return {"result": api.hash_function(arguments["input"])}
 
 
 if __name__ == "__main__":
