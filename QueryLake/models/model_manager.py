@@ -9,24 +9,39 @@ import threading
 import copy
 
 from sqlmodel import Session, select
-from .sql_db import model_query_raw, access_token, chat_session_new, model, chat_entry_model_response, chat_entry_user_question
+from ..database.sql_db_tables import model_query_raw, access_token, chat_session_new, model, chat_entry_model_response, chat_entry_user_question, model
 import time
+import json
+from langchain.llms import LlamaCpp
+from .exllama_langchain import Exllama
+from .exllamav2_langchain import ExllamaV2
 
 class LLMEnsemble:
-    def __init__(self, default_config, model_class) -> None:
+    def __init__(self, database: Session, default_llm : str) -> None:
         self.max_instances = 1
         self.llm_instances = []
-        self.default_config = default_config
-        self.model_class = model_class
-        self.make_new_instance(self.default_config)
+        self.default_llm = default_llm
+        self.make_new_instance(database, default_llm)
 
-    def make_new_instance(self, parameters):
+    def make_new_instance(self, database, model_name):
         new_model = {
             "lock": False,
             "handler": CustomStreamHandler(None),
-            }
+        }
+
+        model_db_entry = database.exec(select(model).where(model.name == model_name)).first()
+
+        parameters = json.loads(model_db_entry.default_settings)
+
         parameters["callback_manager"] = CallbackManager([new_model["handler"]])
-        new_model["model"] = self.model_class(**parameters)
+
+        if (model_db_entry.necessary_loader == "exllama"):
+            new_model["model"] = Exllama(**parameters)
+        elif (model_db_entry.necessary_loader == "exllama_v2"):
+            new_model["model"] = ExllamaV2(**parameters)
+        elif (model_db_entry.necessary_loader == "llama_cpp"):
+            new_model["model"] = LlamaCpp(**parameters)
+        
         self.llm_instances.append(new_model)
 
     def delete_model(self, model_index : int) -> None:
@@ -59,12 +74,15 @@ class LLMEnsemble:
               session_hash,
               question,
               parameters : dict = None,
+              model_choice : str = "Llama-2-7b-Chat-GPTQ",
               context=None):
         """
         This function is for a model request. It creates a threaded generator, 
         substitutes in into the models callback manager, starts the function
         llm_thread in a thread, then returns the threaded generator.
         """
+
+        print("Calling Model")
 
         if not (parameters is None or parameters == {}):
             if not self.validate_parameters(parameters):
@@ -149,17 +167,19 @@ class LLMEnsemble:
 
             final_prompt += model_entry_db.user_question_wrapper.replace("{question}", question)
 
-            prompt_template = PromptTemplate(input_variables=["question"], template=system_instruction_prompt+"\n{question}")
+            prompt_template = PromptTemplate(input_variables=["question"], template=system_instruction_prompt+"{question}")
             prompt_medium = prompt_template.format(question=final_prompt)
             # final_prompt = prompt_template.format(question=prompt)
             llm_chain = LLMChain(prompt=prompt_template, llm=self.llm_instances[model_index]["model"])
             # llm_chain.run({"question": prompt, "system_instruction": system_instruction})
 
-            # print("final_prompt")
-            # print(prompt_medium)
-
+            print("final_prompt")
+            print(prompt_medium)
+            
             response = llm_chain.run(prompt_medium)
             end_time = time.time()
+
+            print(response)
 
             tokens_add = self.llm_instances[model_index]["handler"].tokens_generated
             first_key = database.exec(select(access_token).where(access_token.author_user_name == user_name)).first()
@@ -171,7 +191,7 @@ class LLMEnsemble:
                 "response" : response,
                 "response_size_tokens": self.llm_instances[model_index]["handler"].tokens_generated,
                 "prompt_size_tokens": self.llm_instances[model_index]["model"].get_num_tokens(final_prompt),
-                "model": self.llm_instances[model_index]["model"].model_path,
+                "model": self.llm_instances[model_index]["model"].model_path.split("/")[-1],
                 "timestamp": time.time(),
                 "time_taken": end_time-start_time,
                 "model_settings": str(self.llm_instances[model_index]["model"].__dict__),

@@ -1,4 +1,8 @@
-from .api_admin import add_model
+from ..api.api_admin import add_model
+import json
+from ..database import sql_db_tables
+from sqlmodel import Session, select
+# from sqlmodel import Session, select, and_
 
 def add_llama2_to_db(database):
     add_model(database,
@@ -38,3 +42,35 @@ For example code would look like:
 And math expressions would look like:
 $$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$
 """)
+    
+
+
+def add_models_to_database(database, models):
+    for model in models:
+        try:
+            model_args = model["model_args"]
+            necessary_loader = model["loader"]
+            model_name = model_args["model_path"].split("/")[-1]
+            padding = model["padding"]
+            default_system_instruction = model["default_system_instructions"]
+
+            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.name == model_name)).all()
+            if len(find_existing_model) > 0:
+                continue
+
+            new_model = sql_db_tables.model(
+                name=model_name,
+                path_on_server=model_args["model_path"],
+                necessary_loader=necessary_loader,
+                default_settings=json.dumps(model_args),
+                system_instruction_wrapper=padding["system_instruction_wrap"],
+                context_wrapper=padding["context_wrap"],
+                user_question_wrapper=padding["question_wrap"],
+                bot_response_wrapper=padding["response_wrap"],
+                default_system_instruction=default_system_instruction
+            )
+            database.add(new_model)
+            database.commit()
+        except:
+            pass
+    

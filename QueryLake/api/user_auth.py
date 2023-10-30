@@ -1,9 +1,9 @@
 from hashlib import sha256
 import random
-from .. import sql_db
+from ..database import sql_db_tables
 from sqlmodel import Session, select
 import time
-from .. import encryption
+from ..database import encryption
 from .hashing import *
 import os
 
@@ -18,7 +18,7 @@ def add_user(database : Session, username : str, password : str) -> bool:
         return {"account_made": False, "note": "Name too long"}
     if len(password) > 32:
         return {"account_made": False, "note": "Password too long"}
-    statement = select(sql_db.user).where(sql_db.user.name == username) 
+    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username) 
     if len(database.exec(statement).all()) > 0:
         return {"account_made": False, "note": "Username already exists"}
     random_salt_1 = sha256(str(random.getrandbits(512)).encode('utf-8')).hexdigest()
@@ -28,7 +28,7 @@ def add_user(database : Session, username : str, password : str) -> bool:
 
     private_key_encryption_key = hash_function(password, private_key_encryption_salt)
 
-    new_user = sql_db.user(
+    new_user = sql_db_tables.user(
         name=username,
         password_salt=random_salt_1,
         password_hash=hash_function(password, random_salt_1),
@@ -41,7 +41,7 @@ def add_user(database : Session, username : str, password : str) -> bool:
     database.add(new_user)
     database.commit()
 
-    new_access_token = sql_db.access_token(
+    new_access_token = sql_db_tables.access_token(
         type="user_primary_token",
         creation_timestamp=time.time(),
         author_user_name=username,
@@ -55,12 +55,12 @@ def login(database : Session, username : str, password : str):
     """
     This is for verifying a user login, and providing them their password prehash.
     """
-    statement = select(sql_db.user).where(sql_db.user.name == username)
+    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username)
     retrieved = database.exec(statement).all()
     if len(retrieved) > 0:
         # with open(user_db_path+name_hash+".json", 'r', encoding='utf-8') as f:
         #     user_data = json.load(f)
-        user_data = sql_db.data_dict(retrieved[0])
+        user_data = sql_db_tables.data_dict(retrieved[0])
         password_salt = user_data["password_salt"]
         password_hash_truth = user_data["password_hash"]
         password_hash = hash_function(password, password_salt)
@@ -77,13 +77,13 @@ def get_user_id(database : Session, username : str, password_prehash : str) -> i
     Returns -1 if the username doesn't exist.
     Returns -2 if the username exists but the hash is invalid.
     """
-    statement = select(sql_db.user).where(sql_db.user.name == username)
+    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username)
     
     # print("2")
     retrieved = database.exec(statement).all()
     # print("3")
     if len(retrieved) > 0:
-        user_data = sql_db.data_dict(retrieved[0])
+        user_data = sql_db_tables.data_dict(retrieved[0])
         password_salt = user_data["password_salt"]
         password_hash_truth = user_data["password_hash"]
         password_hash = hash_function(password_prehash, password_salt, only_salt=True)
@@ -93,11 +93,11 @@ def get_user_id(database : Session, username : str, password_prehash : str) -> i
     else:
         return -1
 
-def get_user(database : Session, username : str, password_prehash : str) -> sql_db.user:
+def get_user(database : Session, username : str, password_prehash : str) -> sql_db_tables.user:
     """
     Returns the a user by lookup after verifying, raises an error otherwise.
     """
-    statement = select(sql_db.user).where(sql_db.user.name == username)
+    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username)
     retrieved = database.exec(statement).all()
     if len(retrieved) > 0:
         password_salt = retrieved[0].password_salt

@@ -8,8 +8,8 @@ from fastapi import FastAPI, File, UploadFile, APIRouter
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
-from QueryLake.model_manager import LLMEnsemble
-from QueryLake import instruction_templates, encryption, sql_db, database_admin_operations
+from QueryLake.models.model_manager import LLMEnsemble
+from QueryLake import instruction_templates
 from fastapi.responses import StreamingResponse
 # from QueryLake.sql_db import User, File, 
 # from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -21,7 +21,8 @@ import py7zr
 import inspect
 import re
 
-from QueryLake import api
+from QueryLake.api import api
+from QueryLake.database import database_admin_operations, encryption, sql_db_tables
 
 
 app = FastAPI()
@@ -53,13 +54,16 @@ GLOBAL_LLM_CONFIG = GLOBAL_SETTINGS["default_llm_config"]
 
 ACTIVE_SESSIONS = {}
 
-GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
 # engine = create_engine("sqlite:///database.db")
 engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
 SQLModel.metadata.create_all(engine)
 # session_factory = sessionmaker(bind=engine)
 # Session = scoped_session(session_factory)
 database = Session(engine)
+
+database_admin_operations.add_models_to_database(database, GLOBAL_SETTINGS["models"])
+# GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
+GlobalLLMEnsemble = LLMEnsemble(database, "Llama-2-7b-Chat-GPTQ")
 
 print("Model Loaded")
 
@@ -86,7 +90,7 @@ async def chat(req: Request):
     Returns Langchain generation via SSE
     """
 
-    arguments = req.query_params._dict
+    arguments = json.loads(req.query_params._dict["parameters"]) 
     print("request:", arguments)
     if "query" in arguments:
         prompt = arguments["query"]
@@ -106,17 +110,18 @@ async def chat(req: Request):
         return EventSourceResponse("Invalid Authentication") # This response doesn't work. It ends the call obviously, but doesn't communicate it to the user.
 
     result = EventSourceResponse(GlobalLLMEnsemble.chain(
-                                    user_name=arguments["username"],
-                                    session_hash=arguments["session_hash"],
-                                    database=database,
-                                    question=prompt,
+                                user_name=arguments["username"],
+                                session_hash=arguments["session_hash"],
+                                database=database,
+                                question=prompt,
                                 ))
     return result
     
 @app.post("/api/async/upload_document")
 async def create_document_collection(req: Request, file : UploadFile):
     # try:
-    arguments = req.query_params._dict
+    # arguments = req.query_params._dict
+    arguments = json.loads(req.query_params._dict["parameters"]) 
     return api.upload_document_to_collection(database=database, **arguments, file=file)
     # except Exception as e:
     #     return {"success": False, "note": str(e)}
@@ -128,8 +133,8 @@ async def fetch_document(req: Request):
     Takes arguments: file hash id, username, password_prehash.
     """
     try:
-        arguments = req.query_params._dict
-
+        # arguments = req.query_params._dict
+        arguments = json.loads(req.query_params._dict["parameters"]) 
         fetch_parameters = api.get_document_secure(database=database, **arguments)
         path=fetch_parameters["database_path"]
         password = fetch_parameters["password"]
@@ -151,7 +156,8 @@ def api_general_call(req: Request, rest_of_path: str):
     print("api called.")
     print(req.query_params._dict)
     try:
-        arguments = req.query_params._dict
+        # arguments = req.query_params._dict
+        arguments = json.loads(req.query_params._dict["parameters"]) 
         route = req.scope['path']
         route_split = route.split("/")
         print("/".join(route_split[:3]))
@@ -173,6 +179,7 @@ def api_general_call(req: Request, rest_of_path: str):
         return {"success": False, "note": str(e)}
 
 if __name__ == "__main__":
+    
     # try:
     # database_admin_operations.add_llama2_to_db(database)
     # except:

@@ -54,6 +54,7 @@ class chat_session_new(SQLModel, table=True):
     creation_timestamp: float
     tool_used: Optional[str] = Field(default="chat")
     currently_generating: Optional[bool] = Field(default=False)
+    hidden: Optional[bool] = Field(default=False)
 
 class chat_entry_user_question(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

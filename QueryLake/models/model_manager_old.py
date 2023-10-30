@@ -9,8 +9,8 @@ import threading
 import copy
 
 from sqlmodel import Session, select
-from .api import TokenTracker
-from .sql_db import model_query_raw, access_token
+from ..api.api import TokenTracker
+from ..database.sql_db_tables import model_query_raw, access_token
 import time
 
 class LLMEnsemble:

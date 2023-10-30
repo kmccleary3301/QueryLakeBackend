@@ -1,5 +1,5 @@
 import os
-from .. import sql_db
+from ..database import sql_db_tables
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 from .user_auth import *
@@ -18,7 +18,10 @@ def fetch_chat_sessions(database : Session,
 
     user = get_user(database, username, password_prehash)
 
-    user_sessions = database.exec(select(sql_db.chat_session_new).where(and_(sql_db.chat_session_new.author_user_name == username, not_(is_(sql_db.chat_session_new.title, None))))).all()
+    user_sessions = database.exec(select(sql_db_tables.chat_session_new).where(and_(sql_db_tables.chat_session_new.author_user_name == username, 
+                                                                                    not_(is_(sql_db_tables.chat_session_new.title, None)),
+                                                                                    sql_db_tables.chat_session_new.hidden == False))).all()
+    
     print("sessions:", user_sessions)
     user_sessions = sorted(user_sessions, key=lambda x: x.creation_timestamp)
 
@@ -41,25 +44,25 @@ def fetch_session(database : Session,
 
     user = get_user(database, username, password_prehash)
 
-    session = database.exec(select(sql_db.chat_session_new).where(and_(sql_db.chat_session_new.hash_id == hash_id, sql_db.chat_session_new.author_user_name == username))).first()
+    session = database.exec(select(sql_db_tables.chat_session_new).where(and_(sql_db_tables.chat_session_new.hash_id == hash_id, sql_db_tables.chat_session_new.author_user_name == username))).first()
 
-    bot_responses_previous = database.exec(select(sql_db.chat_entry_model_response).where(sql_db.chat_entry_model_response.chat_session_id == session.id)).all()
+    bot_responses_previous = database.exec(select(sql_db_tables.chat_entry_model_response).where(sql_db_tables.chat_entry_model_response.chat_session_id == session.id)).all()
     # print("Bot responses found:", bot_responses_previous)
     bot_responses_previous = sorted(bot_responses_previous, key=lambda x: x.timestamp)
 
     return_segments = []
     for bot_response in bot_responses_previous:
-        question_previous = database.exec(select(sql_db.chat_entry_user_question).where(sql_db.chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
+        question_previous = database.exec(select(sql_db_tables.chat_entry_user_question).where(sql_db_tables.chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
         return_segments.append({"content": question_previous.content.encode("utf-8").hex(), "type": "user"})
         return_segments.append({"content": bot_response.content.encode("utf-8").hex(), "type": "bot"})
-    
+
     # print("Got return segments:", return_segments)
     return {"success": True, "result": return_segments}
 
 def prune_empty_chat_sessions(database : Session):
     """Get rid of empty chat sessions with no history."""
 
-    sessions = database.exec(select(sql_db.chat_session_new).where(sql_db.chat_session_new.title == None)).all()
+    sessions = database.exec(select(sql_db_tables.chat_session_new).where(sql_db_tables.chat_session_new.title == None)).all()
     for session in sessions:
         database.delete(session)
     database.commit()
@@ -73,12 +76,12 @@ def create_chat_session(database : Session,
 
     user = get_user(database, username, password_prehash)
     if access_token_hash_id is None:
-        get_access_token = database.exec(select(sql_db.access_token).where(sql_db.access_token.author_user_name == username)).first()
+        get_access_token = database.exec(select(sql_db_tables.access_token).where(sql_db_tables.access_token.author_user_name == username)).first()
     else:
-        get_access_token = database.exec(select(sql_db.access_token).where(sql_db.access_token.hash_id == access_token_hash_id)).first()
+        get_access_token = database.exec(select(sql_db_tables.access_token).where(sql_db_tables.access_token.hash_id == access_token_hash_id)).first()
     
     session_hash = random_hash()
-    new_session = sql_db.chat_session_new(
+    new_session = sql_db_tables.chat_session_new(
         hash_id=session_hash,
         model="Llama-2-7b-Chat-GPTQ",
         author_user_name=username,
@@ -89,6 +92,23 @@ def create_chat_session(database : Session,
     database.add(new_session)
     database.commit()
     return {"success": True, "session_hash": session_hash}
+
+def hide_chat_session(database : Session, 
+                        username : str, 
+                        password_prehash : str,
+                        hash_id: str):
+    """
+    Permanently hide chat session so it does not show up in history.
+    """
+
+    user = get_user(database, username, password_prehash)
+
+    session = database.exec(select(sql_db_tables.chat_session_new).where(and_(sql_db_tables.chat_session_new.hash_id == hash_id, sql_db_tables.chat_session_new.author_user_name == username))).first()
+
+    session.hidden = True
+    database.commit()
+    # print("Got return segments:", return_segments)
+    return {"success": True}
 
 
 

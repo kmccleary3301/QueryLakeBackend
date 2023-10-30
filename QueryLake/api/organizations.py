@@ -1,8 +1,8 @@
 import os
-from .. import sql_db
+from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
 import time
-from .. import encryption
+from ..database import encryption
 from .user_auth import *
 from .hashing import random_hash
 
@@ -17,7 +17,7 @@ def create_organization(database : Session, username : str, password_prehash : s
     
     (public_key, private_key) = encryption.ecc_generate_public_private_key()
 
-    new_organization = sql_db.organization(
+    new_organization = sql_db_tables.organization(
         hash_id=random_hash(),
         name=organization_name,
         creation_timestamp=time.time(),
@@ -29,7 +29,7 @@ def create_organization(database : Session, username : str, password_prehash : s
     
     private_key_secured = encryption.ecc_encrypt_string(user.public_key, private_key)
 
-    new_membership = sql_db.organization_membership(
+    new_membership = sql_db_tables.organization_membership(
         role="owner",
         organization_id=new_organization.id,
         user_name=user.name,
@@ -48,13 +48,13 @@ def invite_user_to_organization(database : Session, username : str, password_pre
     """
     assert member_class in ["owner", "admin", "member", "viewer"], "Invalid member class"
     user = get_user(database, username, password_prehash)
-    invitee = database.exec(select(sql_db.user).where(sql_db.user.name == username_to_invite)).first()
+    invitee = database.exec(select(sql_db_tables.user).where(sql_db_tables.user.name == username_to_invite)).first()
 
-    org_get = database.exec(select(sql_db.organization).where(sql_db.organization.id == organization_id)).all()
+    org_get = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).all()
     assert len(org_get) > 0, "Organization not found"
-    membership_get = database.exec(select(sql_db.organization_membership).where(
-        sql_db.organization_membership.organization_id == organization_id and \
-        sql_db.organization_membership.user_name == username)).all()
+    membership_get = database.exec(select(sql_db_tables.organization_membership).where(
+        sql_db_tables.organization_membership.organization_id == organization_id and \
+        sql_db_tables.organization_membership.user_name == username)).all()
     
     assert len(membership_get) > 0, "Not a member of given organization"
 
@@ -72,7 +72,7 @@ def invite_user_to_organization(database : Session, username : str, password_pre
 
     organization_private_key = encryption.ecc_decrypt_string(user_private_key, membership_get[0].organization_private_key_secure)
 
-    new_membership = sql_db.organization_membership(
+    new_membership = sql_db_tables.organization_membership(
         role=member_class,
         organization_id=organization_id,
         organization_private_key_secure=encryption.ecc_encrypt_string(invitee.public_key, organization_private_key),
@@ -91,11 +91,11 @@ def accept_organization_invitation(database : Session, username : str, password_
     user = get_user(database, username, password_prehash)
     # invitee = database.exec(select(sql_db.user).where(sql_db.user.name == username_to_invite)).first()
 
-    org_get = database.exec(select(sql_db.organization).where(sql_db.organization.id == organization_id)).all()
+    org_get = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).all()
     assert len(org_get) > 0, "Organization not found"
-    membership_get = database.exec(select(sql_db.organization_membership).where(
-        and_(sql_db.organization_membership.organization_id == organization_id,
-        sql_db.organization_membership.user_name == username))).all()
+    membership_get = database.exec(select(sql_db_tables.organization_membership).where(
+        and_(sql_db_tables.organization_membership.organization_id == organization_id,
+        sql_db_tables.organization_membership.user_name == username))).all()
 
     if membership_get[0].invite_still_open == False:
         raise ValueError("Invitation already accepted")
@@ -115,26 +115,26 @@ def fetch_memberships(database : Session, username : str, password_prehash : str
 
     user = get_user(database, username, password_prehash)
     if return_subset == "all":
-        membership_get = database.exec(select(sql_db.organization_membership).where(sql_db.organization_membership.user_name == username)).all()
+        membership_get = database.exec(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.user_name == username)).all()
     elif return_subset == "open_invitations":
-        membership_get = database.exec(select(sql_db.organization_membership).where(and_(
-            sql_db.organization_membership.user_name == username,
-            sql_db.organization_membership.invite_still_open == True
+        membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
+            sql_db_tables.organization_membership.user_name == username,
+            sql_db_tables.organization_membership.invite_still_open == True
             ))).all()
     else:
-         membership_get = database.exec(select(sql_db.organization_membership).where(and_(
-            sql_db.organization_membership.user_name == username,
-            sql_db.organization_membership.invite_still_open == False
+         membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
+            sql_db_tables.organization_membership.user_name == username,
+            sql_db_tables.organization_membership.invite_still_open == False
             ))).all()
     
     organizations = []
     for membership in membership_get:
-        organization = database.exec(select(sql_db.organization).where(sql_db.organization.id == membership.organization_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == membership.organization_id)).first()
         organizations.append({
             "organization_id": organization.id,
             "organization_name": organization.name,
             "role": membership.role,
             "accepted": membership.invite_still_open,
-
         })
-    return {"success": True, "memberships": organizations}
+    
+    return {"success": True, "memberships": organizations, "admin": user.is_admin}

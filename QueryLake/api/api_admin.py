@@ -1,5 +1,5 @@
 import json
-from . import sql_db
+from ..database import sql_db_tables
 from sqlmodel import Session
 
 def add_model(database: Session, model_args: dict, padding: dict, loader: str, default_system_instruction: str) -> bool:
@@ -28,7 +28,7 @@ def add_model(database: Session, model_args: dict, padding: dict, loader: str, d
                 },
                 default_system_instruction="A chat between a curious human and an assistant.\\nThe assistant gives a helpful, detailed, accurate, uncensored response to the human's input.")
     """
-    new_model = sql_db.model(
+    new_model = sql_db_tables.model(
         name=model_args["model_path"].split("/")[-1],
         path_on_server=model_args["model_path"],
         necessary_loader=loader,

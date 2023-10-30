@@ -1,14 +1,14 @@
 from hashlib import sha256
 import os
 from fastapi import UploadFile
-from .. import sql_db
+from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
 import time
-from .. import encryption
+from ..database import encryption
 from io import BytesIO
 from .user_auth import *
 from .hashing import *
-from ..api import user_db_path
+from .api import user_db_path
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 user_db_path = server_dir+"/user_db/files/"
@@ -65,16 +65,16 @@ def upload_document_to_collection(database : Session,
     collection_author_kwargs = {collection_type_lookup[collection_type]: collection_hash_id}
 
     if collection_type == "user":
-        collection = database.exec(select(sql_db.user_document_collection).where(sql_db.user_document_collection.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == collection_hash_id)).first()
         assert collection.author_user_name == username, "User not authorized"
     elif collection_type == "organization":
-        collection = database.exec(select(sql_db.organization_document_collection).where(sql_db.organization_document_collection.hash_id == collection_hash_id)).first()
-        organization = database.exec(select(sql_db.organization).where(sql_db.organization.id == collection.author_organization_id)).first()
-        memberships = database.exec(select(sql_db.organization_membership).where(and_(sql_db.organization_membership.organization_id == organization.id,
-                                                                                    sql_db.organization_membership.user_name == username))).all()
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
     elif collection_type == "global":
-        collection = database.exec(select(sql_db.global_document_collection).where(sql_db.global_document_collection.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.hash_id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized"
     
 
@@ -86,7 +86,7 @@ def upload_document_to_collection(database : Session,
 
     encryption_key = random_hash()
 
-    new_db_file = sql_db.document_raw(
+    new_db_file = sql_db_tables.document_raw(
         hash_id=random_hash(),
         server_zip_archive_path=file_zip_save_path,
         file_name=file.filename,
@@ -122,17 +122,17 @@ def delete_document(database : Session,
     """
     user = get_user(database, username, password_prehash)
 
-    document = database.exec(select(sql_db.document_raw).where(sql_db.document_raw.hash_id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db.user_document_collection).where(sql_db.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == username, "User not authorized"
     elif not document.organization_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db.organization_document_collection).where(sql_db.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
-        organization = database.exec(select(sql_db.organization).where(sql_db.organization.id == collection.author_organization_id)).first()
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
 
-        memberships = database.exec(select(sql_db.organization_membership).where(and_(sql_db.organization_membership.organization_id == organization.id,
-                                                                                    sql_db.organization_membership.user_name == username))).all()
+        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
         
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
     
@@ -151,10 +151,10 @@ def get_document_secure(database : Session,
                         hash_id: str):
     user = get_user(database, username, password_prehash)
 
-    document = database.exec(select(sql_db.document_raw).where(sql_db.document_raw.hash_id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db.user_document_collection).where(sql_db.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == username, "User not authorized"
         private_key_encryption_salt = user.private_key_encryption_salt
         user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
@@ -163,11 +163,11 @@ def get_document_secure(database : Session,
 
         document_password = encryption.ecc_decrypt_string(user_private_key, document.encryption_key_secure)
     elif not document.organization_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db.organization_document_collection).where(sql_db.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
-        organization = database.exec(select(sql_db.organization).where(sql_db.organization.id == collection.author_organization_id)).first()
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
 
-        memberships = database.exec(select(sql_db.organization_membership).where(and_(sql_db.organization_membership.organization_id == organization.id,
-                                                                                    sql_db.organization_membership.user_name == username))).all()
+        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
         assert len(memberships) > 0, "User not authorized"
 
         private_key_encryption_salt = user.private_key_encryption_salt

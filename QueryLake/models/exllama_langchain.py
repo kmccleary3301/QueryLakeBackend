@@ -363,7 +363,17 @@ class Exllama(LLM):
             #Tokenize the string from the last new line, we can't just decode the last token due to how sentencepiece decodes.
             stuff = generator.tokenizer.decode(generator.sequence_actual[0][last_newline_pos:])
             cursor_tail = len(stuff)
-            chunk = stuff[cursor_head:cursor_tail]
+            # chunk = stuff[cursor_head:cursor_tail]
+
+            if (cursor_tail < cursor_head): # This happens on special characters and can fail to decode them.
+                chunk = stuff[-1:]
+            else:
+                chunk = stuff[cursor_head:cursor_tail]
+
+            # Manually remove the unknown character token. There is an issue decoding special characters i.e. emojis.
+            if (bytes(chunk, encoding="utf-8").hex() == "efbfbd"):
+                chunk = ""
+
             cursor_head = cursor_tail
             
             #Append the generated chunk to our stream buffer
