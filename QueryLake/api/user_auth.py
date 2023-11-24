@@ -1,14 +1,22 @@
 from hashlib import sha256
 import random
 from ..database import sql_db_tables
-from sqlmodel import Session, select
+from sqlmodel import Session, select, and_
 import time
 from ..database import encryption
 from .hashing import *
-import os
+import os, json
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 user_db_path = server_dir+"/user_db/files/"
+
+server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
+upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
+user_db_path = server_dir+"/user_db/files/"
+with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
+    file_read = f.read()
+    f.close()
+GLOBAL_SETTINGS = json.loads(file_read)
 
 def add_user(database : Session, username : str, password : str) -> bool:
     """
@@ -106,8 +114,127 @@ def get_user(database : Session, username : str, password_prehash : str) -> sql_
         if password_hash == password_hash_truth:
             return retrieved[0]
         else:
-            return ValueError("User Verification Failed")
+            raise ValueError("User Verification Failed")
     else:
         raise IndexError("User Not Found")
     # except:
     #     raise ValueError("Error Validating User")
+
+def get_user_private_key(database : Session, username : str, password_prehash : str) -> str:
+    """
+    Fetch user private key.
+    """
+    user = get_user(database, username, password_prehash)
+
+    private_key_encryption_salt = user.private_key_encryption_salt
+    user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+
+    user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+
+    return user_private_key
+
+def get_organization_private_key(database : Session, username : str, password_prehash : str, organization_hash_id : str) -> str:
+    """
+    Decrypt organization private key from user's membership entry in the database.
+    """
+    user = get_user(database, username, password_prehash)
+
+    organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
+
+    memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                sql_db_tables.organization_membership.user_name == username))).all()
+    assert len(memberships) > 0, "User not authorized with organization"
+
+    private_key_encryption_salt = user.private_key_encryption_salt
+    user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+
+    user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+
+    organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
+
+    return organization_private_key
+
+def get_available_models(database : Session, username : str, password_prehash : str):
+    """
+    Gets a list of all models on the server available to the given user.
+    Plan on making changes so that organizations can have private models.
+    """
+    user = get_user(database, username, password_prehash)
+    models = database.exec(select(sql_db_tables.model)).all()
+    external_models = {
+        "openai": [key for key in GLOBAL_SETTINGS["external_model_providers"]["openai"].keys()]
+    }
+    results = {
+        "default_model": GLOBAL_SETTINGS["default_model"],
+        "local_models": [model.name for model in models],
+        "external_models": external_models
+    }
+    return {"success" : True, "result" : results}
+
+def set_user_openai_api_key(database : Session, 
+                            username : str, 
+                            password_prehash : str,
+                            openai_api_key : str):
+    """
+    Sets user OpenAI API key in SQL db.
+    Necessary to use OpenAI models for chat outputs.
+    """
+    user = get_user(database, username, password_prehash)
+    encrypted_api_key = encryption.ecc_encrypt_string(user.public_key, openai_api_key)
+    user.openai_api_key_encrypted = encrypted_api_key
+    database.commit()
+    return {"success": True}
+
+def set_organization_openai_id(database : Session, 
+                                username : str, 
+                                password_prehash : str,
+                                openai_organization_id : str,
+                                organization_hash_id : str):
+    """
+    Sets organization OpenAI ID Key.
+    Using this allows users to use OpenAI models with charges made
+    to the OpenAI organization instead.
+    """
+    user = get_user(database, username, password_prehash)
+    organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
+
+    memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                sql_db_tables.organization_membership.user_name == username))).all()
+    assert len(memberships) > 0, "User not authorized with organization"
+    assert memberships[0].role in ["owner", "admin", "member"], "User not authorized to set SERP key"
+
+    encrypted_openai_organization_id = encryption.ecc_encrypt_string(organization.public_key, openai_organization_id)
+
+    organization.openai_organization_id_encrypted = encrypted_openai_organization_id
+    database.commit()
+
+    return {"success": True}
+
+def get_openai_api_key(database : Session, 
+                        username : str, 
+                        password_prehash : str,
+                        organization_hash_id : str = None):
+    """
+    Retrieve user OpenAI API key.
+    If organization is specified, return an array with the former plus
+    the organization OpenAI ID.
+    """
+    user = get_user(database, username, password_prehash)
+    return_result = []
+    
+    if not organization_hash_id is None:
+        organization_private_key = get_organization_private_key(database, username, password_prehash, organization_hash_id)
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
+        organization_openai_id_encrypted = organization.openai_organization_id_encrypted
+        assert not organization_openai_id_encrypted is None, "Organization OpenAI ID not set"
+        openai_organization_id = encryption.ecc_decrypt_string(organization_private_key, organization_openai_id_encrypted)
+
+    user_private_key = get_user_private_key(database, username, password_prehash)
+    encrypted_openai_api_key = user.openai_api_key_encrypted
+    assert not encrypted_openai_api_key is None, "User OpenAI API key not set"
+    user_openai_api_key = encryption.ecc_decrypt_string(user_private_key, encrypted_openai_api_key)
+    if not organization_hash_id is None:
+        return {"success": True, "result": [user_openai_api_key, openai_organization_id]}
+    return {"success": True, "result": user_openai_api_key}
+
+    

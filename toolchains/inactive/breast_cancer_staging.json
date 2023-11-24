@@ -1,0 +1,112 @@
+{
+	"name": "Breast Cancer Staging",
+    "category": "Medical",
+	"chat_window_settings": {
+		"websearch": false,
+        "file_upload": {
+            "value": true,
+            "multiple": true
+        },
+        "display_mode": "single_table",
+        "store_session": true,
+        "download_results": true
+	},
+    "pipeline_starting_input": {
+        "arguments": ["user_files"]
+    },
+    "pipeline": [
+        {
+            "function": null,
+            "arguments": [
+                {
+                    "input": "user_files",
+                    "type": "file",
+                    "iterable": true,
+                    "optional": false
+                }
+            ],
+            "execution": "synchronous",
+            "stream_output": false,
+            "iterate": true,
+            "output_type": "json",
+            "feed_to": [
+                {
+                    "destination": 1,
+                    "split_outputs": true,
+                    "target_argument": "file_input"
+                }
+            ]
+        },
+        {
+            "function": "stage_breast_cancer_report",
+            "arguments": [
+                {
+                    "argument_name": "file_input",
+                    "type": "file",
+                    "iterable_sources": false,
+                    "optional": false
+                }
+            ],
+            "execution": "synchronous",
+            "stream_output": false,
+            "iterate": true,
+            "output_type": "json",
+            "feed_to": [
+                {
+                    "destination": 2,
+                    "split_outputs": false,
+                    "target_argument": "table_row"
+                }
+            ]
+        },
+        {
+            "function": "format_jsons_to_table",
+            "arguments": [
+                {
+                    "argument_name": "table_row",
+                    "type": "json",
+                    "iterable_sources": true,
+                    "optional": false
+                }
+            ],
+            "stream_input": true,
+            "execution": "asynchronous",
+            "iterate": false,
+            "output_type": "string",
+            "feed_to": [
+                {
+                    "destination": "user",
+                    "argument_class": "display_table",
+                    "stream": true,
+                    "stream_type": "total_revision"
+                },
+                {
+                    "destination": 2,
+                    "stream": false
+                }
+            ]
+        },
+        {
+            "function": "convert_markdown_table_to_data_formats",
+            "arguments": [
+                {
+                    "argument_name": "markdown_table",
+                    "type": "string",
+                    "iterable_sources": false,
+                    "optional": false
+                }
+            ],
+            "stream_input": false,
+            "execution": "asynchronous",
+            "iterate": false,
+            "output_type": "list",
+            "feed_to": [
+                {
+                    "destination": "user",
+                    "argument_class": "download_links",
+                    "stream": false
+                }
+            ]
+        }
+    ]
+}

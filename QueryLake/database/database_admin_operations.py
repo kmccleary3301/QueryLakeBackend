@@ -50,16 +50,16 @@ def add_models_to_database(database, models):
         try:
             model_args = model["model_args"]
             necessary_loader = model["loader"]
-            model_name = model_args["model_path"].split("/")[-1]
+            # model_name = model_args["model_path"].split("/")[-1]
             padding = model["padding"]
             default_system_instruction = model["default_system_instructions"]
 
-            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.name == model_name)).all()
+            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.name == model["name"])).all()
             if len(find_existing_model) > 0:
                 continue
 
             new_model = sql_db_tables.model(
-                name=model_name,
+                name=model["name"],
                 path_on_server=model_args["model_path"],
                 necessary_loader=necessary_loader,
                 default_settings=json.dumps(model_args),
@@ -69,6 +69,8 @@ def add_models_to_database(database, models):
                 bot_response_wrapper=padding["response_wrap"],
                 default_system_instruction=default_system_instruction
             )
+            print("Adding model to db:", new_model.__dict__)
+
             database.add(new_model)
             database.commit()
         except:

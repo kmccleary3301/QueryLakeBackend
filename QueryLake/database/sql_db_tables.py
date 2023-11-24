@@ -22,6 +22,32 @@ def data_dict(db_entry : SQLModel):
 
 # Experimental
 
+
+class toolchain_session(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
+    creation_timestamp: float
+    toolchain_id: str = Field(foreign_key="toolchain.toolchain_id", index=True)
+    author: str = Field(foreign_key="user.name", index=True)
+    state_arguments: Optional[str] = Field(default=None)
+
+class toolchain(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    toolchain_id: str = Field(index=True, unique=True)
+    category: str
+    content: str #JSON loads this portion.
+
+
+
+
+
+
+class document_access_token(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    hash_id: str = Field(index=True, unique=True)
+    expiration_timestamp: float
+
+
 class model(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -68,9 +94,15 @@ class chat_entry_model_response(SQLModel, table=True):
     chat_session_id: int = Field(foreign_key="chat_session_new.id", index=True)
     timestamp: float
     content: str
+    sources: Optional[str] = Field(default=None)
 
-    
-
+class web_search(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    author_user_name: str = Field(foreign_key="user.name", index=True)
+    query: str
+    timestamp: float
+    organization_hash_id: Optional[str] = Field(foreign_key="organization.hash_id", index=True, default=None)
+    result: str
 
 # Decided on
 
@@ -85,6 +117,8 @@ class user(SQLModel, table=True):
     public_key: str
     private_key_encryption_salt: str
     private_key_secured: str # Encrypted with salt(password_prehash, encryption_salt)
+    serp_api_key_encrypted: Optional[str] = Field(default=None)         # Encrypted with user's public key
+    openai_api_key_encrypted: Optional[str] = Field(default=None)       # Encrypted with user's public key
 
 class organization(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -92,6 +126,8 @@ class organization(SQLModel, table=True):
     name: str
     creation_timestamp: float
     public_key: str
+    serp_api_key_encrypted: Optional[str] = Field(default=None)             # Encrypted with organization's public key
+    openai_organization_id_encrypted: Optional[str] = Field(default=None)   # Encrypted with organization's public key
 
 class chat_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -135,6 +171,8 @@ class document_raw(SQLModel, table=True):
     organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.hash_id", index=True)
     user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
     global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
+    toolchain_session_hash_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.hash_id", index=True)
+
 
 class organization_document_collection(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -165,7 +203,7 @@ class global_document_collection(SQLModel, table=True):
 
 class organization_membership(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    role: str
+    role: str # "owner" | "admin" | "member" | "viewer"
     organization_id: int = Field(foreign_key="organization.id", index=True)
     user_name: str = Field(foreign_key="user.name", index=True)
     invite_sender_user_name: Optional[str] = Field(default=None, foreign_key="user.name")

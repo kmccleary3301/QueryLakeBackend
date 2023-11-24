@@ -90,7 +90,8 @@ def fetch_all_collections(database : Session,
             sql_db_tables.organization_membership.user_name == username and sql_db_tables.organization_membership.invite_still_open == False)).all()
     organizations = []
     for membership in fetch_memberships:
-        organizations.append(database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == membership.organization_id)).first())
+        if not membership.invite_still_open:
+            organizations.append(database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == membership.organization_id)).first())
     
     return_value = {"global_collections": [], "user_collections": []}
 

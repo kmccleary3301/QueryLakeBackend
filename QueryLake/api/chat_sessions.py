@@ -4,9 +4,18 @@ from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 from .user_auth import *
 from .hashing import random_hash
+import json
+
+
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
+upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
 user_db_path = server_dir+"/user_db/files/"
+with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
+    file_read = f.read()
+    f.close()
+GLOBAL_SETTINGS = json.loads(file_read)
+
 
 def fetch_chat_sessions(database : Session, 
                         username : str, 
@@ -22,7 +31,7 @@ def fetch_chat_sessions(database : Session,
                                                                                     not_(is_(sql_db_tables.chat_session_new.title, None)),
                                                                                     sql_db_tables.chat_session_new.hidden == False))).all()
     
-    print("sessions:", user_sessions)
+    # print("sessions:", user_sessions)
     user_sessions = sorted(user_sessions, key=lambda x: x.creation_timestamp)
 
     return_sessions = []
@@ -54,7 +63,11 @@ def fetch_session(database : Session,
     for bot_response in bot_responses_previous:
         question_previous = database.exec(select(sql_db_tables.chat_entry_user_question).where(sql_db_tables.chat_entry_user_question.id == bot_response.chat_entry_response_to)).first()
         return_segments.append({"content": question_previous.content.encode("utf-8").hex(), "type": "user"})
-        return_segments.append({"content": bot_response.content.encode("utf-8").hex(), "type": "bot"})
+        if not bot_response.sources is None:
+            sources = [{"metadata": value} for value in json.loads(bot_response.sources)]
+            return_segments.append({"content": bot_response.content.encode("utf-8").hex(), "type": "bot", "sources": sources})
+        else:
+            return_segments.append({"content": bot_response.content.encode("utf-8").hex(), "type": "bot"})
 
     # print("Got return segments:", return_segments)
     return {"success": True, "result": return_segments}
@@ -70,7 +83,8 @@ def prune_empty_chat_sessions(database : Session):
 def create_chat_session(database : Session, 
                         username : str, 
                         password_prehash : str,
-                        access_token_hash_id : str = None):
+                        access_token_hash_id : str = None,
+                        model_name : str = GLOBAL_SETTINGS["default_model"]):
     """Create a new chat session. Returns the hash_id of the created session."""
 
 
@@ -83,7 +97,7 @@ def create_chat_session(database : Session,
     session_hash = random_hash()
     new_session = sql_db_tables.chat_session_new(
         hash_id=session_hash,
-        model="Llama-2-7b-Chat-GPTQ",
+        model=model_name,
         author_user_name=username,
         creation_timestamp=time.time(),
         access_token_id=get_access_token.id,

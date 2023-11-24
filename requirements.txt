@@ -6,6 +6,14 @@ sse_starlette
 safetensors
 exllama @ git+https://github.com/jllllll/exllama
 sentencepiece>=0.1.99
-flash-attn
+# flash-attn
 pypdf
 pycryptodome
+# flash-attn --no-build-isolation
+exllamav2
+sqlmodel
+py7zr
+eciespy
+python-multipart
+# pluggy
+# rich

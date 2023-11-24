@@ -32,10 +32,10 @@ def ecc_generate_public_private_key() -> tuple[str]:
     """
 
     eth_k = generate_eth_key()
-    sk_hex = eth_k.to_hex()  # hex string
-    pk_hex = eth_k.public_key.to_hex()
+    private_key_hex = eth_k.to_hex()  # hex string
+    public_key_hex = eth_k.public_key.to_hex()
 
-    return (pk_hex, sk_hex)
+    return (public_key_hex, private_key_hex)
 
 def ecc_encrypt_string(public_key_hex : str, input_string : str, encoding : str = "utf-8") -> str:
     """

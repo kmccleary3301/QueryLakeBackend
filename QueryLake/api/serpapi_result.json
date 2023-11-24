@@ -1,0 +1,361 @@
+{
+    "search_metadata": {
+        "id": "654e8b593c3fb241f12cb6e9",
+        "status": "Success",
+        "json_endpoint": "https://serpapi.com/searches/ce4b69f267d1780d/654e8b593c3fb241f12cb6e9.json",
+        "created_at": "2023-11-10 19:58:17 UTC",
+        "processed_at": "2023-11-10 19:58:17 UTC",
+        "google_url": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&uule=w+CAIQICIvRWFzdCBCYXRvbiBSb3VnZSBQYXJpc2gsTG91aXNpYW5hLFVuaXRlZCBTdGF0ZXM&sourceid=chrome&ie=UTF-8",
+        "raw_html_file": "https://serpapi.com/searches/ce4b69f267d1780d/654e8b593c3fb241f12cb6e9.html",
+        "total_time_taken": 1.39
+    },
+    "search_parameters": {
+        "engine": "google",
+        "q": "python sklearn kernel_regression _______________",
+        "location_requested": "Baton Rouge, Louisiana",
+        "location_used": "East Baton Rouge Parish,Louisiana,United States",
+        "google_domain": "google.com",
+        "device": "desktop"
+    },
+    "search_information": {
+        "query_displayed": "python sklearn kernel_regression _______________",
+        "total_results": 49700,
+        "time_taken_displayed": 0.74,
+        "menu_items": [{
+            "position": 1,
+            "title": "Images",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+_______________&tbm=isch&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIDhAB",
+            "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_images&gl=us&google_domain=google.com&hl=en&q=python+sklearn+kernel_regression+_______________"
+        }, {
+            "position": 2,
+            "title": "Videos",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+_______________&tbm=vid&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIDRAB",
+            "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_videos&gl=us&google_domain=google.com&hl=en&q=python+sklearn+kernel_regression+_______________"
+        }, {
+            "position": 3,
+            "title": "Shopping",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+_______________&tbm=shop&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIDBAB",
+            "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_shopping&gl=us&google_domain=google.com&hl=en&q=python+sklearn+kernel_regression+_______________"
+        }, {
+            "position": 4,
+            "title": "News",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+_______________&tbm=nws&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQICxAB",
+            "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&q=python+sklearn+kernel_regression+_______________&tbm=nws"
+        }, {
+            "position": 5,
+            "title": "Books",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+_______________&tbm=bks&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIVhAB"
+        }, {
+            "position": 6,
+            "title": "Maps",
+            "link": "https://maps.google.com/maps?sca_esv=eea3e502d75ccf43&sca_upv=1&output=search&q=python+sklearn+kernel_regression+_______________&source=lnms&entry=mc&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIVBAB"
+        }, {
+            "position": 7,
+            "title": "Flights",
+            "link": "https://www.google.com/travel/flights?sca_esv=eea3e502d75ccf43&sca_upv=1&output=search&q=python+sklearn+kernel_regression+_______________&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIVRAB"
+        }, {
+            "position": 8,
+            "title": "Finance",
+            "link": "https://www.google.com/finance?sca_esv=eea3e502d75ccf43&sca_upv=1&output=search&q=python+sklearn+kernel_regression+_______________&source=lnms&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ0pQJegQIUxAB"
+        }],
+        "organic_results_state": "Showing results for exact spelling despite spelling suggestion",
+        "spelling_fix": "python sklearn kernel regression _______________"
+    },
+    "related_questions": [{
+        "question": "How to do kernel regression in Python?",
+        "title": "2 Kernel regression by Hand in Python",
+        "date": "Feb 19, 2021",
+        "link": "https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66",
+        "list": ["1 Step 1: Calculate the Kernel for a single input x point. ... ", "2 Visualizing the Kernels for all the input x points. ... ", "3 Step 2: Calculate the weights for each input x value. ... ", "4 Step 3: Calculate the y pred value for a single input point."],
+        "displayed_link": "https://towardsdatascience.com \u203a kernel-regression-in-...",
+        "thumbnail": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/24f97a8358dbfb62038da12d443e9077168e8384a30d32db0484ea0798f4af5b.png",
+        "next_page_token": "eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiSG93IHRvIGRvIGtlcm5lbCByZWdyZXNzaW9uIGluIFB5dGhvbj8iLCJsayI6IkdpVm9iM2NnZEc4Z1pHOGdhMlZ5Ym1Wc0lISmxaM0psYzNOcGIyNGdhVzRnY0hsMGFHOXUiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ==",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_related_questions&google_domain=google.com&next_page_token=eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiSG93IHRvIGRvIGtlcm5lbCByZWdyZXNzaW9uIGluIFB5dGhvbj8iLCJsayI6IkdpVm9iM2NnZEc4Z1pHOGdhMlZ5Ym1Wc0lISmxaM0psYzNOcGIyNGdhVzRnY0hsMGFHOXUiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ%3D%3D"
+    }, {
+        "question": "What is the kernel ridge regression function?",
+        "snippet": "Kernel ridge regression (KRR) combines ridge regression (linear least squares with l2-norm regularization) with the kernel trick. It thus learns a linear function in the space induced by the respective kernel and the data. For non-linear kernels, this corresponds to a non-linear function in the original space.",
+        "title": "sklearn.kernel_ridge.KernelRidge",
+        "link": "http://scikit-learn.org/stable/modules/generated/sklearn.kernel_ridge.KernelRidge.html#:~:text=Kernel%20ridge%20regression%20(KRR)%20combines,function%20in%20the%20original%20space.",
+        "displayed_link": "http://scikit-learn.org \u203a stable \u203a modules \u203a generated",
+        "thumbnail": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtaW5cIloxhMHJuxVHT2xRaGMZxnDrB2VYyCcn0jSq0A&s",
+        "next_page_token": "eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyB0aGUga2VybmVsIHJpZGdlIHJlZ3Jlc3Npb24gZnVuY3Rpb24/IiwibGsiOiJHaUJyWlhKdVpXd2djbWxrWjJVZ2NtVm5jbVZ6YzJsdmJpQm1kVzVqZEdsdmJnIiwiYnMiOiJjLVBTNWxMenlDOVhLTWxYU01sWHlFNHR5a3ZOVVNoS1RTOUtMUzdPek05VHlNeFRDS2dzeWNqUHM1ZDR5OHhseEtVYm5wRllvcEJackZDU2tRcFhucG1Tbm9xc0thMDBMN2trRTZUbnB3bVhPcGNTVEU5eGRrNXFZbEdlUWs1bUhwQkcwbUV2c1VrSW04TGMxSktpek9SaVpGZTBaUXN3QWdBIiwiaWQiOiJmY18xIn0=",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_related_questions&google_domain=google.com&next_page_token=eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyB0aGUga2VybmVsIHJpZGdlIHJlZ3Jlc3Npb24gZnVuY3Rpb24%2FIiwibGsiOiJHaUJyWlhKdVpXd2djbWxrWjJVZ2NtVm5jbVZ6YzJsdmJpQm1kVzVqZEdsdmJnIiwiYnMiOiJjLVBTNWxMenlDOVhLTWxYU01sWHlFNHR5a3ZOVVNoS1RTOUtMUzdPek05VHlNeFRDS2dzeWNqUHM1ZDR5OHhseEtVYm5wRllvcEJackZDU2tRcFhucG1Tbm9xc0thMDBMN2trRTZUbnB3bVhPcGNTVEU5eGRrNXFZbEdlUWs1bUhwQkcwbUV2c1VrSW04TGMxSktpek9SaVpGZTBaUXN3QWdBIiwiaWQiOiJmY18xIn0%3D"
+    }, {
+        "question": "What is sklearn linear regression?",
+        "snippet": "Prerequisite: Linear Regression. Linear Regression is a machine learning algorithm based on supervised learning. It performs a regression task. Regression models a target prediction value based on independent variables. It is mostly used for finding out the relationship between variables and forecasting.",
+        "title": "Python | Linear Regression using sklearn - GeeksforGeeks",
+        "date": "Aug 2, 2023",
+        "link": "https://www.geeksforgeeks.org/python-linear-regression-using-sklearn/#:~:text=Prerequisite%3A%20Linear%20Regression,relationship%20between%20variables%20and%20forecasting.",
+        "displayed_link": "https://www.geeksforgeeks.org \u203a python-linear-regressio...",
+        "thumbnail": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQFrqHG8PEvvpr5tydX1PibmtXtU1zUv2GnOHLMI3AvMw&s",
+        "next_page_token": "eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyBza2xlYXJuIGxpbmVhciByZWdyZXNzaW9uPyIsImxrIjoiR2lGM2FHRjBJR2x6SUhOcmJHVmhjbTRnYkdsdVpXRnlJSEpsWjNKbGMzTnBiMjQiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ==",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_related_questions&google_domain=google.com&next_page_token=eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyBza2xlYXJuIGxpbmVhciByZWdyZXNzaW9uPyIsImxrIjoiR2lGM2FHRjBJR2x6SUhOcmJHVmhjbTRnYkdsdVpXRnlJSEpsWjNKbGMzTnBiMjQiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ%3D%3D"
+    }, {
+        "question": "What is sklearn metrics in Python?",
+        "snippet": "Classification metrics. The sklearn. metrics module implements several loss, score, and utility functions to measure classification performance. Some metrics might require probability estimates of the positive class, confidence values, or binary decisions values.",
+        "title": "3.3. Metrics and scoring: quantifying the quality of predictions - Scikit-learn",
+        "link": "http://scikit-learn.org/stable/modules/model_evaluation.html#:~:text=2.-,Classification%20metrics,values%2C%20or%20binary%20decisions%20values.",
+        "displayed_link": "http://scikit-learn.org \u203a modules \u203a model_evaluation",
+        "thumbnail": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/24f97a8358dbfb62038da12d443e9077737194cde1e05c40cd3ffcad46fe0fc7.png",
+        "next_page_token": "eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyBza2xlYXJuIG1ldHJpY3MgaW4gUHl0aG9uPyIsImxrIjoiR2lGM2FHRjBJR2x6SUhOcmJHVmhjbTRnYldWMGNtbGpjeUJwYmlCd2VYUm9iMjQiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ==",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google_related_questions&google_domain=google.com&next_page_token=eyJvbnMiOiIxMDA0MSIsImZjIjoiRW9zQkNreEJURTl1Y0ZsV2JFc3hWWEpEZUdaRVJsOXVkM0IxTlRjMU5IUjBOVWhLTlRCWmNERnZhelo0YTB4d01YTmpVVXAwZVZCaGVWaDRVRGh6ZEhscVUwaGpSMTlUWVdzMFdVWm9XbnBNRWhkWGIzUlBXbGwxWkVFM2FqaDNZbXRRTFdOcFNXdEJXUm9pUVVwM2F5MDRaVEJwVkVwelNDMXFNblowZUhkQlYxUTVUMjV6Y1dNNGFubHhVUSIsImZjdiI6IjMiLCJlaSI6IldvdE9aWXVkQTdqOHdia1AtY2lJa0FZIiwicWMiOiJjLU15S0tnc3ljalBVeWpPemtsTkxNcFR5RTR0eWt2TmlTOUtUUzlLTFM3T0JNckVvd0lCaGxyVEYxcjJBQSIsInF1ZXN0aW9uIjoiV2hhdCBpcyBza2xlYXJuIG1ldHJpY3MgaW4gUHl0aG9uPyIsImxrIjoiR2lGM2FHRjBJR2x6SUhOcmJHVmhjbTRnYldWMGNtbGpjeUJwYmlCd2VYUm9iMjQiLCJicyI6ImMtUFM1bEx6eUM5WEtNbFhTTWxYeUU0dHlrdk5VU2hLVFM5S0xTN096TTlUeU14VENLZ3N5Y2pQczVkNHk4eGx4S1VibnBGWW9wQlpyRkNTa1FwWG5wbVNub3FzS2EwMEw3a2tFNlRucHdtWE9wY1NURTl4ZGs1cVlsR2VRazVtSHBCRzBtRXZzVWtJbThMYzFKS2l6T1JpWkZlMFpRc3dBZ0EiLCJpZCI6ImZjXzEifQ%3D%3D"
+    }],
+    "organic_results": [{
+        "position": 1,
+        "title": "sklearn.kernel_ridge.KernelRidge",
+        "link": "http://scikit-learn.org/stable/modules/generated/sklearn.kernel_ridge.KernelRidge.html",
+        "displayed_link": "http://scikit-learn.org \u203a stable \u203a modules \u203a generated",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978c9ce3acb0a94261da7c51d30c0eaa620.png",
+        "snippet": "Kernel ridge regression (KRR) combines ridge regression (linear least squares with l2-norm regularization) with the kernel trick. It thus learns a linear ...",
+        "snippet_highlighted_words": ["Kernel ridge regression"],
+        "about_page_link": "https://www.google.com/search?q=About+http://scikit-learn.org/stable/modules/generated/sklearn.kernel_ridge.KernelRidge.html&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+http%3A%2F%2Fscikit-learn.org%2Fstable%2Fmodules%2Fgenerated%2Fsklearn.kernel_ridge.KernelRidge.html",
+        "cached_page_link": "http://webcache.googleusercontent.com/search?q=cache:677jfMfTwI0J:scikit-learn.org/stable/modules/generated/sklearn.kernel_ridge.KernelRidge.html&hl=en&gl=us",
+        "missing": ["_______________"],
+        "must_include": {
+            "word": "_______________",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+%22_______________%22&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ5t4CegQILxAB"
+        },
+        "source": "scikit-learn"
+    }, {
+        "position": 2,
+        "title": "1.3. Kernel ridge regression",
+        "link": "http://scikit-learn.org/stable/modules/kernel_ridge.html",
+        "displayed_link": "http://scikit-learn.org \u203a stable \u203a modules \u203a kernel_ridge",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978a12eb5a8a044753c72ef3e55c5cb25a5.png",
+        "snippet": "Kernel ridge regression (KRR) [M2012] combines Ridge regression and classification (linear least squares with l2-norm regularization) with the kernel trick. It ...",
+        "snippet_highlighted_words": ["combines Ridge regression and classification"],
+        "about_page_link": "https://www.google.com/search?q=About+http://scikit-learn.org/stable/modules/kernel_ridge.html&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+http%3A%2F%2Fscikit-learn.org%2Fstable%2Fmodules%2Fkernel_ridge.html",
+        "cached_page_link": "http://webcache.googleusercontent.com/search?q=cache:tqnckdGIgD0J:scikit-learn.org/stable/modules/kernel_ridge.html&hl=en&gl=us",
+        "missing": ["_______________"],
+        "must_include": {
+            "word": "_______________",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+%22_______________%22&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ5t4CegQIKxAB"
+        },
+        "source": "scikit-learn"
+    }, {
+        "position": 3,
+        "title": "Kernel Regression in Python",
+        "link": "https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66",
+        "displayed_link": "https://towardsdatascience.com \u203a kernel-regression-in-...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978a5ee230b32b49d406a6fb801fd0c8c4f.png",
+        "date": "Feb 19, 2021",
+        "snippet": "This notebook demonstrates how you can perform Kernel Regression manually in python. While Statsmodels provides a library for Kernel Regression, ...",
+        "snippet_highlighted_words": ["Statsmodels"],
+        "sitelinks": {
+            "inline": [{
+                "title": "2 Kernel Regression By Hand...",
+                "link": "https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66#:~:text=2%20Kernel%20regression%20by%20Hand%20in%20Python,-To%20do%20Kernel%20regression%20by"
+            }, {
+                "title": "4 References",
+                "link": "https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66#:~:text=4%20References,-https%3A%2F%2Fwww.stat.cmu.edu%2F~ryantibs%2Fadvmethods%2Fnotes%2Fkernel.pdf"
+            }, {
+                "title": "Membership",
+                "link": "https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66#:~:text=Membership"
+            }]
+        },
+        "about_page_link": "https://www.google.com/search?q=About+https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Ftowardsdatascience.com%2Fkernel-regression-in-python-9775c05d5f66",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:GYTWvqo1mtYJ:https://towardsdatascience.com/kernel-regression-in-python-9775c05d5f66&hl=en&gl=us",
+        "source": "Towards Data Science"
+    }, {
+        "position": 4,
+        "title": "sklearn.linear_model.LinearRegression",
+        "link": "http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html",
+        "displayed_link": "http://scikit-learn.org \u203a stable \u203a modules \u203a generated",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978197020b5b42fceb818ec998f59befd78.png",
+        "snippet": "LinearRegression fits a linear model with coefficients w = (w1, \u2026, wp) to minimize the residual sum of squares between the observed targets in the dataset, and ...",
+        "about_page_link": "https://www.google.com/search?q=About+http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+http%3A%2F%2Fscikit-learn.org%2Fstable%2Fmodules%2Fgenerated%2Fsklearn.linear_model.LinearRegression.html",
+        "cached_page_link": "http://webcache.googleusercontent.com/search?q=cache:ZGRlMLTGDaYJ:scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html&hl=en&gl=us",
+        "missing": ["_______________"],
+        "must_include": {
+            "word": "_______________",
+            "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=python+sklearn+kernel_regression+%22_______________%22&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ5t4CegQILRAB"
+        },
+        "source": "scikit-learn"
+    }, {
+        "position": 5,
+        "title": "Does sklearn support kernel regression? - python",
+        "link": "https://stackoverflow.com/questions/68617087/does-sklearn-support-kernel-regression",
+        "displayed_link": "https://stackoverflow.com \u203a questions \u203a does-sklearn-s...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978d1fe8b84d8cab75ffc4637134d08030c.png",
+        "date": "Aug 2, 2021",
+        "snippet": "Do I need to implement the kernel regression or sklearn has it's own kernel regression models (with different types of kernels) ? python ...",
+        "snippet_highlighted_words": ["kernel regression"],
+        "sitelinks": {
+            "list": [{
+                "title": "scikit learn kernel ridge regression produces very different ...",
+                "link": "https://stackoverflow.com/questions/73750066/scikit-learn-kernel-ridge-regression-produces-very-different-result-using-linear",
+                "date": "Sep 16, 2022"
+            }, {
+                "title": "What is the Kernel for the KNN regressor in sklearn python?",
+                "link": "https://stackoverflow.com/questions/48914360/what-is-the-kernel-for-the-knn-regressor-in-sklearn-python",
+                "date": "Feb 21, 2018"
+            }, {
+                "title": "Is kernel regression the same as linear kernel regression?",
+                "link": "https://stackoverflow.com/questions/37749941/is-kernel-regression-the-same-as-linear-kernel-regression",
+                "date": "Jun 10, 2016"
+            }, {
+                "title": "How to get a regression summary in scikit-learn like R does?",
+                "link": "https://stackoverflow.com/questions/26319259/how-to-get-a-regression-summary-in-scikit-learn-like-r-does",
+                "date": "Oct 11, 2014"
+            }]
+        },
+        "about_page_link": "https://www.google.com/search?q=About+https://stackoverflow.com/questions/68617087/does-sklearn-support-kernel-regression&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fstackoverflow.com%2Fquestions%2F68617087%2Fdoes-sklearn-support-kernel-regression",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:E_KVop5Na0oJ:https://stackoverflow.com/questions/68617087/does-sklearn-support-kernel-regression&hl=en&gl=us",
+        "source": "Stack Overflow"
+    }, {
+        "position": 6,
+        "title": "Regression Using scikit Kernel Ridge Regression",
+        "link": "https://visualstudiomagazine.com/articles/2023/07/06/scikit-kernel-ridge-regression.aspx",
+        "displayed_link": "https://visualstudiomagazine.com \u203a articles \u203a 2023/07/06",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac55997876965b3cf64fe2bdb71acea278411dc1.png",
+        "date": "Jul 6, 2023",
+        "snippet": "The scikit KernelRidge module creates models that are often surprisingly effective, especially with small datasets. A technique that is closely ...",
+        "snippet_highlighted_words": ["scikit KernelRidge module creates models that"],
+        "about_page_link": "https://www.google.com/search?q=About+https://visualstudiomagazine.com/articles/2023/07/06/scikit-kernel-ridge-regression.aspx&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fvisualstudiomagazine.com%2Farticles%2F2023%2F07%2F06%2Fscikit-kernel-ridge-regression.aspx",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:05Z2DROkBjQJ:https://visualstudiomagazine.com/articles/2023/07/06/scikit-kernel-ridge-regression.aspx&hl=en&gl=us",
+        "source": "Visual Studio Magazine"
+    }, {
+        "position": 7,
+        "title": "statsmodels.nonparametric.kernel_regression.KernelReg",
+        "link": "https://www.statsmodels.org/devel/generated/statsmodels.nonparametric.kernel_regression.KernelReg.html",
+        "displayed_link": "https://www.statsmodels.org \u203a devel \u203a generated \u203a stats...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac5599782ab870e5d6af3ef7598adb787d8906a5.png",
+        "snippet": "Calculates the conditional mean E[y|X] where y = g(X) + e . Note that the \u201clocal constant\u201d type of regression provided here is also known as Nadaraya-Watson ...",
+        "snippet_highlighted_words": ["Calculates the conditional mean E[y|X"],
+        "about_page_link": "https://www.google.com/search?q=About+https://www.statsmodels.org/devel/generated/statsmodels.nonparametric.kernel_regression.KernelReg.html&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fwww.statsmodels.org%2Fdevel%2Fgenerated%2Fstatsmodels.nonparametric.kernel_regression.KernelReg.html",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:0sWnGy2PtkIJ:https://www.statsmodels.org/devel/generated/statsmodels.nonparametric.kernel_regression.KernelReg.html&hl=en&gl=us",
+        "source": "Statsmodels"
+    }, {
+        "position": 8,
+        "title": "Sklearn Regression Models : Methods and Categories",
+        "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models",
+        "displayed_link": "https://www.simplilearn.com \u203a scikit-learn-tutorial \u203a sk...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac5599787b61d10e5955e50780003355b0f9bd4e.png",
+        "date": "Feb 23, 2023",
+        "snippet": "Scikit-learn (Sklearn) is the most robust machine learning library in Python ... In this article, we will explore what Sklearn Regression Models",
+        "snippet_highlighted_words": ["Scikit-learn", "Sklearn", "Python", "what Sklearn Regression"],
+        "sitelinks": {
+            "inline": [{
+                "title": "Sklearn Regression Models",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models#:~:text=Sklearn%20Regression%20Models,-By%20Simplilearn"
+            }, {
+                "title": "Lgbm Regressor",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models#:~:text=LGBM%20Regressor"
+            }, {
+                "title": "Supervised Learning",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models#:~:text=Supervised%20Learning,-The%20system%20learns%20under%20the"
+            }]
+        },
+        "about_page_link": "https://www.google.com/search?q=About+https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fwww.simplilearn.com%2Ftutorials%2Fscikit-learn-tutorial%2Fsklearn-regression-models",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:GYiDQhf6h8UJ:https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-regression-models&hl=en&gl=us",
+        "source": "Simplilearn.com"
+    }, {
+        "position": 9,
+        "title": "Sklearn Linear Regression (Step-By-Step Explanation)",
+        "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples",
+        "displayed_link": "https://www.simplilearn.com \u203a scikit-learn-tutorial \u203a sk...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac559978a82086a981c3ec6caaf505fe50d6ca14.png",
+        "date": "Apr 3, 2023",
+        "snippet": "It offers a set of fast tools for machine learning and statistical modeling, such as classification, regression, clustering, and dimensionality ...",
+        "snippet_highlighted_words": ["regression"],
+        "sitelinks": {
+            "inline": [{
+                "title": "Linear Regression Theory",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples#:~:text=Linear%20Regression%20Theory,-Linear%20Regression%20is%20a%20supervised"
+            }, {
+                "title": "Evaluating The Model",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples#:~:text=Evaluating%20the%20Model"
+            }, {
+                "title": "Exploratory Data Analysis",
+                "link": "https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples#:~:text=Exploratory%20Data%20Analysis,-Exploratory%20Data%20Analysis"
+            }]
+        },
+        "about_page_link": "https://www.google.com/search?q=About+https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fwww.simplilearn.com%2Ftutorials%2Fscikit-learn-tutorial%2Fsklearn-linear-regression-with-examples",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:Ie0lmb-a12sJ:https://www.simplilearn.com/tutorials/scikit-learn-tutorial/sklearn-linear-regression-with-examples&hl=en&gl=us",
+        "source": "Simplilearn.com"
+    }, {
+        "position": 10,
+        "title": "Is kernel ridge regression the same as kernel regression?",
+        "link": "https://stats.stackexchange.com/questions/312929/is-kernel-ridge-regression-the-same-as-kernel-regression",
+        "displayed_link": "https://stats.stackexchange.com \u203a questions \u203a is-kernel-...",
+        "favicon": "https://serpapi.com/searches/654e8b593c3fb241f12cb6e9/images/bdc301e7e816fa52dadc7ca0ac55997817b3cdee6b504076fa26ffce918b4acd.png",
+        "date": "Nov 9, 2017",
+        "snippet": "I know the Nadaraya-Watson kernel regression. What is new to me is the Kernel ridge regression from scitkit-learn's KernelRidge with kernel='rbf ...",
+        "snippet_highlighted_words": ["Kernel ridge regression"],
+        "about_page_link": "https://www.google.com/search?q=About+https://stats.stackexchange.com/questions/312929/is-kernel-ridge-regression-the-same-as-kernel-regression&tbm=ilp",
+        "about_page_serpapi_link": "https://serpapi.com/search.json?engine=google_about_this_result&google_domain=google.com&q=About+https%3A%2F%2Fstats.stackexchange.com%2Fquestions%2F312929%2Fis-kernel-ridge-regression-the-same-as-kernel-regression",
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:uzzzcrfmXqsJ:https://stats.stackexchange.com/questions/312929/is-kernel-ridge-regression-the-same-as-kernel-regression&hl=en&gl=us",
+        "source": "Stack Exchange"
+    }],
+    "related_searches": [{
+        "block_position": 1,
+        "query": "kernel regression sklearn",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+regression+sklearn&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAhAEAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+regression+sklearn"
+    }, {
+        "block_position": 1,
+        "query": "kernel regression python",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+regression+Python&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg_EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+regression+Python"
+    }, {
+        "block_position": 1,
+        "query": "kernel regression python example",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+regression+Python+example&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg-EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+regression+Python+example"
+    }, {
+        "block_position": 1,
+        "query": "python kernel logistic regression",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Python+kernel+logistic+regression&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg9EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Python+kernel+logistic+regression"
+    }, {
+        "block_position": 1,
+        "query": "kernel ridge regression example",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+ridge+regression+example&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg8EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+ridge+regression+example"
+    }, {
+        "block_position": 1,
+        "query": "kernel ridge regression python from scratch",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+ridge+regression+Python+from+scratch&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg7EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+ridge+regression+Python+from+scratch"
+    }, {
+        "block_position": 1,
+        "query": "sklearn linear regression",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Sklearn+linear+regression&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg6EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Sklearn+linear+regression"
+    }, {
+        "block_position": 1,
+        "query": "kernel logistic regression sklearn",
+        "link": "https://www.google.com/search?sca_esv=eea3e502d75ccf43&sca_upv=1&q=Kernel+logistic+regression+sklearn&sa=X&ved=2ahUKEwiLstvum7qCAxU4fjABHXkkAmIQ1QJ6BAg4EAE",
+        "serpapi_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=Kernel+logistic+regression+sklearn"
+    }],
+    "pagination": {
+        "current": 1,
+        "next": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&start=10&sourceid=chrome&ie=UTF-8",
+        "other_pages": {
+            "2": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&start=10&sourceid=chrome&ie=UTF-8",
+            "3": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&start=20&sourceid=chrome&ie=UTF-8",
+            "4": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&start=30&sourceid=chrome&ie=UTF-8",
+            "5": "https://www.google.com/search?q=python+sklearn+kernel_regression+_______________&oq=python+sklearn+kernel_regression+_______________&start=40&sourceid=chrome&ie=UTF-8"
+        }
+    },
+    "serpapi_pagination": {
+        "current": 1,
+        "next_link": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=10",
+        "next": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=10",
+        "other_pages": {
+            "2": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=10",
+            "3": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=20",
+            "4": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=30",
+            "5": "https://serpapi.com/search.json?device=desktop&engine=google&google_domain=google.com&location=Baton+Rouge%2C+Louisiana&q=python+sklearn+kernel_regression+_______________&start=40"
+        }
+    }
+}

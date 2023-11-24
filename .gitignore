@@ -1,3 +1,4 @@
 __pycache__/
 user_data.db
 user_db
+vector_database/
