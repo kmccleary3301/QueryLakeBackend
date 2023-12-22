@@ -6,6 +6,8 @@ import time
 from ..database import encryption
 from .hashing import *
 import os, json
+from .organizations import fetch_memberships
+# from .toolchains import get_available_toolchains
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 user_db_path = server_dir+"/user_db/files/"
@@ -36,6 +38,10 @@ def add_user(database : Session, username : str, password : str) -> bool:
 
     private_key_encryption_key = hash_function(password, private_key_encryption_salt)
 
+    print("Adding user with private key:", [private_key])
+    tmp_encrypt = encryption.aes_encrypt_string(private_key_encryption_key, private_key)
+    print("Encrypted to:", [tmp_encrypt, type(tmp_encrypt)])
+
     new_user = sql_db_tables.user(
         name=username,
         password_salt=random_salt_1,
@@ -57,7 +63,20 @@ def add_user(database : Session, username : str, password : str) -> bool:
     )
     database.add(new_access_token)
     database.commit()
-    return {"account_made": True, "password_single_hash": hash_function(password)}
+
+    password_prehash = hash_function(password)
+
+    fetch_memberships_get = fetch_memberships(database, username, password_prehash, return_subset="all")
+    # available_toolchains_get = get_available_toolchains(database, username, password_prehash)
+    return {
+        "account_made": True,
+        "password_single_hash": password_prehash,
+        "memberships": fetch_memberships_get["memberships"],
+        "admin": fetch_memberships_get["admin"],
+        "available_models": get_available_models(database, username, password_prehash)["available_models"],
+        # "available_toolchains": available_toolchains_get["toolchains"],
+        # "default_toolchain": available_toolchains_get["default"]
+    }
 
 def login(database : Session, username : str, password : str):
     """
@@ -72,11 +91,25 @@ def login(database : Session, username : str, password : str):
         password_salt = user_data["password_salt"]
         password_hash_truth = user_data["password_hash"]
         password_hash = hash_function(password, password_salt)
+        password_prehash = hash_function(password)
         if (password_hash == password_hash_truth):
-            return {"successful": True, "password_single_hash": hash_function(password)}
-        return {"successful": False, "note": "Incorrect Password"}
+            # return {"successful": True, "password_single_hash": hash_function(password)}
+            fetch_memberships_get = fetch_memberships(database, username, password_prehash, return_subset="all")
+            # available_toolchains_get = get_available_toolchains(database, username, password_prehash)
+            return {
+                "password_single_hash": password_prehash,
+                "memberships": fetch_memberships_get["memberships"],
+                "admin": fetch_memberships_get["admin"],
+                "available_models": get_available_models(database, username, password_prehash)["available_models"],
+                # "available_toolchains": available_toolchains_get["toolchains"],
+                # "default_toolchain": available_toolchains_get["default"]
+            }
+        # return {"successful": False, "note": "Incorrect Password"}
+        assert False, "Incorrect Password"
+
     else:
-        return {"successful": False, "note": "User not found"}
+        # return {"successful": False, "note": "User not found"}
+        assert False, "User not found"
 
 
 def get_user_id(database : Session, username : str, password_prehash : str) -> int:
@@ -128,10 +161,10 @@ def get_user_private_key(database : Session, username : str, password_prehash : 
 
     private_key_encryption_salt = user.private_key_encryption_salt
     user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
-
+    
     user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
-    return user_private_key
+    return {"private_key": user_private_key}
 
 def get_organization_private_key(database : Session, username : str, password_prehash : str, organization_hash_id : str) -> str:
     """
@@ -152,7 +185,7 @@ def get_organization_private_key(database : Session, username : str, password_pr
 
     organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
 
-    return organization_private_key
+    return {"private_key": organization_private_key}
 
 def get_available_models(database : Session, username : str, password_prehash : str):
     """
@@ -169,7 +202,8 @@ def get_available_models(database : Session, username : str, password_prehash : 
         "local_models": [model.name for model in models],
         "external_models": external_models
     }
-    return {"success" : True, "result" : results}
+    # return {"success" : True, "result" : results}
+    return {"available_models": results}
 
 def set_user_openai_api_key(database : Session, 
                             username : str, 
@@ -183,7 +217,8 @@ def set_user_openai_api_key(database : Session,
     encrypted_api_key = encryption.ecc_encrypt_string(user.public_key, openai_api_key)
     user.openai_api_key_encrypted = encrypted_api_key
     database.commit()
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def set_organization_openai_id(database : Session, 
                                 username : str, 
@@ -208,7 +243,8 @@ def set_organization_openai_id(database : Session,
     organization.openai_organization_id_encrypted = encrypted_openai_organization_id
     database.commit()
 
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def get_openai_api_key(database : Session, 
                         username : str, 
@@ -223,18 +259,20 @@ def get_openai_api_key(database : Session,
     return_result = []
     
     if not organization_hash_id is None:
-        organization_private_key = get_organization_private_key(database, username, password_prehash, organization_hash_id)
+        organization_private_key = get_organization_private_key(database, username, password_prehash, organization_hash_id)["private_key"]
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
         organization_openai_id_encrypted = organization.openai_organization_id_encrypted
         assert not organization_openai_id_encrypted is None, "Organization OpenAI ID not set"
         openai_organization_id = encryption.ecc_decrypt_string(organization_private_key, organization_openai_id_encrypted)
 
-    user_private_key = get_user_private_key(database, username, password_prehash)
+    user_private_key = get_user_private_key(database, username, password_prehash)["private_key"]
     encrypted_openai_api_key = user.openai_api_key_encrypted
     assert not encrypted_openai_api_key is None, "User OpenAI API key not set"
     user_openai_api_key = encryption.ecc_decrypt_string(user_private_key, encrypted_openai_api_key)
     if not organization_hash_id is None:
-        return {"success": True, "result": [user_openai_api_key, openai_organization_id]}
-    return {"success": True, "result": user_openai_api_key}
+        # return {"success": True, "result": [user_openai_api_key, openai_organization_id]}
+        return {"api_key": user_openai_api_key, "organization_id": openai_organization_id}
+    # return {"success": True, "result": user_openai_api_key}
+    return {"api_key": user_openai_api_key}
 
     

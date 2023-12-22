@@ -167,12 +167,13 @@ class LLMEnsemble:
               username : str,
               password_prehash : str,
               database: Session,
-              session_hash : str,
               history : list,
               parameters : dict = None,
               model_choice : str = None,
               context=None,
-              organization_hash_id : str = None):
+              session_hash : str = None,
+              organization_hash_id : str = None,
+              provided_generator : ThreadedGenerator = None):
         """
         This function is for a model request. It creates a threaded generator, 
         substitutes in into the models callback manager, starts the function
@@ -183,7 +184,8 @@ class LLMEnsemble:
             model_choice = self.default_llm
         print("Calling Model")
 
-        g = ThreadedGenerator()
+        if provided_generator is None:
+            provided_generator = ThreadedGenerator()
         
         if not (parameters is None or parameters == {}):
             if not self.validate_parameters(parameters):
@@ -193,7 +195,7 @@ class LLMEnsemble:
             model_index = self.choose_llm_for_request(model_name=model_choice)
             token_counter = self.llm_instances[model_index]["model"].get_num_tokens
             kwargs = {"model_index": model_index}
-            self.llm_instances[model_index]["handler"].gen = g
+            self.llm_instances[model_index]["handler"].gen = provided_generator
             model_entry_db = database.exec(select(model).where(model.name == model_choice)).first()
             if model_entry_db is None:
                 model_entry_db = database.exec(select(model).where(model.name == self.default_llm)).first()
@@ -211,11 +213,9 @@ class LLMEnsemble:
             def token_counter_tiktoken(prompt : str):
                 return num_tokens_from_string(prompt, model_choice[-1])
             token_counter = token_counter_tiktoken
-            keys = get_openai_api_key(database, username, password_prehash, organization_hash_id=organization_hash_id)
-            if type(keys["result"]) == str:
-                kwargs = {"api_key": keys["result"]}
-            else:
-                kwargs = {"api_key": keys["result"][0], "organization": keys["result"][1]}
+            kwargs = get_openai_api_key(database, username, password_prehash, organization_hash_id=organization_hash_id)
+            if "organization_id" in kwargs:
+                kwargs["organization"] = kwargs["organization_id"]
             system_instruction_base = latex_basic_system_instruction
             max_tokens = self.global_settings["external_model_providers"][model_choice[0]][model_choice[1]]
 
@@ -232,7 +232,6 @@ class LLMEnsemble:
         
         
 
-        session = database.exec(select(chat_session_new).where(chat_session_new.hash_id == session_hash)).first()
         # system_instruction_prompt = model_entry_db.system_instruction_wrapper.replace("{system_instruction}", system_instruction_base)
         
         # bot_responses_previous = database.exec(select(chat_entry_model_response).where(chat_entry_model_response.chat_session_id == session.id)).all()
@@ -248,11 +247,16 @@ class LLMEnsemble:
         #     chat_history_raw.append([question_previous.content, bot_response.content])
         
         
+        if not session_hash is None:
+            session = database.exec(select(chat_session_new).where(chat_session_new.hash_id == session_hash)).first()
+            if len(chat_history_raw) == 0:
+                session.title = history[len(history)-1]["content"].split(r"[.|?|!|\n|\t]")[-1]
+        else:
+            session = None
 
         
 
-        if len(chat_history_raw) == 0:
-            session.title = history[len(history)-1]["content"].split(r"[.|?|!|\n|\t]")[-1]
+        
         if type(model_choice) is str: # Use a local model
             prompt_medium = construct_chat_history(
                 max_tokens=max_tokens,
@@ -264,15 +268,14 @@ class LLMEnsemble:
                 system_instruction=system_instruction_base,
                 new_question=history[len(history)-1]["content"]
             )
-            threading.Thread(target=self.llm_thread, args=(g, 
+            threading.Thread(target=self.llm_thread, args=(provided_generator, 
                                                            username,
                                                            database, 
                                                            prompt_medium,
                                                            history[len(history)-1]["content"],
                                                            parameters, 
                                                            context,
-                                                           session,
-                                                           model_index)).start()
+                                                           model_index), kwargs={"session": session}).start()
         else: # Use an OpenAI Model
             # all_history = []
             # all_history.append({"role": "system", "content": system_instruction_base})
@@ -285,8 +288,8 @@ class LLMEnsemble:
                                                                   history,
                                                                   history[len(history)-1]["content"],
                                                                   context,
-                                                                  model_choice[1]), kwargs={"g": g, "session": session}).start()
-        return g
+                                                                  model_choice[1]), kwargs={"g": provided_generator, "session": session}).start()
+        return provided_generator
 
 
     def llm_thread_openai(self, 
@@ -302,15 +305,17 @@ class LLMEnsemble:
         Call OpenAI Model with streaming in a thread.
         """
         print("Calling openAI model")
-        question_entry = chat_entry_user_question(
-            chat_session_id=session.id,
-            timestamp=time.time(),
-            content=single_question,
-        )
-        database.add(question_entry)
-        database.commit()
-        database.flush()
-
+        if not session is None:
+            question_entry = chat_entry_user_question(
+                chat_session_id=session.id,
+                timestamp=time.time(),
+                content=single_question,
+            )
+            database.add(question_entry)
+            database.commit()
+            database.flush()
+        print("Openai args:", openai_keys)
+        start_time = time.time()
         client = OpenAI(**openai_keys)
         response = ""
         for chunk in client.chat.completions.create(
@@ -323,8 +328,26 @@ class LLMEnsemble:
                 if not g is None:
                     g.send(content)
                 response += content
+        end_time = time.time()
         if not g is None:
-            g.send("-DONE-")
+            # g.send("-DONE-")
+            g.close()
+
+        response_token_count = num_tokens_from_string(response, model_choice)
+        request_data = {
+            "prompt": json.dumps(chat_history),
+            "response" : response,
+            "response_size_tokens": response_token_count,
+            "prompt_size_tokens": sum([num_tokens_from_string(msg["content"], model_choice) for msg in chat_history]) ,
+            "model": model_choice,
+            "timestamp": time.time(),
+            "time_taken": end_time-start_time,
+            "model_settings": "{}"
+        }
+        print("OpenAI response %.2f tokens/s" % (response_token_count/(end_time-start_time)))
+        new_request = model_query_raw(**request_data)
+        database.add(new_request)
+        database.commit()
 
         if not session is None:
             model_response = chat_entry_model_response(
@@ -347,8 +370,8 @@ class LLMEnsemble:
                    single_question : str,
                    parameters,
                    context,
-                   session : chat_session_new,
-                   model_index : int):
+                   model_index : int,
+                   session : chat_session_new = None):
         """
         This function is run in a thread, outside of normal execution.
         """
@@ -362,7 +385,7 @@ class LLMEnsemble:
             #         previous_values[key] = self.llm_instances[model_index]["model"].__dict__[key]
             #     self.llm_instances[model_index]["model"].refresh_params(parameters)
             
-                
+            
 
             start_time = time.time()
             self.llm_instances[model_index]["lock"] = True
@@ -403,25 +426,26 @@ class LLMEnsemble:
 
                 
                 # new_user = sql_db.User(**user_data)
-                question_entry = chat_entry_user_question(
-                    chat_session_id=session.id,
-                    timestamp=time.time(),
-                    content=single_question,
-                )
-                database.add(question_entry)
-                database.commit()
-                database.flush()
+                if not session is None:
+                    question_entry = chat_entry_user_question(
+                        chat_session_id=session.id,
+                        timestamp=time.time(),
+                        content=single_question,
+                    )
+                    database.add(question_entry)
+                    database.commit()
+                    database.flush()
 
-                model_response = chat_entry_model_response(
-                    chat_session_id=session.id,
-                    timestamp=time.time(),
-                    content=response,
-                    chat_entry_response_to=question_entry.id,
-                    sources=json.dumps(context) if not context is None and len(context) > 0 else None
-                    #model query raw id.
-                )
-                database.add(model_response)
-                database.commit()
+                    model_response = chat_entry_model_response(
+                        chat_session_id=session.id,
+                        timestamp=time.time(),
+                        content=response,
+                        chat_entry_response_to=question_entry.id,
+                        sources=json.dumps(context) if not context is None and len(context) > 0 else None
+                        #model query raw id.
+                    )
+                    database.add(model_response)
+                    database.commit()
             except AssertionError as e:
                 g.send("<<<FAILURE>>> | Model Context Length Exceeded")
         finally:
@@ -478,11 +502,7 @@ class LLMEnsemble:
             def token_counter_tiktoken(prompt : str):
                 return num_tokens_from_string(prompt, model_choice[-1])
             token_counter = token_counter_tiktoken
-            keys = get_openai_api_key(database, username, password_prehash, organization_hash_id=organization_hash_id)
-            if type(keys["result"]) == str:
-                kwargs = {"api_key": keys["result"]}
-            else:
-                kwargs = {"api_key": keys["result"][0], "organization": keys["result"][1]}
+            kwargs = get_openai_api_key(database, username, password_prehash, organization_hash_id=organization_hash_id)
             system_instruction_base = latex_basic_system_instruction
             max_tokens = self.global_settings["external_model_providers"][model_choice[0]][model_choice[1]]
 

@@ -12,11 +12,13 @@ from .hashing import *
 from .api import user_db_path
 from threading import Thread
 from ..vector_database.embeddings import query_database, create_embeddings_in_database
+from ..vector_database.document_parsing import parse_PDFs
 from chromadb.api import ClientAPI
 import time
 import json
 import py7zr
 from fastapi.responses import StreamingResponse
+import ocrmypdf
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 user_db_path = server_dir+"/user_db/files/"
@@ -38,7 +40,9 @@ def upload_document(database : Session,
                     collection_hash_id : str, 
                     collection_type : str = "user",
                     organization_hash_id : str = None,
-                    public : bool = False) -> dict:
+                    public : bool = False,
+                    return_file_hash : bool = False,
+                    add_to_vector_db : bool = True) -> dict:
     """
     Upload file to server. Possibly with encryption.
     Can be a user document, organization document, or global document, or a toolchain_session document.
@@ -88,8 +92,9 @@ def upload_document(database : Session,
         collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.hash_id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized"
     elif collection_type == "toolchain_session":
-        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection)).first()
+        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
         assert type(session) is sql_db_tables.toolchain_session, "Session not found"
+        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
 
     if not public:
         if collection_type == "organization":
@@ -111,35 +116,39 @@ def upload_document(database : Session,
         **collection_author_kwargs
     )
     
-    assert not collection is None, "Collection not found"
+    assert not collection is None or collection_type, "Collection not found"
 
     zip_start_time = time.time()
     if public:
-        zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-            "key": None, 
-            "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-            "save_path": file_zip_save_path
-        })
+        encryption.aes_encrypt_zip_file(key=None, file_data={file.filename: BytesIO(file_data_bytes)}, save_path=file_zip_save_path)
+        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
+        #     "key": None, 
+        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
+        #     "save_path": file_zip_save_path
+        # })
     else:
-        zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-            "key": encryption_key, 
-            "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-            "save_path": file_zip_save_path
-        })
-    zip_thread.start()
+        encryption.aes_encrypt_zip_file(key=encryption_key, file_data={file.filename: BytesIO(file_data_bytes)}, save_path=file_zip_save_path)
+        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
+        #     "key": encryption_key, 
+        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
+        #     "save_path": file_zip_save_path
+        # })
+    # zip_thread.start()
     print("Saved file in %.2fs" % (time.time()-zip_start_time))
-
-
-    collection.document_count += 1
+    print("Collection type:", collection_type)
+    if not collection_type == "toolchain_session":
+        collection.document_count += 1
     database.add(new_db_file)
     database.commit()
-    if (file.filename.split(".")[-1].lower() == "pdf"):
+    if (file.filename.split(".")[-1].lower() == "pdf" and add_to_vector_db):
         thread = Thread(target=create_embeddings_in_database, args=(database, file_data_bytes, new_db_file, vector_database, file.filename))
         thread.start()
     time_taken = time.time() - time_start
 
     print("Took %.2fs to upload" % (time_taken))
-    return {"success": True, "note": f"file '{file.filename}' saved at '{file_zip_save_path}'"}
+    if return_file_hash:
+        return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
+    return True
     
 def delete_document(database : Session, 
                     username : str, 
@@ -171,7 +180,8 @@ def delete_document(database : Session,
     collection.document_count -= 1
     database.commit()
     
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def get_document_secure(database : Session, 
                         username : str, 
@@ -212,6 +222,14 @@ def get_document_secure(database : Session,
         organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
 
         document_password = encryption.ecc_decrypt_string(organization_private_key, document.encryption_key_secure)
+    elif not document.toolchain_session_hash_id is None:
+        private_key_encryption_salt = user.private_key_encryption_salt
+        user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+
+        user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+
+        document_password = encryption.ecc_decrypt_string(user_private_key, document.encryption_key_secure)
+    
     if return_document:
         return document
     return {"password": document_password, "database_path": document.server_zip_archive_path}
@@ -228,7 +246,7 @@ def query_vector_db(database : Session,
     Query from the vector database.
     """
     user = get_user(database, username, password_prehash)
-    return {"success": True, "results": query_database(vector_database, query, collection_hash_ids, k=k, use_rerank=use_rerank)}
+    return {"result": query_database(vector_database, query, collection_hash_ids, k=k, use_rerank=use_rerank)}
 
 def craft_document_access_token(database : Session, 
                                 public_key: str,
@@ -257,10 +275,32 @@ def craft_document_access_token(database : Session,
         "document_hash_id": hash_id,
         "token_hash": token_hash
     }))
-    return {"success": True, "result": [document.file_name, access_encrypted]}
-    
+    # return {"success": True, "result": [document.file_name, access_encrypted]}
+    return {"file_name": document.file_name, "access_encrypted": access_encrypted}
 
-def fetch_document(database : Session,
+
+def get_file_bytes(database : Session,
+                   hash_id : str,
+                   encryption_key : str):
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
+    print("Header Data:", [document.server_zip_archive_path, encryption_key])
+
+
+    file = encryption.aes_decrypt_zip_file(encryption_key, document.server_zip_archive_path)
+    keys = list(file.keys())
+    file_name = keys[0]
+    file_get = file[file_name]
+    return file_get
+    # with py7zr.SevenZipFile(document.server_zip_archive_path, mode='r', password=encryption_key) as z:
+    #     file = z.read()
+    #     keys = list(file.keys())
+    #     print(keys)
+    #     file_name = keys[0]
+    #     file_get = file[file_name]
+    #     z.close()
+    #     return file_get.getbuffer().tobytes()
+
+async def fetch_document(database : Session,
                    auth_access : str,
                    server_private_key : str):
     """
@@ -295,3 +335,22 @@ def fetch_document(database : Session,
         return StreamingResponse(yield_single_file())
     except Exception as e:
         return {"success": False, "note": str(e)}
+        # raise ValueError(str(e))
+
+def ocr_pdf_file(database : Session,
+                username : str, 
+                password_prehash : str,
+                file: bytes):
+    """
+    OCR a pdf file and return the raw text.
+    """
+    user = get_user(database, username, password_prehash)
+    ocr_bytes_target = BytesIO()
+
+    ocrmypdf.ocr(file, ocr_bytes_target, redo_ocr=True)
+    text = parse_PDFs(ocr_bytes_target, return_all_text_as_string=True)
+    return {
+        "pdf_text": text
+    }
+
+

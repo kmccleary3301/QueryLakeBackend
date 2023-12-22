@@ -4,6 +4,7 @@
         {
             "loader": "exllama",
             "name": "Llama-2-7b-Chat-GPTQ-ExLLaMA",
+            "model_card": "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GPTQ",
             "model_args": {
                 "streaming": true,
                 "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
@@ -26,7 +27,8 @@
             "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
         },
         {
-            "name": "Llama-2-7b-Chat-GPTQ-ExLLaMA_V2",
+            "name": "Llama-2-7b-Chat-GPTQ",
+            "model_card": "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GPTQ",
             "loader": "exllama_v2",
             "model_args": {
                 "streaming": true,
@@ -51,6 +53,7 @@
         },
         {
             "name": "Mistral-7B-OpenOrca-GPTQ-ExLLaMA_V2",
+            "model_card": "https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-GPTQ",
             "loader": "exllama_v2",
             "model_args": {
                 "streaming": true,
@@ -93,12 +96,14 @@
     ],
     "external_model_providers": {
         "openai": {
-            "gpt-3.5-turbo-instruct": 4096,
-            "gpt-4-1106-preview": 128000,
-            "gpt-4": 8192,
-            "gpt-4-32k": 32768,
-            "gpt-3.5-turbo": 4096,
-            "gpt-3.5-turbo-16k": 16385
+            "gpt-4-1106-preview": {
+                "context": 128000,
+                "model_card": "https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo"
+            },
+            "gpt-3.5-turbo-1106": {
+                "context": 16385,
+                "model_card": "https://platform.openai.com/docs/models/gpt-3-5"
+            }
         }
     },
     "loader_parameters": {

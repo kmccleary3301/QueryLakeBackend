@@ -58,6 +58,7 @@ def aes_encrypt_string(key : str, input_string : str, encoding : str = "utf-8") 
     Encrypts input string using any input key string.
     Data is returned as a hex string.
     """
+    print("Encrypting with key:", key)
     # key = bytes.fromhex(hash_function(key))
     key = bytes("abcdef0123456789", encoding="utf-8")
     nonce = get_random_hash()
@@ -69,12 +70,15 @@ def aes_decrypt_string(key : str, encrypted_hex_string : str, encoding : str = "
     """
     Decrypts ecnrypted hex string using any input key string.
     """
+    print("Decrypting with key:", [encrypted_hex_string, key])
     key = bytes("abcdef0123456789", encoding="utf-8")
     nonce = encrypted_hex_string[-64:]
     encrypted_hex_string = encrypted_hex_string[:-64]
     obj = AES.new(key, AES.MODE_EAX, bytes.fromhex(nonce))
     ciphertext = obj.decrypt(bytes.fromhex(encrypted_hex_string))
-    return ciphertext.decode(encoding=encoding)
+    result = ciphertext.decode(encoding=encoding)
+    print(result, type(result))
+    return result
 
 def zip_test(key : str):
 
@@ -96,7 +100,13 @@ def zip_test(key : str):
         z.write(server_dir+"QueryLake")
 
 def aes_encrypt_zip_file(key : str, file_data : Dict[str, Union[str, bytes]], save_path : str):
-     with py7zr.SevenZipFile(save_path, 'w', password=key, header_encryption=True) as z:
+    print("Encrypting file with key:", [key])
+    
+    header_encryption = False
+    if not key is None and save_path.split(".")[-1] == "7z":
+        header_encryption = True
+    
+    with py7zr.SevenZipFile(save_path, 'w', password=key, header_encryption=True) as z:
         z.writed(file_data)
 
 def aes_decrypt_zip_file(key : str, file_path : str):

@@ -3,89 +3,37 @@
     "id": "chat_session_normal",
     "category": "General",
 	"chat_window_settings": {
-		"websearch": true,
-        "file_upload": {
-            "value": true,
-            "multiple": false
-        },
-        "display_mode": "chat",
-        "store_session": true,
-        "download_results": false
+		"display":   [
+            {
+                "input_argument": "chat_history",
+                "type" : "<<STATE>>",
+                "display_as": "chat"
+            },
+            {
+                "input_argument": "third_step",
+                "type" : "node_stream_temporary_output",
+                "display_as": "chat_entry"
+            },
+            {
+                "input_argument": "user_files",
+                "type": "<<STATE>>",
+                "display_as": "chat_window_files"
+            }
+        ],
+        "max_files": 10,
+        "enable_rag": true,
+        "events_available": [
+            "user_question_event"
+        ]
 	},
     "state_initialization": {
-        "user_provided_chat_history": []
+        "title": "Chat",
+        "chat_history": []
     },
     "pipeline_starting_input": {
-        "arguments": ["user_files"],
         "event_arguments": ["user_question"]
     },
     "pipeline": [
-        {
-            "id": "user_input_arguments",
-            "function": "<<ENTRY>>",
-            "arguments": [
-                {
-                    "argument_name": "user_provided_document",
-                    "origin": "<<USER>>",
-                    "type": "file",
-                    "iterable": false,
-                    "optional": false
-                }
-            ],
-            "execution": "synchronous",
-            "output_arguments": [
-                {
-                    "id": "user_provided_document",
-                    "type": "file",
-                    "stream": false
-                }
-            ],
-            "feed_to": [
-                {
-                    "destination": "second_step",
-                    "split_outputs": false,
-                    "input": [
-                        {
-                            "output_argument_id": "user_provided_document",
-                            "target_argument": "file_input"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "id": "second_step",
-            "function": "create_document_summary",
-            "arguments": [
-                {
-                    "argument_name": "file_input",
-                    "origin": "user_input_arguments",
-                    "type": "file",
-                    "iterable_sources": false,
-                    "optional": false
-                }
-            ],
-            "execution": "synchronous",
-            "output_arguments": [
-                {
-                    "id": "document_summary",
-                    "type": "string",
-                    "stream": false
-                }
-            ],
-            "feed_to": [
-                {
-                    "destination": "third_step",
-                    "split_outputs": false,
-                    "input": [
-                        {
-                            "output_argument_id": "document_summary",
-                            "target_argument": "document_summary"
-                        }
-                    ] 
-                }
-            ]
-        },
         {
             "id": "user_question_event",
             "function": "<<EVENT>>",
@@ -96,6 +44,22 @@
                     "type": "string",
                     "iterable": false,
                     "optional": false
+                },
+                {
+                    "argument_name": "chat_history",
+                    "origin": "<<STATE>>",
+                    "type": "list",
+                    "iterable_sources": false,
+                    "optional": false
+                },
+                {
+                    "argument_name": "model_choice",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "collection_hash_ids",
+                    "origin": "<<USER>>",
+                    "optional": true
                 }
             ],
             "execution": "synchronous",
@@ -108,55 +72,74 @@
             ],
             "feed_to": [
                 {
+                    "destination": "<<STATE>>",
+                    "action": "append_dict",
+                    "target_value": "chat_history",
+                    "input": [
+                        {
+                            "target_argument": "role",
+                            "value": "user"
+                        },
+                        {
+                            "output_argument_id": "user_question",
+                            "target_argument": "content"
+                        }
+                    ]
+                },
+                {
                     "destination": "third_step",
                     "split_outputs": false,
                     "input": [
                         {
-                            "output_argument_id": "user_question",
-                            "target_argument": "user_question"
-                        }
-                    ]  
-                },
-                {
-                    "destination": "split_output",
-                    "split_outputs": false,
-                    "input": [
+                            "output_argument_id": "model_choice",
+                            "target_argument": "model_choice"
+                        },
                         {
-                            "output_argument_id": "user_question",
-                            "target_argument": "input"
+                            "output_argument_id": "collection_hash_ids",
+                            "target_argument": "collection_hash_ids",
+                            "optional": true
                         }
-                    ]  
+                    ]
                 }
+                
             ]
         },
         {
             "id": "third_step",
-            "function": "answer_user_question",
+            "function": "llm_call_chat_session_direct",
             "arguments": [
                 {
-                    "argument_name": "user_question",
-                    "origin": "user_question_event",
-                    "type": "string",
-                    "iterable_sources": false,
-                    "optional": false
+                    "argument_name": "database",
+                    "origin": "<<SERVER_ARGS>>"
                 },
                 {
-                    "argument_name": "document_summary",
-                    "origin": "second_step",
-                    "type": "string",
-                    "iterable_sources": false,
-                    "optional": false
+                    "argument_name": "llm_ensemble",
+                    "origin": "<<SERVER_ARGS>>"
                 },
                 {
-                    "argument_name": "user_provided_chat_history",
+                    "argument_name": "vector_database",
+                    "origin": "<<SERVER_ARGS>>"
+                },
+                {
+                    "argument_name": "username",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "password_prehash",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "model_choice",
+                    "origin": "user_question_event"
+                },
+                {
+                    "argument_name": "chat_history",
+                    "rename_to": "history",
                     "origin": "<<STATE>>",
-                    "type": "list",
                     "iterable_sources": false,
                     "optional": false
                 }
             ],
-            "stream_input": true,
-            "execution": "synchronous",
             "output_arguments": [
                 {
                     "id": "model_response",
@@ -173,102 +156,29 @@
                             "output_argument_id": "model_response",
                             "target_argument": "model_response"
                         }
-                    ] 
+                    ]
                 },
                 {
                     "destination": "<<STATE>>",
-                    "action": "append_user_query_to_chat_history",
+                    "action": "append_dict",
+                    "target_value": "chat_history",
                     "input": [
                         {
-                            "output_argument_id": "user_question",
-                            "target_argument": "user_provided_chat_history"
-                        }
-                    ] 
-                },
-                {
-                    "destination": "<<STATE>>",
-                    "action": "append_model_response_to_chat_history",
-                    "input": [
+                            "target_argument": "role",
+                            "value": "assistant"
+                        },
                         {
                             "output_argument_id": "model_response",
-                            "target_argument": "user_provided_chat_history"
+                            "target_argument": "content"
+                        },
+                        {
+                            "output_argument_id": "sources",
+                            "target_argument": "sources",
+                            "optional": true
                         }
-                    ] 
+                    ]
                 }
                 
-            ]
-        },
-        {
-            "id": "split_output",
-            "function": "generate_split_output",
-            "arguments": [
-                {
-                    "argument_name": "input",
-                    "origin": "user_question_event",
-                    "type": "string",
-                    "iterable_sources": false,
-                    "optional": false
-                }
-            ],
-            "feed_to": [
-                {
-                    "destination": "process_token",
-                    "split_outputs": true,
-                    "input": [
-                        {
-                            "output_argument_id": "split_output",
-                            "target_argument": "single_input"
-                        }
-                    ] 
-                }
-            ]
-        },
-        {
-            "id": "process_token",
-            "function": "split_processing_single",
-            "arguments": [
-                {
-                    "argument_name": "single_input",
-                    "origin": "split_output",
-                    "type": "string",
-                    "iterable_sources": false,
-                    "optional": false
-                }
-            ],
-            "feed_to": [
-                {
-                    "destination": "combine_splits",
-                    "input": [
-                        {
-                            "output_argument_id": "token",
-                            "target_argument": "split_input"
-                        }
-                    ] 
-                }
-            ]
-        },
-        {
-            "id": "combine_splits",
-            "function": "organize_split_input",
-            "arguments": [
-                {
-                    "argument_name": "split_input",
-                    "origin": "split_output",
-                    "type": "string",
-                    "merge_parallel_outputs": true,
-                    "optional": false
-                }
-            ],
-            "feed_to": [
-                {
-                    "destination": "<<USER>>",
-                    "input": [
-                        {
-                            "output_argument_id": "recombined_input",
-                            "target_argument": "recombined_input"
-                        }
-                    ] 
-                }
             ]
         }
     ]

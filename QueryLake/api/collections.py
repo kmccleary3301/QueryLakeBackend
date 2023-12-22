@@ -33,7 +33,8 @@ def fetch_document_collections_belonging_to(database : Session, username : str, 
             "id" : collection.id,
             "document_count": collection.document_count
         })
-    return {"success": True, "collections": collections_return}
+    # return {"success": True, "collections": collections_return}
+    return {"collections": collections_return}
 
 def create_document_collection(database : Session, 
                                username : str, 
@@ -76,7 +77,8 @@ def create_document_collection(database : Session,
     database.add(new_collection)
     database.commit()
     database.flush()
-    return {"success": True, "hash_id": new_collection.hash_id}
+    # return {"success": True, "hash_id": new_collection.hash_id}
+    return {"hash_id": new_collection.hash_id}
 
 def fetch_all_collections(database : Session, 
                             username : str, 
@@ -123,7 +125,8 @@ def fetch_all_collections(database : Session,
             "document_count": collection.document_count,
             "type" : "user"
         })
-    return {"success": True, "result": return_value}
+    # return {"success": True, "result": return_value}
+    return {"collections": return_value}
 
 def fetch_collection(database : Session,
                         username : str,
@@ -166,7 +169,8 @@ def fetch_collection(database : Session,
             "title": document.file_name,
             "hash_id": document.hash_id
         })
-    return {"success": True, "result": data}
+    # return {"success": True, "result": data}
+    return data
 
 
 def modify_document_collection(database : Session,
@@ -202,5 +206,6 @@ def modify_document_collection(database : Session,
     if not description is None:
         collection.description = description
 
-    return {"success": True}
+    # return {"success": True}
+    return True
 

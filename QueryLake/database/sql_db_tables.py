@@ -26,14 +26,19 @@ def data_dict(db_entry : SQLModel):
 class toolchain_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     hash_id: str = Field(index=True, unique=True)
+    title: Optional[str] = Field(default=None)
+    hidden: Optional[bool] = Field(default=False)
     creation_timestamp: float
     toolchain_id: str = Field(foreign_key="toolchain.toolchain_id", index=True)
     author: str = Field(foreign_key="user.name", index=True)
     state_arguments: Optional[str] = Field(default=None)
+    queue_inputs: Optional[str] = Field(default="")
+    firing_queue: Optional[str] = Field(default="")
 
 class toolchain(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     toolchain_id: str = Field(index=True, unique=True)
+    title: str
     category: str
     content: str #JSON loads this portion.
 
@@ -156,7 +161,7 @@ class model_query_raw(SQLModel, table=True):
     model_settings: str
     timestamp: float #UnixEpoch
     time_taken: float # In milliseconds
-    access_token_id: int = Field(foreign_key="access_token.id", index=True)
+    access_token_id: Optional[int] = Field(foreign_key="access_token.id", index=True, default=None)
     organization_id: Optional[int] = Field(default=None, foreign_key="organization.id", index=True)
 
 class document_raw(SQLModel, table=True):

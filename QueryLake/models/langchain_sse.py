@@ -11,6 +11,7 @@ class ThreadedGenerator:
         self.encode_hex = encode_hex
         self.done = False
         self.sent_values = []
+        self.report_callbacks = []
         self.queue = queue.Queue()
 
     def __iter__(self):
@@ -28,10 +29,13 @@ class ThreadedGenerator:
                 self.queue.put(data.encode("utf-8").hex())
             else:
                 self.queue.put(data)
+            for callback in self.report_callbacks:
+                callback(data)
             self.sent_values.append(data)
 
     def close(self):
         print("Closing Generator")
+        self.queue.put("<<CLOSE>>")
         self.done = True
         self.queue.put(StopIteration)
 
@@ -54,7 +58,7 @@ def ErrorAsGenerator(message):
 class CustomStreamHandler(BaseCallbackHandler):
     """Callback handler for streaming. Only works with LLMs that support streaming."""
 
-    def __init__(self, gen) -> None:
+    def __init__(self, gen : ThreadedGenerator) -> None:
         super().__init__()
         self.gen = gen
         self.tokens_generated = 0
@@ -74,7 +78,7 @@ class CustomStreamHandler(BaseCallbackHandler):
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Run when LLM ends running."""
         if not self.gen is None:
-            self.gen.send("-DONE-")
+            self.gen.close()
 
     def on_llm_error(
         self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any

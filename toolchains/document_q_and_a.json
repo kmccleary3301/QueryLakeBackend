@@ -1,16 +1,27 @@
 {
-	"name": "Document Q&A",
+	"name": "Node Split Test",
     "id": "document_q_and_a_test",
     "category": "Documents",
 	"chat_window_settings": {
-		"websearch": true,
-        "file_upload": {
-            "value": true,
-            "multiple": false
-        },
-        "display_mode": "chat",
-        "store_session": true,
-        "download_results": false
+		"display": [
+            {
+                "input_argument": "chat_history",
+                "type" : "<<STATE>>",
+                "display_as": "chat"
+            },
+            {
+                "input_argument": "third_step",
+                "type" : "node_stream_temporary_output",
+                "display_as": "chat_entry"
+            },
+            {
+                "input_argument": "user_files",
+                "type": "<<STATE>>",
+                "display_as": "chat_window_files"
+            }
+        ],
+        "max_files": 10,
+        "enable_rag": true
 	},
     "state_initialization": {
         "user_provided_chat_history": []
@@ -132,6 +143,7 @@
         {
             "id": "third_step",
             "function": "answer_user_question",
+            "async": true,
             "arguments": [
                 {
                     "argument_name": "user_question",

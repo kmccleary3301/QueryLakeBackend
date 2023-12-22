@@ -1,0 +1,299 @@
+{
+	"name": "Breast Cancer Staging",
+    "id": "breast_cancer_staging",
+    "category": "Medical",
+	"chat_window_settings": {
+		"display": [
+            {
+                "type" : "<<STATE>>",
+                "input_argument": "markdown_display_reports_table",
+                "display_as": "markdown"
+            },
+            {
+                "type": "event_button",
+                "input_argument": "download_csv_event",
+                "return_file_response": true,
+                "display_as": "button",
+                "feather_icon": "download",
+                "button_text": "Download CSV"
+            }
+        ],
+        "max_files": 100,
+        "enable_rag": false,
+        "events_available": [
+            "user_file_upload_event"
+        ]
+	},
+    "state_initialization": {
+        "title": "Breast Cancer Staging",
+        "chat_history": [],
+        "staged_reports_table": [{
+            "Report Title": 0,
+            "T Value": 1,
+            "N Value": 2,
+            "M Value": 3,
+            "Stage": 4
+        }],
+        "markdown_display_reports_table": ""
+    },
+    "pipeline_starting_input": {
+        "event_arguments": ["user_file"]
+    },
+    "pipeline": [
+        {
+            "id": "user_file_upload_event",
+            "function": "<<EVENT>>",
+            "arguments": [
+                {
+                    "argument_name": "user_file",
+                    "origin": "<<USER>>",
+                    "type": "file",
+                    "iterable": false,
+                    "optional": false
+                },
+                {
+                    "argument_name": "model_choice",
+                    "origin": "<<USER>>"
+                }
+            ],
+            "execution": "synchronous",
+            "output_arguments": [
+                {
+                    "id": "user_file",
+                    "type": "file",
+                    "stream": false
+                }
+            ],
+            "feed_to": [
+                {
+                    "destination": "ocr_pdf_file",
+                    "split_outputs": false,
+                    "input": [
+                        {
+                            "output_argument_id": "user_file",
+                            "target_argument": "file",
+                            "optional": true
+                        }
+                    ]
+                },
+                {
+                    "destination": "stage_breast_cancer_report",
+                    "store": true,
+                    "split_outputs": false,
+                    "input": [
+                        {
+                            "output_argument_id": "model_choice",
+                            "target_argument": "model_choice"
+                        },
+                        {
+                            "output_argument_id": "file_name",
+                            "target_argument": "report_title"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "ocr_pdf_file",
+            "function": "ocr_pdf_file",
+            "arguments": [
+                {
+                    "argument_name": "database",
+                    "origin": "<<SERVER_ARGS>>"
+                },
+                {
+                    "argument_name": "username",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "password_prehash",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "file",
+                    "origin": "user_file_upload_event"
+                }
+            ],
+            "output_arguments": [
+                {
+                    "id": "pdf_text",
+                    "type": "string",
+                    "stream": false
+                }
+            ],
+            "feed_to": [
+                {
+                    "destination": "stage_breast_cancer_report",
+                    "argument_class": "model_response",
+                    "input": [
+                        {
+                            "output_argument_id": "pdf_text",
+                            "target_argument": "report"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "stage_breast_cancer_report",
+            "function": "stage_breast_cancer_report",
+            "arguments": [
+                {
+                    "argument_name": "report",
+                    "origin": "ocr_pdf_file"
+                },
+                {
+                    "argument_name": "model_choice",
+                    "origin": "user_file_upload_event"
+                },
+                {
+                    "argument_name": "report_title",
+                    "origin": "user_file_upload_event"
+                },
+                {
+                    "argument_name": "llm_ensemble",
+                    "origin": "<<SERVER_ARGS>>"
+                },
+                {
+                    "argument_name": "database",
+                    "origin": "<<SERVER_ARGS>>"
+                },
+                {
+                    "argument_name": "username",
+                    "origin": "<<USER>>"
+                },
+                {
+                    "argument_name": "password_prehash",
+                    "origin": "<<USER>>"
+                }
+            ],
+            "output_arguments": [
+                {
+                    "id": "T",
+                    "type": "string",
+                    "stream": false
+                },
+                {
+                    "id": "N",
+                    "type": "string",
+                    "stream": false
+                },
+                {
+                    "id": "M",
+                    "type": "string",
+                    "stream": false
+                }
+            ],
+            "feed_to": [
+                {
+                    "destination": "<<STATE>>",
+                    "action": "append_dict",
+                    "target_value": "staged_reports_table",
+                    "input": [
+                        {
+                            "output_argument_id": "title",
+                            "target_argument": "Report Title"
+                        },
+                        {
+                            "output_argument_id": "t",
+                            "target_argument": "T Value"
+                        },
+                        {
+                            "output_argument_id": "n",
+                            "target_argument": "N Value"
+                        },
+                        {
+                            "output_argument_id": "m",
+                            "target_argument": "M Value"
+                        },
+                        {
+                            "output_argument_id": "stage",
+                            "target_argument": "Stage"
+                        }
+                    ]
+                },
+                {
+                    "destination": "get_markdown_table_string",
+                    "input": []
+                }
+            ]
+        },
+        {
+            "id": "get_markdown_table_string",
+            "function": "convert_dict_list_to_markdown",
+            "arguments": [
+                {
+                    "argument_name": "staged_reports_table",
+                    "rename_to": "list_in",
+                    "origin": "<<STATE>>",
+                    "iterable_sources": false,
+                    "optional": false
+                }
+            ],
+            "output_arguments": [
+                {
+                    "id": "markdown_string",
+                    "type": "string",
+                    "stream": false
+                }
+            ],
+            "feed_to": [
+                {
+                    "destination": "<<STATE>>",
+                    "action": "set_state_value",
+                    "target_value": "markdown_display_reports_table",
+                    "input": [
+                        {
+                            "output_argument_id": "markdown_string",
+                            "target_argument": "<<VALUE_OVERWRITE_DICT>>"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "download_csv_event",
+            "function": "<<EVENT>>",
+            "arguments": [],
+            "execution": "synchronous",
+            "output_arguments": [],
+            "feed_to": [
+                {
+                    "destination": "download_csv_file",
+                    "split_outputs": false,
+                    "input": []
+                }
+            ]
+        },
+        {
+            "id": "download_csv_file",
+            "function": "download_dict_list_as_csv",
+            "arguments": [
+                {
+                    "argument_name": "staged_reports_table",
+                    "rename_to": "list_in",
+                    "origin": "<<STATE>>",
+                    "iterable_sources": false,
+                    "optional": false
+                }
+            ],
+            "execution": "synchronous",
+            "output_arguments": [],
+            "feed_to": [
+                {
+                    "destination": "<<USER>>",
+                    "input": [
+                        {
+                            "output_argument_id": "file_bytes",
+                            "target_argument": "file_bytes"
+                        },
+                        {
+                            "output_argument_id": "file_name",
+                            "target_argument": "file_name"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

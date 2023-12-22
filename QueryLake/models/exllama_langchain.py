@@ -2,7 +2,8 @@ from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from typing import Any, Dict, List, Optional
 from langchain.pydantic_v1 import Field, root_validator
-from .exllama_model import ExLlama, ExLlamaCache, ExLlamaConfig
+# from .exllama_model import ExLlama, ExLlamaCache, ExLlamaConfig
+from exllama.model import ExLlama, ExLlamaCache, ExLlamaConfig
 from exllama.tokenizer import ExLlamaTokenizer
 from exllama.generator import ExLlamaGenerator
 from exllama.lora import ExLlamaLora

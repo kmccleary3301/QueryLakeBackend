@@ -3,8 +3,9 @@ from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
 import time
 from ..database import encryption
-from .user_auth import *
-from .hashing import random_hash
+# from .user_auth import get_user_private_key
+from .single_user_auth import get_user
+from .hashing import random_hash, hash_function
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 user_db_path = server_dir+"/user_db/files/"
@@ -46,7 +47,8 @@ def create_organization(database : Session, username : str, password_prehash : s
 
     database.add(new_membership)
     database.commit()
-    return {"success": True, "organization_id": new_organization.id, "organization_dict": new_organization.__dict__, "membership_dict": new_membership.__dict__}
+    # return {"success": True, "organization_id": new_organization.id, "organization_dict": new_organization.__dict__, "membership_dict": new_membership.__dict__}
+    return {"organization_id": new_organization.id, "organization_dict": new_organization.__dict__, "membership_dict": new_membership.__dict__}
 
 def invite_user_to_organization(database : Session, username : str, password_prehash : str, username_to_invite : str, organization_id : int, member_class : str = "member"):
     """
@@ -79,7 +81,12 @@ def invite_user_to_organization(database : Session, username : str, password_pre
     # user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
 
     # user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-    user_private_key = get_user_private_key(database, username, password_prehash)
+    private_key_encryption_salt = user.private_key_encryption_salt
+    user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+
+    user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+
+    # user_private_key = get_user_private_key(database, username, password_prehash)["private_key"]
 
     organization_private_key = encryption.ecc_decrypt_string(user_private_key, membership_get[0].organization_private_key_secure)
 
@@ -94,7 +101,8 @@ def invite_user_to_organization(database : Session, username : str, password_pre
     database.add(new_membership)
     database.commit()
 
-    return {"success" : True}
+    # return {"success" : True}
+    return True
 
 def resolve_organization_invitation(database : Session, username : str, password_prehash : str, organization_id : int, accept : bool):
     """
@@ -119,7 +127,8 @@ def resolve_organization_invitation(database : Session, username : str, password
         database.delete(membership_get[0])
         database.commit()
 
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def fetch_memberships(database : Session, username : str, password_prehash : str, return_subset : str = "accepted"):
     """
@@ -159,7 +168,8 @@ def fetch_memberships(database : Session, username : str, password_prehash : str
             })
         organizations.append(org_result)
     
-    return {"success": True, "memberships": organizations, "admin": user.is_admin}
+    # return {"success": True, "memberships": organizations, "admin": user.is_admin}
+    return {"memberships": organizations, "admin": user.is_admin}
 
 def fetch_memberships_of_organization(database : Session, username : str, password_prehash : str, organization_id : int):
     """
@@ -189,4 +199,5 @@ def fetch_memberships_of_organization(database : Session, username : str, passwo
             "invite_still_open": membership.invite_still_open,
         })
     
-    return {"success": True, "memberships": memberships}
+    # return {"success": True, "memberships": memberships}
+    return {"memberships": memberships}

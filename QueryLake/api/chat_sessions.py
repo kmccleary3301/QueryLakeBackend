@@ -41,7 +41,8 @@ def fetch_chat_sessions(database : Session,
             "title": session.title,
             "hash_id": session.hash_id
         })
-    return {"success": True, "result": return_sessions[::-1]}
+    # return {"success": True, "result": return_sessions[::-1]}
+    return return_sessions[::-1]
 
 def fetch_session(database : Session, 
                     username : str, 
@@ -70,7 +71,8 @@ def fetch_session(database : Session,
             return_segments.append({"content": bot_response.content.encode("utf-8").hex(), "type": "bot"})
 
     # print("Got return segments:", return_segments)
-    return {"success": True, "result": return_segments}
+    # return {"success": True, "result": return_segments}
+    return return_segments
 
 def prune_empty_chat_sessions(database : Session):
     """Get rid of empty chat sessions with no history."""
@@ -105,7 +107,8 @@ def create_chat_session(database : Session,
 
     database.add(new_session)
     database.commit()
-    return {"success": True, "session_hash": session_hash}
+    # return {"success": True, "session_hash": session_hash}
+    return session_hash
 
 def hide_chat_session(database : Session, 
                         username : str, 
@@ -122,7 +125,8 @@ def hide_chat_session(database : Session,
     session.hidden = True
     database.commit()
     # print("Got return segments:", return_segments)
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 
 

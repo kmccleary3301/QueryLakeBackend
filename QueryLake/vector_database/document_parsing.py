@@ -14,8 +14,10 @@ import re
 
 # PyPDF2.PdfFileReader()
 
-def parse_PDFs(bytes_in) -> List[Document]:
-    reader = PdfReader(BytesIO(bytes_in))
+def parse_PDFs(bytes_in, return_all_text_as_string : bool = False) -> List[Document]:
+    if type(bytes_in) is bytes:
+        bytes_in = BytesIO(bytes_in)
+    reader = PdfReader(bytes_in)
     # blob_get = Blob(bytes_in)
     # print(reader)
 
@@ -59,6 +61,8 @@ def parse_PDFs(bytes_in) -> List[Document]:
     # print(all_text)
     # print(pages_text)
     # return pages_text
+    if return_all_text_as_string:
+        return " ".join([pair[0] for pair in all_text])
     return all_text
     # print(pdf_loader.lazy_load(blob_get))
 

@@ -20,7 +20,8 @@ def set_user_serp_key(database : Session,
     encrypted_serp_key = encryption.ecc_encrypt_string(user.public_key, serp_key)
     user.serp_api_key_encrypted = encrypted_serp_key
     database.commit()
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def set_organization_serp_key(database : Session, 
                               username : str, 
@@ -43,7 +44,8 @@ def set_organization_serp_key(database : Session,
 
     organization.serp_api_key_encrypted = encrypted_serp_key
     database.commit()
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def get_serp_key(database : Session, 
                  username : str, 
@@ -56,18 +58,19 @@ def get_serp_key(database : Session,
     user = get_user(database, username, password_prehash)
     
     if not organization_hash_id is None:
-        organization_private_key = get_organization_private_key(database, username, password_prehash, organization_hash_id)
+        organization_private_key = get_organization_private_key(database, username, password_prehash, organization_hash_id)["private_key"]
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
         organization_serp_key_encrypted = organization.serp_api_key_encrypted
         assert not organization_serp_key_encrypted is None, "Organization SERP key not set"
         serp_key = encryption.ecc_decrypt_string(organization_private_key, organization_serp_key_encrypted)
         return {"success": True, "result": serp_key}
 
-    user_private_key = get_user_private_key(database, username, password_prehash)
+    user_private_key = get_user_private_key(database, username, password_prehash)["private_key"]
     serp_key_encrypted = user.serp_api_key_encrypted
     assert not serp_key_encrypted is None, "User SERP key not set"
     serp_key = encryption.ecc_decrypt_string(user_private_key, serp_key_encrypted)
-    return {"success": True, "result": serp_key}
+    # return {"success": True, "result": serp_key}
+    return {"serp_key": serp_key}
 
 def search_google(database : Session, 
                   username : str, 
@@ -83,15 +86,13 @@ def search_google(database : Session,
     # assert results < 20, "Too many results requested"
     query = query.strip()
 
-
-    print()
     if serp_key is None:
         # search_pre_existing = database.exec(select(sql_db_tables.web_search).where(sql_db_tables.web_search.query == query)).all()
         # if len(search_pre_existing) > 0:
         #     return {"success": True, "result": json.loads(search_pre_existing[0].result), "new_search": False}
         try:
             print("Getting serp_key")
-            serp_key = get_serp_key(database, username, password_prehash, organization_hash_id=organization_hash_id)["result"]
+            serp_key = get_serp_key(database, username, password_prehash, organization_hash_id=organization_hash_id)["serp_key"]
             print("Got key:", serp_key)
         except:
             pass
@@ -123,7 +124,8 @@ def search_google(database : Session,
     database.add(new_db_entry)
     database.commit()
 
-    return {"success": True, "result": search_links, "new_search": True}
+    # return {"success": True, "result": search_links, "new_search": True}
+    return {"result": search_links, "new_search": True}
 
 def parse_urls(database : Session, 
                username : str, 
@@ -137,7 +139,8 @@ def parse_urls(database : Session,
     for result in results:
         print()
         print(result[:20])
-    return {"success": True, "result": results}
+    # return {"success": True, "result": results}
+    return {"result": results}
 
 def embed_urls(database : Session, 
                vector_database : ClientAPI, 
@@ -152,7 +155,8 @@ def embed_urls(database : Session,
     results = list(map(parse_url, urls))
     pairs = [(urls[i], results[i]) for i in range(len(urls)) if not results[i] is None]
     create_website_embeddings(vector_database, pairs)
-    return {"success": True}
+    # return {"success": True}
+    return True
 
 def perform_search_query(database : Session, 
                          vector_database : ClientAPI, 
@@ -168,7 +172,8 @@ def perform_search_query(database : Session,
     # get_links = get_links["result"]
     # embed_urls(database, vector_database, username, password_prehash, get_links)
     # return {"success": True, "results": query_database(vector_database, query, [], k=10, use_rerank=True, web_query=True)}
-    return {"success": True, "result": get_links}
+    # return {"success": True, "result": get_links}
+    return {"links": get_links}
     
 
 
