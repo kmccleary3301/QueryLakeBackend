@@ -15,5 +15,10 @@ sqlmodel
 py7zr
 eciespy
 python-multipart
+chromadb
+ray
+transformers
+markdownify
+pypdf2
 # pluggy
 # rich
