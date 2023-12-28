@@ -32,20 +32,22 @@ from QueryLake.models.langchain_sse import ThreadedGenerator
 from threading import Timer
 # from QueryLake.api import toolchains
 
-import httpx
+# import httpx
 # from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from starlette.testclient import TestClient
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.requests_client = httpx.AsyncClient()
-    yield
-    await app.requests_client.aclose()
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     app.requests_client = httpx.AsyncClient()
+#     yield
+#     await app.requests_client.aclose()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    # lifespan=lifespan
+)
 
 origins = ["*"]
 
