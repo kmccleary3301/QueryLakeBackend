@@ -268,6 +268,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.send_text(f"Message text was: {data}")
 
 if __name__ == "__main__":
-    # print(API_FUNCTION_HELP_GUIDE)
+    print(API_FUNCTION_HELP_GUIDE)
     Timer(30, api.prune_inactive_toolchain_sessions, args=(database, 240)) # Doesn't work, why??????
     uvicorn.run(app, host="0.0.0.0", port=5000, log_level="trace", log_config=None)  # type: ignore

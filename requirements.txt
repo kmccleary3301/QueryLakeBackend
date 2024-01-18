@@ -20,5 +20,9 @@ ray
 transformers
 markdownify
 pypdf2
+openai
+tiktoken
+ocrmypdf
+google-search-results
 # pluggy
 # rich

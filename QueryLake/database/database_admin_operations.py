@@ -42,8 +42,6 @@ For example code would look like:
 And math expressions would look like:
 $$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$
 """)
-    
-
 
 def add_models_to_database(database, models):
     for model in models:

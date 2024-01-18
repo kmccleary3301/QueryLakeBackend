@@ -37,7 +37,10 @@ excluded_member_function_descriptions = [
     "prune_inactive_toolchain_sessions",
     "retrieve_files_for_session"
     "session_notification",
-    "delete_file_on_delay"
+    "delete_file_on_delay",
+    "aes_decrypt_zip_file",
+    "aes_encrypt_zip_file",
+    "deepcopy"
 ]
 
 async_member_functions = [
@@ -50,4 +53,34 @@ async_member_functions = [
     "toolchain_stream_node_propagation_call",
     "get_toolchain_output_file_response"
 ]
+
+remaining_independent_api_functions = """
+add_user
+craft_document_access_token
+create_document_collection
+create_organization
+delete_document
+fetch_all_collections
+fetch_collection
+fetch_document
+fetch_document_collections_belonging_to
+fetch_memberships
+fetch_memberships_of_organization
+get_available_models
+get_available_toolchains
+get_document_secure
+get_openai_api_key
+get_serp_key
+invite_user_to_organization
+login
+modify_document_collection
+resolve_organization_invitation
+set_organization_openai_id
+set_organization_serp_key
+set_user_openai_api_key
+set_user_serp_key
+upload_document
+"""
+
+
 
