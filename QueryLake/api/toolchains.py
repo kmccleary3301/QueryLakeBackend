@@ -811,7 +811,7 @@ async def toolchain_file_upload_event_call(database : Session,
     """
     user = get_user(database, **auth)
     if session is None:
-        session = retrieve_toolchain_from_db(database, toolchain_function_caller, **auth, session_id)
+        session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
 
     system_args = {

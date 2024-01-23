@@ -80,7 +80,9 @@ set_organization_serp_key
 set_user_openai_api_key
 set_user_serp_key
 upload_document
-"""
+""".split("\n")
+
+remaining_independent_api_functions = [x.strip() for x in remaining_independent_api_functions if x.strip() != ""]
 
 
 

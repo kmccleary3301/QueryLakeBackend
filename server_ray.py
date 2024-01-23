@@ -1,7 +1,7 @@
 import asyncio
 # import logging
 
-from typing import Annotated
+from typing import Annotated, Callable, Any
 import json, os
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket
@@ -37,20 +37,38 @@ from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from starlette.testclient import TestClient
 
+import re, json
+from typing import AsyncGenerator, Optional, Literal, Tuple, Union, List, AsyncIterator
+from pydantic import BaseModel
 
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from starlette.requests import Request
+from starlette.responses import StreamingResponse, Response
 
+from vllm.engine.arg_utils import AsyncEngineArgs
+from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.sampling_params import SamplingParams
+from vllm.utils import random_uuid
+from vllm.outputs import RequestOutput
+from vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
 
+from ray.util import ActorPool
+from ray import serve, remote
+from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 
+from lmformatenforcer import JsonSchemaParser
+from lmformatenforcer import CharacterLevelParser
+from lmformatenforcer.integrations.vllm import VLLMLogitsProcessor
+from lmformatenforcer.regexparser import RegexParser
 
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoModel
+import torch
 
-
-
-
-
-
-
-
-
+from grammar_sampling_functions import get_token_id, get_logits_processor_from_grammar_options
+from math import exp
+from QueryLake.api.toolchains import ToolchainSession
+from QueryLake.api.hashing import random_hash
+import openai
 
 
 fastapi_app = FastAPI(
@@ -75,11 +93,9 @@ GLOBAL_SETTINGS = json.loads(file_read)
 
 ACTIVE_SESSIONS = {}
 
-engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
-SQLModel.metadata.create_all(engine)
-database = Session(engine)
-vector_database = chromadb.PersistentClient(path="vector_database")
-database_admin_operations.add_models_to_database(database, GLOBAL_SETTINGS["models"])
+
+GLOBAL_VECTOR_DATABASE = chromadb.PersistentClient(path="vector_database")
+
 # GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
 
@@ -127,178 +143,6 @@ def toolchain_function_caller(function_name):
     if function_name in API_FUNCTIONS:
         return getattr(api, function_name)
     return getattr(template_functions, function_name)
-
-@fastapi_app.post("/api/async/upload_document")
-async def create_document_collection(req: Request, file : UploadFile):
-    # try:
-    # arguments = req.query_params._dict
-    route = req.scope['path']
-    route_split = route.split("/")
-    print("/".join(route_split[:4]), req.query_params._dict)
-    arguments = json.loads(req.query_params._dict["parameters"]) 
-    true_arguments = clean_function_arguments_for_api({
-        "database": database,
-        "vector_database": vector_database,
-        "file": file,
-    }, arguments, "upload_document")
-
-    return api.upload_document(**true_arguments)
-
-@fastapi_app.post("/api/async/upload_document_to_session")
-async def create_document_collection(req: Request, file : UploadFile):
-    # try:
-    # arguments = req.query_params._dict
-    route = req.scope['path']
-    route_split = route.split("/")
-    print("/".join(route_split[:4]), req.query_params._dict)
-    arguments = json.loads(req.query_params._dict["parameters"]) 
-    true_arguments = clean_function_arguments_for_api({
-        "database": database,
-        "vector_database": vector_database,
-        "file": file,
-        "return_file_hash": True,
-        "add_to_vector_db": False
-    }, arguments, "upload_document")
-
-    upload_result = api.upload_document(**true_arguments)
-
-    true_args_2 = clean_function_arguments_for_api({
-        "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": GlobalLLMEnsemble,
-        "public_key": global_public_key,
-        "server_private_key": global_private_key,
-        "toolchain_function_caller": toolchain_function_caller,
-        "message": {
-            "type": "file_uploaded",
-            "hash_id": upload_result["hash_id"],
-            "file_name": upload_result["file_name"]
-        }
-    }, arguments, "toolchain_session_notification", bypass_disabled=True)
-    function_actual = getattr(api, "toolchain_session_notification")
-    args_get = await function_actual(**true_args_2)
-    if args_get is True:
-        return {"success": True}
-    return {"success": True, "result": args_get}
-
-
-@fastapi_app.get("/api/async/{rest_of_path:path}")
-async def api_general_call_async(req: Request, rest_of_path: str):
-    arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-    route = req.scope['path']
-
-    route_split = route.split("/")
-    path_split = rest_of_path.split("/")
-    function_target = path_split[0]
-
-    print("/".join(route_split[:4]), req.query_params._dict)
-    
-    assert function_target in API_FUNCTIONS, "Invalid API Function Called"
-    assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
-    function_actual = getattr(api, function_target)
-    true_args = clean_function_arguments_for_api({
-        "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": GlobalLLMEnsemble,
-        "public_key": global_public_key,
-        "server_private_key": global_private_key,
-        "toolchain_function_caller": toolchain_function_caller,
-    }, arguments, function_target)
-    call_result = await function_actual(**true_args)
-    if type(call_result) is ThreadedGenerator:
-        return EventSourceResponse(call_result)
-    elif type(call_result) is StreamingResponse:
-        return call_result
-    elif type(call_result) is FileResponse:
-        return call_result
-    elif type(call_result) is Response:
-        return call_result
-    if call_result is True:
-        return {"success": True}
-    return {"success": True, "result": call_result}
-    # except Exception as e:
-    #     return ErrorAsGenerator(str(e))
-
-# @app.get("/api/{rest_of_path:path}")
-@fastapi_app.post("/api/{rest_of_path:path}")
-async def api_general_call(req: Request, rest_of_path: str):
-    try:
-        # arguments = req.query_params._dict
-        print("Calling:", rest_of_path)
-        arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-        route = req.scope['path']
-        route_split = route.split("/")
-        print("/".join(route_split[:3]), req.query_params._dict)
-        if "/".join(route_split[:3]) == "/api/help":
-            if len(route_split) > 3:
-                function_name = route_split[3]
-                return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
-            else:
-                print(API_FUNCTION_HELP_GUIDE)
-                return {"success": True, "note": API_FUNCTION_HELP_GUIDE} 
-        else:
-            assert rest_of_path in API_FUNCTIONS, "Invalid API Function Called"
-            assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
-            function_actual = getattr(api, rest_of_path)
-            true_args = clean_function_arguments_for_api({
-                "database": database,
-                "vector_database": vector_database,
-                "llm_ensemble": GlobalLLMEnsemble,
-                "public_key": global_public_key,
-                "toolchain_function_caller": toolchain_function_caller
-            }, arguments, rest_of_path)
-            args_get = function_actual(**true_args)
-            if args_get is True:
-                return {"success": True}
-            return {"success": True, "result": args_get}
-    except Exception as e:
-        return {"success": False, "note": str(e)}
-
-@fastapi_app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    data = await websocket.receive_text()
-    await websocket.send_text(f"Message text was: {data}")
-
-# if __name__ == "__main__":
-#     # print(API_FUNCTION_HELP_GUIDE)
-#     Timer(30, api.prune_inactive_toolchain_sessions, args=(database, 240)) # Doesn't work, why??????
-#     uvicorn.run(fastapi_app, host="0.0.0.0", port=5000, log_level="trace", log_config=None)  # type: ignore
-
-
-
-import re, json
-from typing import AsyncGenerator, Optional, Literal, Tuple, Union, List, AsyncIterator
-from pydantic import BaseModel
-
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
-from starlette.requests import Request
-from starlette.responses import StreamingResponse, Response
-
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import AsyncLLMEngine
-from vllm.sampling_params import SamplingParams
-from vllm.utils import random_uuid
-from vllm.outputs import RequestOutput
-from vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
-
-from ray import serve
-from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
-
-from lmformatenforcer import JsonSchemaParser
-from lmformatenforcer import CharacterLevelParser
-from lmformatenforcer.integrations.vllm import VLLMLogitsProcessor
-from lmformatenforcer.regexparser import RegexParser
-
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoModel
-import torch
-
-from grammar_sampling_functions import get_token_id, get_logits_processor_from_grammar_options
-from math import exp
-from QueryLake.api.toolchains import ToolchainSession
-from QueryLake.api.hashing import random_hash
-
-fastapi_app = FastAPI()
 
 @serve.deployment(ray_actor_options={"num_gpus": 1}, max_replicas_per_node=1)
 class LLMDeploymentClass:
@@ -497,10 +341,18 @@ class RerankerDeployment:
 @serve.ingress(fastapi_app)
 class UmbrellaClass:
     def __init__(self, 
+                 database,
+                #  vector_database : ClientAPI,
                  llm_handle: DeploymentHandle,
                  embedding_handle: DeploymentHandle,
-                 rerank_handle: DeploymentHandle
-                 ):
+                 rerank_handle: DeploymentHandle):
+        self.database = database
+        # self.vector_database = GLOBAL_VECTOR_DATABASE
+        
+        self.database.commit.remote()
+        # GLOBAL_DATABASE.commit()
+        
+        [self.database.print_hi.remote() for _ in list(range(100))]
         
         self.llm_handle = llm_handle.options(
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
@@ -510,9 +362,11 @@ class UmbrellaClass:
         self.rerank_handle = rerank_handle
 
     
-    async def run_async_api_function(self, api_function, arguments):
-        print("Running async api function")
-        return await api_function(**arguments)
+    
+    
+    # async def run_async_api_function(self, api_function, arguments):
+    #     print("Running async api function")
+    #     return await api_function(**arguments)
     
     @fastapi_app.post("/direct/{rest_of_path:path}")
     async def run(self, request: Request, rest_of_path: str) -> Response:
@@ -528,47 +382,70 @@ class UmbrellaClass:
         print("Return type:", type(return_tmp), return_tmp)
         return return_tmp
     
-    async def stream_results(self, results_generator, ws : WebSocket) -> AsyncGenerator[bytes, None]:
-        num_returned = 0
-        try:
-            async for request_output in results_generator:
-                text_outputs = [output.text for output in request_output.outputs]
-                assert len(text_outputs) == 1
-                text_output = text_outputs[0][num_returned:]
-                ret = {"text": text_output}
-                
-                await ws.send_text((json.dumps(ret) + "\n").encode("utf-8"))
-                num_returned += len(text_output)
-        except WebSocketDisconnect:
-            print("Client disconnected (stream_results).")
-        return
+    async def stream_results(self, 
+                             results_generator: DeploymentResponseGenerator,
+                             on_new_token: Callable[[str], None] = None) -> AsyncGenerator[bytes, None]:
+        
+        num_returned, tokens_returned = 0, []
+        async for request_output in results_generator:
+            text_outputs = [output.text for output in request_output.outputs]
+            assert len(text_outputs) == 1
+            text_output = text_outputs[0][num_returned:]
+            ret = {"text": text_output}
+            if not on_new_token is None:
+                if inspect.iscoroutinefunction(on_new_token):
+                    await on_new_token(text_output)
+                else:
+                    on_new_token(text_output)
+            num_returned += len(text_output)
+            tokens_returned.append(text_output)
+        return tokens_returned
     
-    async def llm_call(self, request_dict : dict, ws : WebSocket):
-        stream = request_dict.pop("stream", False)
-                
+    async def llm_call(self,
+                       model_parameters : dict,
+                       llm_handle : DeploymentHandle, 
+                       on_new_token: Callable[[str], None] = None):
+        
         gen: DeploymentResponseGenerator = (
-            self.llm_handle.generator.remote(request_dict)
+            llm_handle.generator.remote(model_parameters)
         )
         
         final_output = None
-        if stream:
-            await self.stream_results(gen, ws)
-            await ws.send_text((json.dumps({"notice": "END_RESPONSE"}) + "\n").encode("utf-8"))
-            return
-        else:
-            async for request_output in gen:
-                final_output = request_output
-    
-        
+        results = await self.stream_results(gen, on_new_token)
         assert final_output is not None
-        text_outputs = "".join([output.text for output in final_output.outputs])
-        ret = {"text": text_outputs}
-        await ws.send_text((json.dumps(ret) + "\n").encode("utf-8"))
-        await ws.send_text((json.dumps({"notice": "END_RESPONSE"}) + "\n").encode("utf-8"))
-        return
+        text_outputs = "".join(results)
+        return {"output": text_outputs, "token_count": len(results)}
     
-    async def openai_llm_call(self, request_dict : dict, ws : WebSocket):
-        pass
+    async def openai_llm_call(self,
+                              api_kwargs : dict,
+                              model_choice: str,
+                              chat_history : List[dict],
+                              model_parameters : dict,
+                              on_new_token: Callable[[str], None] = None):
+        # openai.Completion
+        auth_args = {"api_key": api_kwargs["api_key"]}
+        if "organization_id" in api_kwargs:
+            auth_args["organization"] = api_kwargs["organization_id"]
+        # client = openai.OpenAI(**api_kwargs)
+        response = ""
+        for chunk in openai.ChatCompletion.create(
+            model=model_choice,
+            messages=chat_history,
+            **model_parameters,
+            stream=True,
+        ): 
+            try:
+                content = chunk.choices[0].delta.content
+                if not content is None:
+                    response.append(content)
+                    if not on_new_token is None:
+                        if inspect.iscoroutinefunction(on_new_token):
+                            await on_new_token(content)
+                        else:
+                            on_new_token(content)
+            except:
+                pass
+        return {"output": "".join(response), "token_count": len(response)}
     
     @fastapi_app.websocket("/toolchain/{rest_of_path:path}")
     async def toolchain_websocket_handler(self, ws: WebSocket):
@@ -611,13 +488,34 @@ class UmbrellaClass:
                                 vector_database : ClientAPI,
                                 auth : dict,
                                 history: list,
-                                session_hash : str = None,
-                                parameters : dict = None,
+                                model_settings : dict = None,
                                 model_choice : str = None,
                                 collection_hash_ids : list = None,
                                 context : list = None,
                                 web_search : bool = False,
-                                organization_hash_id : str = None):
+                                organization_hash_id : str = None,
+                                on_new_token: Callable[[str], None] = None):
+            """
+            Returns a json with the following fields:
+            `output`: the full output text of the LLM
+            `token_count`: the full count of tokens generated
+            """
+            user = api.get_user(self.database, **auth)
+            
+            model_choice = model_choice.split("/")
+            if len(model_choice) > 1:
+                provider = model_choice[0]
+                if provider == "openai":
+                    result = await self.openai_llm_call(
+                        api_kwargs = user.openai_api_keys,
+                        model_choice = model_choice[1],
+                        chat_history = history,
+                        model_parameters = model_settings,
+                        on_new_token = on_new_token
+                    )
+                
+                model_choice = model_choice[0]
+            
             pass
         
         
@@ -632,8 +530,8 @@ class UmbrellaClass:
         
         
         system_args = {
-            "database": database,
-            "vector_database": vector_database,
+            "database": self.database,
+            "vector_database": self.vector_database,
             "public_key": global_public_key,
             "server_private_key": global_private_key,
             "toolchain_function_caller": toolchain_function_caller_websocket,
@@ -664,17 +562,17 @@ class UmbrellaClass:
                 
                 if command == "toolchain/load":
                     if not toolchain_session is None:
-                        api.save_toolchain_session(database, toolchain_session)
+                        api.save_toolchain_session(self.database, toolchain_session)
                         toolchain_session = None
                     true_args = clean_function_arguments_for_api(system_args)
-                    toolchain_session = api.fetch_toolchain_session(database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
+                    toolchain_session = api.fetch_toolchain_session(self.database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
                 elif command == "toolchain/create":
                     if not toolchain_session is None:
-                        api.save_toolchain_session(database, toolchain_session)
+                        api.save_toolchain_session(self.database, toolchain_session)
                         toolchain_session = None
-                    toolchain_session = api.create_toolchain_session(database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
+                    toolchain_session = api.create_toolchain_session(self.database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
                 elif command == "toolchain/file_upload_event_call":
-                    result = await api.toolchain_file_upload_event_call(database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
+                    result = await api.toolchain_file_upload_event_call(self.database, toolchain_function_caller_websocket, auth=auth, ws=ws, **arguments)
                     
                 generate = {"STOP_GENERATION": False}
                 
@@ -685,10 +583,186 @@ class UmbrellaClass:
                     break
                 else:
                     ws.send_text(json.dumps({"error": str(e)}))
+    
+    # @fastapi_app.post("/api/async/upload_document")
+    # async def create_document_collection(self, req: Request, file : UploadFile):
+    #     # try:
+    #     # arguments = req.query_params._dict
+    #     def create_embeddings(text : str) -> List[List[float]]:
+    #         pass
+        
+    #     route = req.scope['path']
+    #     route_split = route.split("/")
+    #     print("/".join(route_split[:4]), req.query_params._dict)
+    #     arguments = json.loads(req.query_params._dict["parameters"]) 
+    #     true_arguments = clean_function_arguments_for_api({
+    #         "database": self.database,
+    #         "vector_database": self.vector_database,
+    #         "create_embeddings": create_embeddings,
+    #         "file": file,
+    #     }, arguments, "upload_document")
+
+    #     return api.upload_document(**true_arguments)
+
+    # @fastapi_app.post("/api/async/upload_document_to_session")
+    # async def upload_document_to_session(self, req: Request, file : UploadFile):
+    #     # try:
+    #     # arguments = req.query_params._dict
+        
+    #     def create_embeddings(text : str) -> List[List[float]]:
+    #         pass
+        
+    #     route = req.scope['path']
+    #     route_split = route.split("/")
+    #     print("/".join(route_split[:4]), req.query_params._dict)
+    #     arguments = json.loads(req.query_params._dict["parameters"]) 
+    #     true_arguments = clean_function_arguments_for_api({
+    #         "database": self.database,
+    #         "vector_database": self.vector_database,
+    #         "file": file,
+    #         "create_embeddings": create_embeddings,
+    #         "return_file_hash": True,
+    #         "add_to_vector_db": False
+    #     }, arguments, "upload_document")
+
+    #     upload_result = api.upload_document(**true_arguments)
+
+    #     true_args_2 = clean_function_arguments_for_api({
+    #         "database": self.database,
+    #         "vector_database": self.vector_database,
+    #         "public_key": global_public_key,
+    #         "server_private_key": global_private_key,
+    #         "toolchain_function_caller": toolchain_function_caller,
+    #         "message": {
+    #             "type": "file_uploaded",
+    #             "hash_id": upload_result["hash_id"],
+    #             "file_name": upload_result["file_name"]
+    #         }
+    #     }, arguments, "toolchain_session_notification", bypass_disabled=True)
+    #     function_actual = getattr(api, "toolchain_session_notification")
+    #     args_get = await function_actual(**true_args_2)
+    #     if args_get is True:
+    #         return {"success": True}
+    #     return {"success": True, "result": args_get}
+
+    
+    # @fastapi_app.post("/api/{rest_of_path:path}")
+    # async def api_general_call(self, req: Request, rest_of_path: str):
+    #     try:
+    #         # arguments = req.query_params._dict
+    #         print("Calling:", rest_of_path)
+    #         arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
+    #         route = req.scope['path']
+    #         route_split = route.split("/")
+    #         print("/".join(route_split[:3]), req.query_params._dict)
+    #         if "/".join(route_split[:3]) == "/api/help":
+    #             if len(route_split) > 3:
+    #                 function_name = route_split[3]
+    #                 return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
+    #             else:
+    #                 print(API_FUNCTION_HELP_GUIDE)
+    #                 return {"success": True, "note": API_FUNCTION_HELP_GUIDE} 
+    #         else:
+    #             assert rest_of_path in API_FUNCTIONS, "Invalid API Function Called"
+    #             assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
+    #             assert rest_of_path in api.remaining_independent_api_functions, "Function not available"
+    #             function_actual = getattr(api, rest_of_path)
+    #             true_args = clean_function_arguments_for_api({
+    #                 "database": self.database,
+    #                 "vector_database": self.vector_database,
+    #                 # "llm_ensemble": GlobalLLMEnsemble,
+    #                 "public_key": global_public_key,
+    #                 "toolchain_function_caller": toolchain_function_caller
+    #             }, arguments, rest_of_path)
+    #             args_get = function_actual(**true_args)
+    #             if args_get is True:
+    #                 return {"success": True}
+    #             return {"success": True, "result": args_get}
+    #     except Exception as e:
+    #         return {"success": False, "note": str(e)}
+
+    # @fastapi_app.get("/api/async/{rest_of_path:path}")
+    # async def api_general_call_async(self, req: Request, rest_of_path: str):
+    #     arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
+    #     route = req.scope['path']
+
+    #     route_split = route.split("/")
+    #     path_split = rest_of_path.split("/")
+    #     function_target = path_split[0]
+
+    #     print("/".join(route_split[:4]), req.query_params._dict)
+        
+    #     assert function_target in API_FUNCTIONS, "Invalid API Function Called"
+    #     assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
+    #     function_actual = getattr(api, function_target)
+    #     true_args = clean_function_arguments_for_api({
+    #         "database": self.database,
+    #         "vector_database": self.vector_database,
+    #         # "llm_ensemble": GlobalLLMEnsemble,
+    #         "public_key": global_public_key,
+    #         "server_private_key": global_private_key,
+    #         "toolchain_function_caller": toolchain_function_caller,
+    #     }, arguments, function_target)
+    #     call_result = await function_actual(**true_args)
+    #     if type(call_result) is ThreadedGenerator:
+    #         return EventSourceResponse(call_result)
+    #     elif type(call_result) is StreamingResponse:
+    #         return call_result
+    #     elif type(call_result) is FileResponse:
+    #         return call_result
+    #     elif type(call_result) is Response:
+    #         return call_result
+    #     if call_result is True:
+    #         return {"success": True}
+    #     return {"success": True, "result": call_result}
+
+# @serve.deployment
+# class SQLModelEngineWrapper:
+#     def __init__(self, engine):
+#         self.engine = engine
+
+#     async def __call__(self):
+#         return self.engine
+
+# sqlmodel_handle = SQLModelEngineWrapper.bind(engine)
+
+@remote
+class DatabaseActor:
+    def __init__(self):
+        self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
+        SQLModel.metadata.create_all(self.engine)
+        self.database = Session(self.engine)
+        
+        database_admin_operations.add_models_to_database(self.database, GLOBAL_SETTINGS["models"])
+        # configure db connection stuff here
+
+    def add(self, *args, **kwargs):
+        return self.database.add(*args, **kwargs)
+    
+    def commit(self, *args, **kwargs):
+        return self.database.commit(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        return self.database.delete(*args, **kwargs)
+    
+    def exec(self, *args, **kwargs):
+        return self.database.exec(*args, **kwargs)
+    
+    def print_hi(self):
+        print("Hi")
+
+MAX_DB_ACTORS = 1
+
+actors = [DatabaseActor.remote() for _ in range(MAX_DB_ACTORS)]
+pool = ActorPool(actors)
+
+# Get 100 things done but it's limited to max of 5 running at a time, so you limit the number of db connections you're using
 
 
 
 deployment = UmbrellaClass.bind(
+    database=actors[0],
+    # vector_database=GLOBAL_VECTOR_DATABASE,
     llm_handle=LLMDeploymentClass.bind(
         model="/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ", 
         max_model_len=16384
