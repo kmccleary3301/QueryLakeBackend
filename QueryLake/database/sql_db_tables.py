@@ -2,26 +2,17 @@ from typing import Optional, List
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON
 from sqlalchemy.sql.schema import Column
 from sqlmodel import Session, create_engine
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column
+from ..api.hashing import random_hash
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
 
-# class TestArray(SQLModel, table=True):
-#     id: Optional[int] = Field(default=None, primary_key=True)
-#     elements: List[float] = Field(sa_column=Column(ARRAY(Float)))
-
-
-# class Hero(SQLModel, table=True):
-#     id: Optional[int] = Field(default=None, primary_key=True)
-#     name: str = Field(index=True)
-#     secret_name: str
-#     age: Optional[int] = Field(default=None, index=True)
-
-#     team_id: Optional[int] = Field(default=None, foreign_key="team.id")
-
-
-# Experimental
-
+class DocumentEmbedding(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
+    embedding: List[float] = Field(sa_column=Column(Vector(1024)))
+    text: str = Field()
 
 class toolchain_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
