@@ -8,7 +8,6 @@ from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
-from QueryLake.models.model_manager import LLMEnsemble
 from QueryLake import instruction_templates
 from fastapi.responses import StreamingResponse
 # from QueryLake.sql_db import User, File, 
@@ -55,6 +54,8 @@ from vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tok
 from ray.util import ActorPool
 from ray import serve, remote
 from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
+from ray import ObjectRef
+
 
 from lmformatenforcer import JsonSchemaParser
 from lmformatenforcer import CharacterLevelParser
@@ -75,15 +76,15 @@ fastapi_app = FastAPI(
     # lifespan=lifespan
 )
 
-origins = ["*"]
+# origins = ["*"]
 
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# fastapi_app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 with open("config.json", 'r', encoding='utf-8') as f:
@@ -94,13 +95,13 @@ GLOBAL_SETTINGS = json.loads(file_read)
 ACTIVE_SESSIONS = {}
 
 
-GLOBAL_VECTOR_DATABASE = chromadb.PersistentClient(path="vector_database")
+
 
 # GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
 
 
-print("Model Loaded")
+# print("Model Loaded")
 
 TEMPLATE_FUNCTIONS = [pair[0] for pair in inspect.getmembers(template_functions, inspect.isfunction)]
 
@@ -143,6 +144,133 @@ def toolchain_function_caller(function_name):
     if function_name in API_FUNCTIONS:
         return getattr(api, function_name)
     return getattr(template_functions, function_name)
+
+
+from sqlalchemy import util
+
+from sqlmodel.sql.expression import Select
+from sqlalchemy.engine.result import TupleResult
+
+from typing import (
+    Any,
+    Dict,
+    Mapping,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    overload,
+)
+# from sqlmodel.orm import _TSelectParam
+# _TSelectParam = TypeVar("_TSelectParam", bound=Any)
+
+@remote
+class DatabaseActor:
+    def __init__(self):
+        self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
+        SQLModel.metadata.create_all(self.engine)
+        self.database = Session(self.engine)
+        
+        database_admin_operations.add_models_to_database(self.database, GLOBAL_SETTINGS["models"])
+        # configure db connection stuff here
+
+    def add(self, 
+            instance: object,
+            _warn: bool = True) -> None:
+        return self.database.add(
+                                    instance,
+                                    _warn=_warn
+                                )
+    
+    def commit(self) -> None:
+        self.database.commit()
+    
+    def delete(self, instance: object) -> None:
+        self.database.delete(instance)
+    
+    def exec(self, 
+             statement: Select[Any],
+             *,
+             params: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None = None,
+             execution_options: Mapping[str, Any] = util.EMPTY_DICT,
+             bind_arguments: Dict[str, Any] | None = None,
+             _parent_execute_state: Any | None = None,
+             _add_event: Any | None = None) -> TupleResult[Any]:
+        print("CALLING EXEC")
+        result = self.database.exec(
+                                    statement, 
+                                    params=params, 
+                                    execution_options=execution_options, 
+                                    bind_arguments=bind_arguments, 
+                                    _parent_execute_state=_parent_execute_state, 
+                                    _add_event=_add_event
+                                   )
+        print("EXEC RESULT:", result)
+        return result
+    
+    def print_hi(self):
+        print("Hi")
+
+from chromadb.api.types import (
+    CollectionMetadata,
+    Documents,
+    Embeddable,
+    EmbeddingFunction,
+    DataLoader,
+    Embeddings,
+    IDs,
+    Include,
+    Loadable,
+    Metadatas,
+    URIs,
+    Where,
+    QueryResult,
+    GetResult,
+    WhereDocument,
+)
+import chromadb.utils.embedding_functions as ef
+from chromadb.api.models.Collection import Collection
+from uuid import UUID
+from ray.actor import ActorHandle
+
+@remote
+class VectorDatabaseActor:
+    def __init__(self):
+        self.vector_database : ClientAPI = chromadb.PersistentClient(path="vector_database")
+
+    def create_collection(
+            self, 
+            name: str,
+            metadata: CollectionMetadata | None = None,
+            embedding_function: EmbeddingFunction[Embeddable] | None = ef.DefaultEmbeddingFunction(),
+            data_loader: DataLoader[Loadable] | None = None,
+            get_or_create: bool = False
+        ) -> Collection:
+        return self.vector_database.create_collection(
+                                                        name,
+                                                        metadata=metadata,
+                                                        embedding_function=embedding_function,
+                                                        data_loader=data_loader,
+                                                        get_or_create=get_or_create
+                                                      )
+    
+    def get_collection(
+            self,
+            name: str,
+            id: UUID | None = None,
+            embedding_function: EmbeddingFunction[Embeddable] | None = ef.DefaultEmbeddingFunction(),
+            data_loader: DataLoader[Loadable] | None = None
+        ):
+        return self.vector_database.get_collection(
+                                                        name,
+                                                        id=id,
+                                                        embedding_function=embedding_function,
+                                                        data_loader=data_loader
+                                                  )
+    
+    def print_hi(self):
+        print("Hi")
+
 
 @serve.deployment(ray_actor_options={"num_gpus": 1}, max_replicas_per_node=1)
 class LLMDeploymentClass:
@@ -340,19 +468,32 @@ class RerankerDeployment:
 @serve.deployment
 @serve.ingress(fastapi_app)
 class UmbrellaClass:
-    def __init__(self, 
-                 database,
-                #  vector_database : ClientAPI,
+    def __init__(
+                 self, 
                  llm_handle: DeploymentHandle,
                  embedding_handle: DeploymentHandle,
-                 rerank_handle: DeploymentHandle):
+                 rerank_handle: DeploymentHandle,
+                 database : ActorHandle = None,
+                 vector_database : ActorHandle = None
+                 ):
         self.database = database
-        # self.vector_database = GLOBAL_VECTOR_DATABASE
+        self.vector_database = vector_database
         
-        self.database.commit.remote()
+        # self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
+        # SQLModel.metadata.create_all(self.engine)
+        # self.database = Session(self.engine)
+        self.engine = create_engine("postgresql://testuser:testpwd@localhost:5432/vectordb")
+        
+        SQLModel.metadata.create_all(self.engine)
+        self.database = Session(self.engine)
+        
+        
+        all_users = self.database.exec(select(sql_db_tables.user)).all()
+        print(all_users)
+        # self.database.commit.remote()
         # GLOBAL_DATABASE.commit()
         
-        [self.database.print_hi.remote() for _ in list(range(100))]
+        # [self.database.print_hi.remote() for _ in list(range(100))]
         
         self.llm_handle = llm_handle.options(
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
@@ -584,137 +725,144 @@ class UmbrellaClass:
                 else:
                     ws.send_text(json.dumps({"error": str(e)}))
     
-    # @fastapi_app.post("/api/async/upload_document")
-    # async def create_document_collection(self, req: Request, file : UploadFile):
-    #     # try:
-    #     # arguments = req.query_params._dict
-    #     def create_embeddings(text : str) -> List[List[float]]:
-    #         pass
+    @fastapi_app.post("/api/async/upload_document")
+    async def create_document_collection(self, req: Request, file : UploadFile):
+        # try:
+        # arguments = req.query_params._dict
+        def create_embeddings(text : str) -> List[List[float]]:
+            pass
         
-    #     route = req.scope['path']
-    #     route_split = route.split("/")
-    #     print("/".join(route_split[:4]), req.query_params._dict)
-    #     arguments = json.loads(req.query_params._dict["parameters"]) 
-    #     true_arguments = clean_function_arguments_for_api({
-    #         "database": self.database,
-    #         "vector_database": self.vector_database,
-    #         "create_embeddings": create_embeddings,
-    #         "file": file,
-    #     }, arguments, "upload_document")
+        route = req.scope['path']
+        route_split = route.split("/")
+        print("/".join(route_split[:4]), req.query_params._dict)
+        # arguments = json.loads(req.query_params._dict["parameters"]) 
+        arguments = await req.json()
+        true_arguments = clean_function_arguments_for_api({
+            "database": self.database,
+            "vector_database": self.vector_database,
+            "create_embeddings": create_embeddings,
+            "file": file,
+        }, arguments, "upload_document")
 
-    #     return api.upload_document(**true_arguments)
+        return api.upload_document(**true_arguments)
 
-    # @fastapi_app.post("/api/async/upload_document_to_session")
-    # async def upload_document_to_session(self, req: Request, file : UploadFile):
-    #     # try:
-    #     # arguments = req.query_params._dict
+    @fastapi_app.post("/api/async/upload_document_to_session")
+    async def upload_document_to_session(self, req: Request, file : UploadFile):
+        # try:
+        # arguments = req.query_params._dict
         
-    #     def create_embeddings(text : str) -> List[List[float]]:
-    #         pass
+        def create_embeddings(text : str) -> List[List[float]]:
+            pass
         
-    #     route = req.scope['path']
-    #     route_split = route.split("/")
-    #     print("/".join(route_split[:4]), req.query_params._dict)
-    #     arguments = json.loads(req.query_params._dict["parameters"]) 
-    #     true_arguments = clean_function_arguments_for_api({
-    #         "database": self.database,
-    #         "vector_database": self.vector_database,
-    #         "file": file,
-    #         "create_embeddings": create_embeddings,
-    #         "return_file_hash": True,
-    #         "add_to_vector_db": False
-    #     }, arguments, "upload_document")
+        route = req.scope['path']
+        route_split = route.split("/")
+        print("/".join(route_split[:4]), req.query_params._dict)
+        arguments = await req.json()
+        # arguments = json.loads(req.query_params._dict["parameters"]) 
+        true_arguments = clean_function_arguments_for_api({
+            "database": self.database,
+            "vector_database": self.vector_database,
+            "file": file,
+            "create_embeddings": create_embeddings,
+            "return_file_hash": True,
+            "add_to_vector_db": False
+        }, arguments, "upload_document")
 
-    #     upload_result = api.upload_document(**true_arguments)
+        upload_result = api.upload_document(**true_arguments)
 
-    #     true_args_2 = clean_function_arguments_for_api({
-    #         "database": self.database,
-    #         "vector_database": self.vector_database,
-    #         "public_key": global_public_key,
-    #         "server_private_key": global_private_key,
-    #         "toolchain_function_caller": toolchain_function_caller,
-    #         "message": {
-    #             "type": "file_uploaded",
-    #             "hash_id": upload_result["hash_id"],
-    #             "file_name": upload_result["file_name"]
-    #         }
-    #     }, arguments, "toolchain_session_notification", bypass_disabled=True)
-    #     function_actual = getattr(api, "toolchain_session_notification")
-    #     args_get = await function_actual(**true_args_2)
-    #     if args_get is True:
-    #         return {"success": True}
-    #     return {"success": True, "result": args_get}
+        true_args_2 = clean_function_arguments_for_api({
+            "database": self.database,
+            "vector_database": self.vector_database,
+            "public_key": global_public_key,
+            "server_private_key": global_private_key,
+            "toolchain_function_caller": toolchain_function_caller,
+            "message": {
+                "type": "file_uploaded",
+                "hash_id": upload_result["hash_id"],
+                "file_name": upload_result["file_name"]
+            }
+        }, arguments, "toolchain_session_notification", bypass_disabled=True)
+        function_actual = getattr(api, "toolchain_session_notification")
+        args_get = await function_actual(**true_args_2)
+        if args_get is True:
+            return {"success": True}
+        return {"success": True, "result": args_get}
 
     
-    # @fastapi_app.post("/api/{rest_of_path:path}")
-    # async def api_general_call(self, req: Request, rest_of_path: str):
-    #     try:
-    #         # arguments = req.query_params._dict
-    #         print("Calling:", rest_of_path)
-    #         arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-    #         route = req.scope['path']
-    #         route_split = route.split("/")
-    #         print("/".join(route_split[:3]), req.query_params._dict)
-    #         if "/".join(route_split[:3]) == "/api/help":
-    #             if len(route_split) > 3:
-    #                 function_name = route_split[3]
-    #                 return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
-    #             else:
-    #                 print(API_FUNCTION_HELP_GUIDE)
-    #                 return {"success": True, "note": API_FUNCTION_HELP_GUIDE} 
-    #         else:
-    #             assert rest_of_path in API_FUNCTIONS, "Invalid API Function Called"
-    #             assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
-    #             assert rest_of_path in api.remaining_independent_api_functions, "Function not available"
-    #             function_actual = getattr(api, rest_of_path)
-    #             true_args = clean_function_arguments_for_api({
-    #                 "database": self.database,
-    #                 "vector_database": self.vector_database,
-    #                 # "llm_ensemble": GlobalLLMEnsemble,
-    #                 "public_key": global_public_key,
-    #                 "toolchain_function_caller": toolchain_function_caller
-    #             }, arguments, rest_of_path)
-    #             args_get = function_actual(**true_args)
-    #             if args_get is True:
-    #                 return {"success": True}
-    #             return {"success": True, "result": args_get}
-    #     except Exception as e:
-    #         return {"success": False, "note": str(e)}
+    @fastapi_app.post("/api/{rest_of_path:path}")
+    async def api_general_call(self, req: Request, rest_of_path: str):
+        try:
+            # arguments = req.query_params._dict
+            print("Calling:", rest_of_path)
+            # arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
+            arguments = await req.json()
+            print("arguments:", arguments)
+            route = req.scope['path']
+            route_split = route.split("/")
+            print("/".join(route_split[:3]), req.query_params._dict)
+            if "/".join(route_split[:3]) == "/api/help":
+                if len(route_split) > 3:
+                    function_name = route_split[3]
+                    return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
+                else:
+                    print(API_FUNCTION_HELP_GUIDE)
+                    return {"success": True, "note": API_FUNCTION_HELP_GUIDE} 
+            else:
+                assert rest_of_path in API_FUNCTIONS, "Invalid API Function Called"
+                assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
+                assert rest_of_path in api.remaining_independent_api_functions, "Function not available"
+                function_actual = getattr(api, rest_of_path)
+                true_args = clean_function_arguments_for_api({
+                    "database": self.database,
+                    "vector_database": self.vector_database,
+                    # "llm_ensemble": GlobalLLMEnsemble,
+                    "public_key": global_public_key,
+                    "toolchain_function_caller": toolchain_function_caller
+                }, arguments, rest_of_path)
+                
+                print("Created args:", true_args)
+                
+                args_get = function_actual(**true_args)
+                if args_get is True:
+                    return {"success": True}
+                return {"success": True, "result": args_get}
+        except Exception as e:
+            return {"success": False, "note": str(e)}
 
-    # @fastapi_app.get("/api/async/{rest_of_path:path}")
-    # async def api_general_call_async(self, req: Request, rest_of_path: str):
-    #     arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-    #     route = req.scope['path']
+    @fastapi_app.get("/api/async/{rest_of_path:path}")
+    async def api_general_call_async(self, req: Request, rest_of_path: str):
+        arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
+        route = req.scope['path']
 
-    #     route_split = route.split("/")
-    #     path_split = rest_of_path.split("/")
-    #     function_target = path_split[0]
+        route_split = route.split("/")
+        path_split = rest_of_path.split("/")
+        function_target = path_split[0]
 
-    #     print("/".join(route_split[:4]), req.query_params._dict)
+        print("/".join(route_split[:4]), req.query_params._dict)
         
-    #     assert function_target in API_FUNCTIONS, "Invalid API Function Called"
-    #     assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
-    #     function_actual = getattr(api, function_target)
-    #     true_args = clean_function_arguments_for_api({
-    #         "database": self.database,
-    #         "vector_database": self.vector_database,
-    #         # "llm_ensemble": GlobalLLMEnsemble,
-    #         "public_key": global_public_key,
-    #         "server_private_key": global_private_key,
-    #         "toolchain_function_caller": toolchain_function_caller,
-    #     }, arguments, function_target)
-    #     call_result = await function_actual(**true_args)
-    #     if type(call_result) is ThreadedGenerator:
-    #         return EventSourceResponse(call_result)
-    #     elif type(call_result) is StreamingResponse:
-    #         return call_result
-    #     elif type(call_result) is FileResponse:
-    #         return call_result
-    #     elif type(call_result) is Response:
-    #         return call_result
-    #     if call_result is True:
-    #         return {"success": True}
-    #     return {"success": True, "result": call_result}
+        assert function_target in API_FUNCTIONS, "Invalid API Function Called"
+        assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
+        function_actual = getattr(api, function_target)
+        true_args = clean_function_arguments_for_api({
+            "database": self.database,
+            "vector_database": self.vector_database,
+            # "llm_ensemble": GlobalLLMEnsemble,
+            "public_key": global_public_key,
+            "server_private_key": global_private_key,
+            "toolchain_function_caller": toolchain_function_caller,
+        }, arguments, function_target)
+        call_result = await function_actual(**true_args)
+        if type(call_result) is ThreadedGenerator:
+            return EventSourceResponse(call_result)
+        elif type(call_result) is StreamingResponse:
+            return call_result
+        elif type(call_result) is FileResponse:
+            return call_result
+        elif type(call_result) is Response:
+            return call_result
+        if call_result is True:
+            return {"success": True}
+        return {"success": True, "result": call_result}
 
 # @serve.deployment
 # class SQLModelEngineWrapper:
@@ -726,43 +874,20 @@ class UmbrellaClass:
 
 # sqlmodel_handle = SQLModelEngineWrapper.bind(engine)
 
-@remote
-class DatabaseActor:
-    def __init__(self):
-        self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
-        SQLModel.metadata.create_all(self.engine)
-        self.database = Session(self.engine)
-        
-        database_admin_operations.add_models_to_database(self.database, GLOBAL_SETTINGS["models"])
-        # configure db connection stuff here
 
-    def add(self, *args, **kwargs):
-        return self.database.add(*args, **kwargs)
-    
-    def commit(self, *args, **kwargs):
-        return self.database.commit(*args, **kwargs)
-    
-    def delete(self, *args, **kwargs):
-        return self.database.delete(*args, **kwargs)
-    
-    def exec(self, *args, **kwargs):
-        return self.database.exec(*args, **kwargs)
-    
-    def print_hi(self):
-        print("Hi")
+
 
 MAX_DB_ACTORS = 1
+MAX_VECTOR_DB_ACTORS = 1
 
-actors = [DatabaseActor.remote() for _ in range(MAX_DB_ACTORS)]
-pool = ActorPool(actors)
-
-# Get 100 things done but it's limited to max of 5 running at a time, so you limit the number of db connections you're using
-
+db_global_actors = [DatabaseActor.remote() for _ in range(MAX_DB_ACTORS)]
+pool = ActorPool(db_global_actors)
+vector_db_global_actor = VectorDatabaseActor.remote()
 
 
 deployment = UmbrellaClass.bind(
-    database=actors[0],
-    # vector_database=GLOBAL_VECTOR_DATABASE,
+    database=db_global_actors[0],
+    vector_database=vector_db_global_actor,
     llm_handle=LLMDeploymentClass.bind(
         model="/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ", 
         max_model_len=16384
@@ -770,3 +895,6 @@ deployment = UmbrellaClass.bind(
     embedding_handle=EmbeddingDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-large-en-v1.5"),
     rerank_handle=RerankerDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-reranker-large")
 )
+
+if __name__ == "__main__":
+    serve.run(deployment)

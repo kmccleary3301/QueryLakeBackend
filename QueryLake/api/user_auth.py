@@ -7,6 +7,8 @@ from ..database import encryption
 from .hashing import *
 import os, json
 from .organizations import fetch_memberships
+from ray.actor import ActorHandle
+from ray import get
 # from .toolchains import get_available_toolchains
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
@@ -20,7 +22,7 @@ with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
     f.close()
 GLOBAL_SETTINGS = json.loads(file_read)
 
-def add_user(database : Session, username : str, password : str) -> bool:
+def add_user(database : ActorHandle, username : str, password : str) -> bool:
     """
     Add user to the database.
     """
@@ -28,9 +30,13 @@ def add_user(database : Session, username : str, password : str) -> bool:
         return {"account_made": False, "note": "Name too long"}
     if len(password) > 32:
         return {"account_made": False, "note": "Password too long"}
-    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username) 
-    if len(database.exec(statement).all()) > 0:
+    print("add_user 1")
+    statement = "hi"
+    print("add_user 2")
+    result = database.exec.remote(statement)
+    if len(result.all()) > 0:
         return {"account_made": False, "note": "Username already exists"}
+    print("add_user 3")
     random_salt_1 = sha256(str(random.getrandbits(512)).encode('utf-8')).hexdigest()
 
     private_key_encryption_salt = random_hash()
@@ -52,8 +58,8 @@ def add_user(database : Session, username : str, password : str) -> bool:
         private_key_secured=encryption.aes_encrypt_string(private_key_encryption_key, private_key)
     )
 
-    database.add(new_user)
-    database.commit()
+    database.add.remote(new_user)
+    database.commit.remote()
 
     new_access_token = sql_db_tables.access_token(
         type="user_primary_token",
@@ -61,8 +67,8 @@ def add_user(database : Session, username : str, password : str) -> bool:
         author_user_name=username,
         hash_id=random_hash(),
     )
-    database.add(new_access_token)
-    database.commit()
+    database.add.remote(new_access_token)
+    database.commit.remote()
 
     password_prehash = hash_function(password)
 

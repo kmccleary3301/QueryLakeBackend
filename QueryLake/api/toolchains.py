@@ -1,5 +1,5 @@
 import os, json
-from ..models.model_manager import LLMEnsemble
+# from ..models.model_manager import LLMEnsemble
 from .user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
@@ -14,7 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 import asyncio
 from threading import Thread
 from chromadb.api import ClientAPI
-from ..models.model_manager import LLMEnsemble
+# from ..models.model_manager import LLMEnsemble
 import time
 from ..api.document import get_file_bytes, get_document_secure
 from ..api.user_auth import get_user_private_key
@@ -799,7 +799,7 @@ def retrieve_files_for_session(database : Session,
 async def toolchain_file_upload_event_call(database : Session,
                                             toolchain_function_caller,
                                             vector_database : ClientAPI,
-                                            llm_ensemble : LLMEnsemble,
+                                            llm_ensemble,
                                             auth : dict,
                                             session_id : str,
                                             event_parameters : dict,
@@ -844,7 +844,7 @@ async def toolchain_file_upload_event_call(database : Session,
 async def toolchain_entry_call(database : Session,
                                toolchain_function_caller,
                                vector_database : ClientAPI,
-                               llm_ensemble : LLMEnsemble,
+                               llm_ensemble,
                                auth : dict,
                                session_id : str,
                                entry_parameters : dict,
@@ -880,7 +880,7 @@ async def toolchain_entry_call(database : Session,
 async def toolchain_event_call(database : Session,
                                toolchain_function_caller,
                                vector_database : ClientAPI,
-                               llm_ensemble : LLMEnsemble,
+                               llm_ensemble,
                                auth: dict,
                                session_id : str,
                                event_node_id : str,
@@ -948,7 +948,7 @@ async def toolchain_event_call(database : Session,
 async def toolchain_stream_node_propagation_call(database : Session,
                                                  toolchain_function_caller,  
                                                  vector_database : ClientAPI,
-                                                 llm_ensemble : LLMEnsemble,
+                                                 llm_ensemble,
                                                  auth : dict,
                                                  session_id : str,
                                                  event_node_id : str,

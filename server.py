@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
-from QueryLake.models.model_manager import LLMEnsemble
+# from QueryLake.models.model_manager import LLMEnsemble
 from QueryLake import instruction_templates
 from fastapi.responses import StreamingResponse
 # from QueryLake.sql_db import User, File, 
@@ -85,7 +85,7 @@ database = Session(engine)
 vector_database = chromadb.PersistentClient(path="vector_database")
 database_admin_operations.add_models_to_database(database, GLOBAL_SETTINGS["models"])
 # GlobalLLMEnsemble = LLMEnsemble(GLOBAL_LLM_CONFIG, GLOBAL_SETTINGS["loader_class"])
-GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
+# GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
 
 
