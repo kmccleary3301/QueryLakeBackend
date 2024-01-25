@@ -278,7 +278,6 @@ def craft_document_access_token(database : Session,
     # return {"success": True, "result": [document.file_name, access_encrypted]}
     return {"file_name": document.file_name, "access_encrypted": access_encrypted}
 
-
 def get_file_bytes(database : Session,
                    hash_id : str,
                    encryption_key : str):

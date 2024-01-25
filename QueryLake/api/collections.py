@@ -172,7 +172,6 @@ def fetch_collection(database : Session,
     # return {"success": True, "result": data}
     return data
 
-
 def modify_document_collection(database : Session,
                                 username : str,
                                 password_prehash : str,

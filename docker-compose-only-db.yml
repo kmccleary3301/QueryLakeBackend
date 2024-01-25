@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   postgres_db:
     image: ankane/pgvector
@@ -11,21 +10,6 @@ services:
     volumes:
      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
      - ./db_data:/var/lib/postgresql/data
-    # # Uncomment if you want to access the DB from outside the docker network
-    # ports: 
-    #   - 5432:5432
-
-  api_server:
-    build: ./api_server
-    ports:
-      - 8000:8000
-    depends_on:
-      - db
-
-  frontend_server:
-    build: ./frontend
-    ports:
-      - 3000:3000
-
-volumes:
-  db_data:
+    # Uncomment if you want to access the DB from outside the docker network
+    ports: 
+      - 5432:5432

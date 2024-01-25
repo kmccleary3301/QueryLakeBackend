@@ -33,7 +33,7 @@ def ecc_generate_public_private_key() -> tuple[str]:
 
     eth_k = generate_eth_key()
     private_key_hex = eth_k.to_hex()  # hex string
-    public_key_hex = eth_k.public_key.to_hex()
+    public_key_hex = eth_k.public_key.to_hex()[2:]
 
     return (public_key_hex, private_key_hex)
 
@@ -43,7 +43,7 @@ def ecc_encrypt_string(public_key_hex : str, input_string : str, encoding : str 
     Data is returned as a hex string.
     """
     data = bytes(input_string, encoding=encoding)
-    data_encrypted = encrypt(public_key_hex, data).hex()
+    data_encrypted = encrypt("0x"+public_key_hex, data).hex()
     return data_encrypted
 
 def ecc_decrypt_string(private_key_hex : str, encrypted_hex_string : str, encoding : str = "utf-8") -> str:

@@ -71,6 +71,10 @@ from QueryLake.api.toolchains import ToolchainSession
 from QueryLake.api.hashing import random_hash
 import openai
 
+import pgvector
+from pydantic import BaseModel
+from QueryLake.typing.config import ModelArgs, Padding, Models, ExternalModelProviders, LoaderParameters, Config
+
 
 fastapi_app = FastAPI(
     # lifespan=lifespan
@@ -85,17 +89,7 @@ fastapi_app = FastAPI(
 #     allow_methods=["*"],
 #     allow_headers=["*"],
 # )
-
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-with open("config.json", 'r', encoding='utf-8') as f:
-    file_read = f.read()
-    f.close()
-GLOBAL_SETTINGS = json.loads(file_read)
-
 ACTIVE_SESSIONS = {}
-
-
-
 
 # GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
@@ -105,8 +99,16 @@ global_public_key, global_private_key = encryption.ecc_generate_public_private_k
 
 TEMPLATE_FUNCTIONS = [pair[0] for pair in inspect.getmembers(template_functions, inspect.isfunction)]
 
+
+
 API_FUNCTIONS = [pair[0] for pair in inspect.getmembers(api, inspect.isfunction)]
+# API_FUNCTIONS_ALL = [func for func in API_FUNCTIONS if not re.match(r"__.*?__", func)]
+# print("ALL API_FUNCTIONS")
+# print(json.dumps(sorted(API_FUNCTIONS_ALL), indent=4))
 API_FUNCTIONS = [func for func in API_FUNCTIONS if (not re.match(r"__.*?__", func) and func not in api.excluded_member_function_descriptions)]
+# print("API FUNCTIONS INCLUSIVE")
+# print(json.dumps(sorted(API_FUNCTIONS), indent=4))
+
 API_FUNCTION_DOCSTRINGS = [getattr(api, func).__doc__ for func in API_FUNCTIONS]
 API_FUNCTION_PARAMETERS = [inspect.signature(getattr(api, func)) for func in API_FUNCTIONS]
 API_FUNCTION_HELP_DICTIONARY = {}
@@ -163,114 +165,6 @@ from typing import (
 )
 # from sqlmodel.orm import _TSelectParam
 # _TSelectParam = TypeVar("_TSelectParam", bound=Any)
-
-@remote
-class DatabaseActor:
-    def __init__(self):
-        self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
-        SQLModel.metadata.create_all(self.engine)
-        self.database = Session(self.engine)
-        
-        database_admin_operations.add_models_to_database(self.database, GLOBAL_SETTINGS["models"])
-        # configure db connection stuff here
-
-    def add(self, 
-            instance: object,
-            _warn: bool = True) -> None:
-        return self.database.add(
-                                    instance,
-                                    _warn=_warn
-                                )
-    
-    def commit(self) -> None:
-        self.database.commit()
-    
-    def delete(self, instance: object) -> None:
-        self.database.delete(instance)
-    
-    def exec(self, 
-             statement: Select[Any],
-             *,
-             params: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None = None,
-             execution_options: Mapping[str, Any] = util.EMPTY_DICT,
-             bind_arguments: Dict[str, Any] | None = None,
-             _parent_execute_state: Any | None = None,
-             _add_event: Any | None = None) -> TupleResult[Any]:
-        print("CALLING EXEC")
-        result = self.database.exec(
-                                    statement, 
-                                    params=params, 
-                                    execution_options=execution_options, 
-                                    bind_arguments=bind_arguments, 
-                                    _parent_execute_state=_parent_execute_state, 
-                                    _add_event=_add_event
-                                   )
-        print("EXEC RESULT:", result)
-        return result
-    
-    def print_hi(self):
-        print("Hi")
-
-from chromadb.api.types import (
-    CollectionMetadata,
-    Documents,
-    Embeddable,
-    EmbeddingFunction,
-    DataLoader,
-    Embeddings,
-    IDs,
-    Include,
-    Loadable,
-    Metadatas,
-    URIs,
-    Where,
-    QueryResult,
-    GetResult,
-    WhereDocument,
-)
-import chromadb.utils.embedding_functions as ef
-from chromadb.api.models.Collection import Collection
-from uuid import UUID
-from ray.actor import ActorHandle
-
-@remote
-class VectorDatabaseActor:
-    def __init__(self):
-        self.vector_database : ClientAPI = chromadb.PersistentClient(path="vector_database")
-
-    def create_collection(
-            self, 
-            name: str,
-            metadata: CollectionMetadata | None = None,
-            embedding_function: EmbeddingFunction[Embeddable] | None = ef.DefaultEmbeddingFunction(),
-            data_loader: DataLoader[Loadable] | None = None,
-            get_or_create: bool = False
-        ) -> Collection:
-        return self.vector_database.create_collection(
-                                                        name,
-                                                        metadata=metadata,
-                                                        embedding_function=embedding_function,
-                                                        data_loader=data_loader,
-                                                        get_or_create=get_or_create
-                                                      )
-    
-    def get_collection(
-            self,
-            name: str,
-            id: UUID | None = None,
-            embedding_function: EmbeddingFunction[Embeddable] | None = ef.DefaultEmbeddingFunction(),
-            data_loader: DataLoader[Loadable] | None = None
-        ):
-        return self.vector_database.get_collection(
-                                                        name,
-                                                        id=id,
-                                                        embedding_function=embedding_function,
-                                                        data_loader=data_loader
-                                                  )
-    
-    def print_hi(self):
-        print("Hi")
-
 
 @serve.deployment(ray_actor_options={"num_gpus": 1}, max_replicas_per_node=1)
 class LLMDeploymentClass:
@@ -468,32 +362,13 @@ class RerankerDeployment:
 @serve.deployment
 @serve.ingress(fastapi_app)
 class UmbrellaClass:
-    def __init__(
-                 self, 
+    def __init__(self,
+                 configuration: Config,
                  llm_handle: DeploymentHandle,
                  embedding_handle: DeploymentHandle,
-                 rerank_handle: DeploymentHandle,
-                 database : ActorHandle = None,
-                 vector_database : ActorHandle = None
-                 ):
-        self.database = database
-        self.vector_database = vector_database
+                 rerank_handle: DeploymentHandle):
         
-        # self.engine = create_engine("sqlite:///user_data.db", connect_args={"check_same_thread" : False})
-        # SQLModel.metadata.create_all(self.engine)
-        # self.database = Session(self.engine)
-        self.engine = create_engine("postgresql://testuser:testpwd@localhost:5432/vectordb")
-        
-        SQLModel.metadata.create_all(self.engine)
-        self.database = Session(self.engine)
-        
-        
-        all_users = self.database.exec(select(sql_db_tables.user)).all()
-        print(all_users)
-        # self.database.commit.remote()
-        # GLOBAL_DATABASE.commit()
-        
-        # [self.database.print_hi.remote() for _ in list(range(100))]
+        self.config : Config = configuration
         
         self.llm_handle = llm_handle.options(
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
@@ -501,13 +376,16 @@ class UmbrellaClass:
         )
         self.embedding_handle = embedding_handle
         self.rerank_handle = rerank_handle
-
-    
-    
-    
-    # async def run_async_api_function(self, api_function, arguments):
-    #     print("Running async api function")
-    #     return await api_function(**arguments)
+        
+        self.engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
+        
+        SQLModel.metadata.create_all(self.engine)
+        self.database = Session(self.engine)
+        
+        
+        all_users = self.database.exec(select(sql_db_tables.user)).all()
+        print("All users:")
+        print(all_users)
     
     @fastapi_app.post("/direct/{rest_of_path:path}")
     async def run(self, request: Request, rest_of_path: str) -> Response:
@@ -672,7 +550,6 @@ class UmbrellaClass:
         
         system_args = {
             "database": self.database,
-            "vector_database": self.vector_database,
             "public_key": global_public_key,
             "server_private_key": global_private_key,
             "toolchain_function_caller": toolchain_function_caller_websocket,
@@ -739,7 +616,6 @@ class UmbrellaClass:
         arguments = await req.json()
         true_arguments = clean_function_arguments_for_api({
             "database": self.database,
-            "vector_database": self.vector_database,
             "create_embeddings": create_embeddings,
             "file": file,
         }, arguments, "upload_document")
@@ -761,7 +637,6 @@ class UmbrellaClass:
         # arguments = json.loads(req.query_params._dict["parameters"]) 
         true_arguments = clean_function_arguments_for_api({
             "database": self.database,
-            "vector_database": self.vector_database,
             "file": file,
             "create_embeddings": create_embeddings,
             "return_file_hash": True,
@@ -772,7 +647,6 @@ class UmbrellaClass:
 
         true_args_2 = clean_function_arguments_for_api({
             "database": self.database,
-            "vector_database": self.vector_database,
             "public_key": global_public_key,
             "server_private_key": global_private_key,
             "toolchain_function_caller": toolchain_function_caller,
@@ -788,7 +662,6 @@ class UmbrellaClass:
             return {"success": True}
         return {"success": True, "result": args_get}
 
-    
     @fastapi_app.post("/api/{rest_of_path:path}")
     async def api_general_call(self, req: Request, rest_of_path: str):
         try:
@@ -800,94 +673,92 @@ class UmbrellaClass:
             route = req.scope['path']
             route_split = route.split("/")
             print("/".join(route_split[:3]), req.query_params._dict)
-            if "/".join(route_split[:3]) == "/api/help":
+            if rest_of_path == "help":
                 if len(route_split) > 3:
                     function_name = route_split[3]
                     return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
                 else:
                     print(API_FUNCTION_HELP_GUIDE)
-                    return {"success": True, "note": API_FUNCTION_HELP_GUIDE} 
+                    return {"success": True, "note": API_FUNCTION_HELP_GUIDE}
             else:
                 assert rest_of_path in API_FUNCTIONS, "Invalid API Function Called"
-                assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
+                print(rest_of_path, "in", API_FUNCTIONS)
+                # assert not rest_of_path in api.async_member_functions, "Async function called. Try api/async/"+rest_of_path
                 assert rest_of_path in api.remaining_independent_api_functions, "Function not available"
                 function_actual = getattr(api, rest_of_path)
                 true_args = clean_function_arguments_for_api({
                     "database": self.database,
-                    "vector_database": self.vector_database,
-                    # "llm_ensemble": GlobalLLMEnsemble,
                     "public_key": global_public_key,
-                    "toolchain_function_caller": toolchain_function_caller
+                    "toolchain_function_caller": toolchain_function_caller,
+                    "global_config": self.config,
                 }, arguments, rest_of_path)
                 
                 print("Created args:", true_args)
                 
-                args_get = function_actual(**true_args)
-                if args_get is True:
+                # Check if function is async
+                if inspect.iscoroutinefunction(function_actual):
+                    args_get = await function_actual(**true_args)
+                else:
+                    args_get = function_actual(**true_args)
+                
+                if type(args_get) is ThreadedGenerator:
+                    return EventSourceResponse(args_get)
+                elif type(args_get) is StreamingResponse:
+                    return args_get
+                elif type(args_get) is FileResponse:
+                    return args_get
+                elif type(args_get) is Response:
+                    return args_get
+                elif args_get is True:
                     return {"success": True}
                 return {"success": True, "result": args_get}
+            
         except Exception as e:
             return {"success": False, "note": str(e)}
 
-    @fastapi_app.get("/api/async/{rest_of_path:path}")
-    async def api_general_call_async(self, req: Request, rest_of_path: str):
-        arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-        route = req.scope['path']
+    # @fastapi_app.get("/api/async/{rest_of_path:path}")
+    # async def api_general_call_async(self, req: Request, rest_of_path: str):
+    #     arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
+    #     route = req.scope['path']
 
-        route_split = route.split("/")
-        path_split = rest_of_path.split("/")
-        function_target = path_split[0]
+    #     route_split = route.split("/")
+    #     path_split = rest_of_path.split("/")
+    #     function_target = path_split[0]
 
-        print("/".join(route_split[:4]), req.query_params._dict)
+    #     print("/".join(route_split[:4]), req.query_params._dict)
         
-        assert function_target in API_FUNCTIONS, "Invalid API Function Called"
-        assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
-        function_actual = getattr(api, function_target)
-        true_args = clean_function_arguments_for_api({
-            "database": self.database,
-            "vector_database": self.vector_database,
-            # "llm_ensemble": GlobalLLMEnsemble,
-            "public_key": global_public_key,
-            "server_private_key": global_private_key,
-            "toolchain_function_caller": toolchain_function_caller,
-        }, arguments, function_target)
-        call_result = await function_actual(**true_args)
-        if type(call_result) is ThreadedGenerator:
-            return EventSourceResponse(call_result)
-        elif type(call_result) is StreamingResponse:
-            return call_result
-        elif type(call_result) is FileResponse:
-            return call_result
-        elif type(call_result) is Response:
-            return call_result
-        if call_result is True:
-            return {"success": True}
-        return {"success": True, "result": call_result}
+    #     assert function_target in API_FUNCTIONS, "Invalid API Function Called"
+    #     assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
+    #     function_actual = getattr(api, function_target)
+    #     true_args = clean_function_arguments_for_api({
+    #         "database": self.database,
+    #         "public_key": global_public_key,
+    #         "server_private_key": global_private_key,
+    #         "toolchain_function_caller": toolchain_function_caller,
+    #     }, arguments, function_target)
+    #     call_result = await function_actual(**true_args)
+    #     if type(call_result) is ThreadedGenerator:
+    #         return EventSourceResponse(call_result)
+    #     elif type(call_result) is StreamingResponse:
+    #         return call_result
+    #     elif type(call_result) is FileResponse:
+    #         return call_result
+    #     elif type(call_result) is Response:
+    #         return call_result
+    #     if call_result is True:
+    #         return {"success": True}
+    #     return {"success": True, "result": call_result}
 
-# @serve.deployment
-# class SQLModelEngineWrapper:
-#     def __init__(self, engine):
-#         self.engine = engine
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
+# with open("config.json", 'r', encoding='utf-8') as f:
+#     file_read = f.read()
+#     f.close()
+# GLOBAL_SETTINGS = json.loads(file_read)
 
-#     async def __call__(self):
-#         return self.engine
-
-# sqlmodel_handle = SQLModelEngineWrapper.bind(engine)
-
-
-
-
-MAX_DB_ACTORS = 1
-MAX_VECTOR_DB_ACTORS = 1
-
-db_global_actors = [DatabaseActor.remote() for _ in range(MAX_DB_ACTORS)]
-pool = ActorPool(db_global_actors)
-vector_db_global_actor = VectorDatabaseActor.remote()
-
+GLOBAL_CONFIG = Config.parse_file('config.json')
 
 deployment = UmbrellaClass.bind(
-    database=db_global_actors[0],
-    vector_database=vector_db_global_actor,
+    configuration=GLOBAL_CONFIG,
     llm_handle=LLMDeploymentClass.bind(
         model="/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ", 
         max_model_len=16384

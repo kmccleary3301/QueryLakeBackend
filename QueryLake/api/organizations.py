@@ -8,6 +8,7 @@ from .single_user_auth import get_user
 from .hashing import random_hash, hash_function
 from ray import get
 from ray.actor import ActorHandle
+from ..typing.config import Config
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 user_db_path = server_dir+"/user_db/files/"
@@ -132,7 +133,7 @@ def resolve_organization_invitation(database : Session, username : str, password
     # return {"success": True}
     return True
 
-def fetch_memberships(database : ActorHandle, username : str, password_prehash : str, return_subset : str = "accepted"):
+def fetch_memberships(database : Session, username : str, password_prehash : str, return_subset : str = "accepted"):
     """
     Returns a list of dicts for organizations for which the user has a membership table connecting the two.
     return_subset is "accepted" | "open_invitations" | "all".
@@ -142,21 +143,21 @@ def fetch_memberships(database : ActorHandle, username : str, password_prehash :
 
     user = get_user(database, username, password_prehash)
     if return_subset == "all":
-        membership_get = get(database.exec.remote(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.user_name == username))).all()
+        membership_get = database.exec(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.user_name == username)).all()
     elif return_subset == "open_invitations":
-        membership_get = get(database.exec.remote(select(sql_db_tables.organization_membership).where(and_(
+        membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
             sql_db_tables.organization_membership.user_name == username,
             sql_db_tables.organization_membership.invite_still_open == True
-            )))).all()
+            ))).all()
     else:
-         membership_get = get(database.exec.remote(select(sql_db_tables.organization_membership).where(and_(
+         membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
             sql_db_tables.organization_membership.user_name == username,
             sql_db_tables.organization_membership.invite_still_open == False
-            )))).all()
+            ))).all()
     
     organizations = []
     for membership in membership_get:
-        organization = get(database.exec.remote(select(sql_db_tables.organization).where(sql_db_tables.organization.id == membership.organization_id))).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == membership.organization_id)).first()
         
         org_result = {
             "organization_id": organization.id,
@@ -187,7 +188,6 @@ def fetch_memberships_of_organization(database : Session, username : str, passwo
         sql_db_tables.organization_membership.user_name == username)).all()
     
     assert len(membership_get) > 0, "Not a member of given organization"
-
 
     memberships_get = database.exec(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.organization_id == organization_id)).all()
     

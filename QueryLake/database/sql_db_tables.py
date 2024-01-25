@@ -5,6 +5,7 @@ from sqlmodel import Session, create_engine
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
 from ..api.hashing import random_hash
+import pgvector
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -13,6 +14,7 @@ class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
     text: str = Field()
+    private: bool = Field(default=False)
 
 class toolchain_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -149,7 +151,7 @@ class model_query_raw(SQLModel, table=True):
     prompt_size_tokens: int
     response_size_tokens: int
     model: str
-    model_settings: str
+    settings: str
     timestamp: float #UnixEpoch
     time_taken: float # In milliseconds
     access_token_id: Optional[int] = Field(foreign_key="access_token.id", index=True, default=None)
