@@ -725,9 +725,12 @@ def create_toolchain_session(database : Session,
 
 def fetch_toolchain_sessions(database : Session, 
                              auth : AuthType,
-                             cutoff_date: str = None):
+                             cutoff_date: float = None):
     """
-    Get previous toolchain sessions of user. Returned as a list of objects sorted by timestamp.
+    Get previous toolchain sessions of user. 
+    Returned as a list of objects sorted by timestamp.
+    
+    Optional cutoff date provided in unix time.
     """
 
     user_retrieved : getUserType  = get_user(database, auth)

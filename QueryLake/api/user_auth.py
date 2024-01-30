@@ -244,9 +244,9 @@ def set_user_openai_api_key(database : Session,
     return True
 
 def set_organization_openai_id(database : Session, 
-                                auth : AuthType,
-                                openai_organization_id : str,
-                                organization_hash_id : str):
+                               auth : AuthType,
+                               openai_organization_id : str,
+                               organization_hash_id : str):
     """
     Sets organization OpenAI ID Key.
     Using this allows users to use OpenAI models with charges made
@@ -269,8 +269,8 @@ def set_organization_openai_id(database : Session,
     return True
 
 def get_openai_api_key(database : Session, 
-                        auth : AuthType,
-                        organization_hash_id : str = None):
+                       auth : AuthType,
+                       organization_hash_id : str = None):
     """
     Retrieve user OpenAI API key.
     If organization is specified, return an array with the former plus

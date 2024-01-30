@@ -215,7 +215,6 @@ class organization_membership(SQLModel, table=True):
     # This way, it is exchanged securely between users, and only decrypted for file retrieval
     # Or when an invite is extended
     organization_private_key_secure: str 
-
     invite_still_open: Optional[bool] = Field(default=True)
 
 class view_priviledge(SQLModel, table=True):

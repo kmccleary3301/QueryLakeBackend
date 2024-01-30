@@ -262,6 +262,8 @@ def craft_document_access_token(database : Session,
     Craft a document access token using the global server public key.
     Default expiration is 60 seconds, but client can specify otherwise.
     """
+    (user, user_auth) = get_user(database, auth)
+    
     document = get_document_secure(database, auth, hash_id, return_document=True)
     token_hash = random_hash()
     
@@ -274,8 +276,8 @@ def craft_document_access_token(database : Session,
     database.commit()
 
     access_encrypted = encryption.ecc_encrypt_string(public_key, json.dumps({
-        "username": auth.username,
-        "password_prehash": auth.password_prehash,
+        "username": user_auth.username,
+        "password_prehash": user_auth.password_prehash,
         "document_hash_id": hash_id,
         "token_hash": token_hash
     }))
@@ -305,40 +307,40 @@ def get_file_bytes(database : Session,
     #     return file_get.getbuffer().tobytes()
 
 async def fetch_document(database : Session,
-                         auth_access : str,
+                         auth : AuthType,
+                         document_auth_access : str,
                          server_private_key : str):
     """
     Decrypt document in memory for the user's viewing.
     """
-    try:
-        auth_access = json.loads(encryption.ecc_decrypt_string(server_private_key, auth_access))
+    print("Fetching document with auth:", document_auth_access)
+    
+    document_auth_access = json.loads(encryption.ecc_decrypt_string(server_private_key, document_auth_access))
+    print(json.dumps(document_auth_access, indent=4))
 
-        auth_access["hash_id"] = auth_access["document_hash_id"]
+    document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
 
-        document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == auth_access["token_hash"])).first()
-        assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
-        
+    document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
+    assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
+    
 
-        fetch_parameters = get_document_secure(**{
-            "database" : database, 
-            "username" : auth_access["username"], 
-            "password_prehash" : auth_access["password_prehash"],
-            "hash_id": auth_access["hash_id"],
-        })
-        path=fetch_parameters["database_path"]
-        password = fetch_parameters["password"]
+    fetch_parameters = get_document_secure(**{
+        "database" : database, 
+        "auth" : auth,
+        "hash_id": document_auth_access["hash_id"],
+    })
+    path=fetch_parameters["database_path"]
+    password = fetch_parameters["password"]
 
-        def yield_single_file():
-            with py7zr.SevenZipFile(path, mode='r', password=password) as z:
-                file = z.read()
-                keys = list(file.keys())
-                print(keys)
-                file_name = keys[0]
-                file = file[file_name]
-                yield file.getbuffer().tobytes()
-        return StreamingResponse(yield_single_file())
-    except Exception as e:
-        return {"success": False, "note": str(e)}
+    def yield_single_file():
+        with py7zr.SevenZipFile(path, mode='r', password=password) as z:
+            file = z.read()
+            keys = list(file.keys())
+            print(keys)
+            file_name = keys[0]
+            file = file[file_name]
+            yield file.getbuffer().tobytes()
+    return StreamingResponse(yield_single_file())
         # raise ValueError(str(e))
 
 def ocr_pdf_file(database : Session,
