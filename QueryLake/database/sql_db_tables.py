@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON
 from sqlalchemy.sql.schema import Column
 from sqlmodel import Session, create_engine
@@ -10,8 +10,17 @@ import pgvector
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
 
+
+# COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
+
 class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
+    collection_type: str = Field(index=True)
+    document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
+    document_integrity: Optional[str] = Field(default=None)
+    parent_collection_hash_id: str = Field(index=True)
+    document_name: str = Field()
+    website_url : Optional[str] = Field(default=None)
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
     text: str = Field()
     private: bool = Field(default=False)
@@ -34,11 +43,6 @@ class toolchain(SQLModel, table=True):
     title: str
     category: str
     content: str #JSON loads this portion.
-
-
-
-
-
 
 class document_access_token(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

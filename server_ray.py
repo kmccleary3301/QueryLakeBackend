@@ -1,10 +1,11 @@
 import asyncio
+import traceback
 # import logging
 
 from typing import Annotated, Callable, Any
 import json, os
 import uvicorn
-from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket
+from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -387,18 +388,13 @@ class UmbrellaClass:
         print("All users:")
         print(all_users)
     
-    @fastapi_app.post("/direct/{rest_of_path:path}")
-    async def run(self, request: Request, rest_of_path: str) -> Response:
-        assert rest_of_path in ["embedding", "rerank"]
-        if rest_of_path == "embedding":
-            request_dict = await request.json()
-            print("Running Embedding 1")
+    # @fastapi_app.post("/direct/{rest_of_path:path}")
+    async def text_models_callback(self, request_dict: dict, model_choice: Literal["embedding", "rerank"]):
+        assert model_choice in ["embedding", "rerank"]
+        if model_choice == "embedding":
             return_tmp = await self.embedding_handle.run.remote(request_dict)
-        elif rest_of_path == "rerank":
-            request_dict = await request.json()
-            print("Running Rerank 1")
+        elif model_choice == "rerank":
             return_tmp = await self.rerank_handle.run.remote(request_dict)
-        print("Return type:", type(return_tmp), return_tmp)
         return return_tmp
     
     async def stream_results(self, 
@@ -602,25 +598,32 @@ class UmbrellaClass:
                 else:
                     ws.send_text(json.dumps({"error": str(e)}))
     
-    @fastapi_app.post("/api/async/upload_document")
-    async def create_document_collection(self, req: Request, file : UploadFile):
-        # try:
-        # arguments = req.query_params._dict
-        def create_embeddings(text : str) -> List[List[float]]:
-            pass
-        
-        route = req.scope['path']
-        route_split = route.split("/")
-        print("/".join(route_split[:4]), req.query_params._dict)
-        # arguments = json.loads(req.query_params._dict["parameters"]) 
-        arguments = await req.json()
-        true_arguments = clean_function_arguments_for_api({
-            "database": self.database,
-            "create_embeddings": create_embeddings,
-            "file": file,
-        }, arguments, "upload_document")
+    @fastapi_app.post("/upload_document")
+    async def upload_document_new(self, req : Request, file : UploadFile):
+        try:
+            # arguments = req.query_params._dict
+            
+            
+            # print(req.__dict__)
+            # route = req.scope['path']
+            # route_split = route.split("/")
+            # print("/".join(route_split[:4]), req.query_params._dict)
+            arguments = json.loads(req.query_params._dict["parameters"]) 
+            # arguments = await req.json()
+            # arguments = json.loads(data) if data else {}
+            true_arguments = clean_function_arguments_for_api({
+                "database": self.database,
+                "text_models_callback": self.text_models_callback,
+                "file": file,
+            }, arguments, "upload_document")
 
-        return api.upload_document(**true_arguments)
+            return await api.upload_document(**true_arguments)
+        except Exception as e:
+            error_message = str(e)
+            stack_trace = traceback.format_exc()
+            return_msg = {"success": False, "note": error_message, "trace": stack_trace}
+            print(return_msg)
+            return return_msg
 
     @fastapi_app.post("/api/async/upload_document_to_session")
     async def upload_document_to_session(self, req: Request, file : UploadFile):
@@ -688,6 +691,7 @@ class UmbrellaClass:
                 function_actual = getattr(api, rest_of_path)
                 true_args = clean_function_arguments_for_api({
                     "database": self.database,
+                    "text_models_callback": self.text_models_callback,
                     "public_key": global_public_key,
                     "toolchain_function_caller": toolchain_function_caller,
                     "global_config": self.config,
@@ -712,48 +716,15 @@ class UmbrellaClass:
                 elif args_get is True:
                     return {"success": True}
                 return {"success": True, "result": args_get}
-            
         except Exception as e:
-            return {"success": False, "note": str(e)}
-
-    # @fastapi_app.get("/api/async/{rest_of_path:path}")
-    # async def api_general_call_async(self, req: Request, rest_of_path: str):
-    #     arguments = json.loads(req.query_params._dict["parameters"]) if "parameters" in req.query_params._dict else {}
-    #     route = req.scope['path']
-
-    #     route_split = route.split("/")
-    #     path_split = rest_of_path.split("/")
-    #     function_target = path_split[0]
-
-    #     print("/".join(route_split[:4]), req.query_params._dict)
-        
-    #     assert function_target in API_FUNCTIONS, "Invalid API Function Called"
-    #     assert function_target in api.async_member_functions, "Synchronous function called. Try api/"+function_target
-    #     function_actual = getattr(api, function_target)
-    #     true_args = clean_function_arguments_for_api({
-    #         "database": self.database,
-    #         "public_key": global_public_key,
-    #         "server_private_key": global_private_key,
-    #         "toolchain_function_caller": toolchain_function_caller,
-    #     }, arguments, function_target)
-    #     call_result = await function_actual(**true_args)
-    #     if type(call_result) is ThreadedGenerator:
-    #         return EventSourceResponse(call_result)
-    #     elif type(call_result) is StreamingResponse:
-    #         return call_result
-    #     elif type(call_result) is FileResponse:
-    #         return call_result
-    #     elif type(call_result) is Response:
-    #         return call_result
-    #     if call_result is True:
-    #         return {"success": True}
-    #     return {"success": True, "result": call_result}
+            error_message = str(e)
+            stack_trace = traceback.format_exc()
+            return_dict = {"success": False, "note": error_message, "trace": stack_trace}
+            print(json.dumps(return_dict, indent=4))
+            return return_dict
+            # return {"success": False, "note": str(e)}
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
-# with open("config.json", 'r', encoding='utf-8') as f:
-#     file_read = f.read()
-#     f.close()
-# GLOBAL_SETTINGS = json.loads(file_read)
 
 GLOBAL_CONFIG = Config.parse_file('config.json')
 

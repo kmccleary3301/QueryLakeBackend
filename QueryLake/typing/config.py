@@ -1,5 +1,6 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union, Tuple
 from pydantic import BaseModel
+from ..database.sql_db_tables import user
 
 class ModelArgs(BaseModel):
     stream: Optional[bool] = False
@@ -48,3 +49,23 @@ class Config(BaseModel):
     default_model: str
     models: List[Models]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
+    
+    
+
+
+
+class AuthType1(BaseModel):
+    username: str
+    password_prehash: str
+
+class AuthType2(BaseModel):
+    apiKey: str
+
+class getUserAuthType(BaseModel):
+    username: str
+    password_prehash: str
+
+AuthType = Union[AuthType1, AuthType2]
+
+getUserType = Tuple[user, getUserAuthType]
+

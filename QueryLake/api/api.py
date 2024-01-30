@@ -251,6 +251,7 @@ get_serp_key
 invite_user_to_organization
 login
 modify_document_collection
+query_vector_db
 resolve_organization_invitation
 set_organization_openai_id
 set_organization_serp_key

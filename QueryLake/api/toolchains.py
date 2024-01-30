@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi import WebSocket
 import zipfile
 from ..function_run_clean import run_function_safe
+from ..typing.config import AuthType, getUserType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -624,7 +625,8 @@ class ToolchainSession():
 #     # def entry_call(self, parameters):
 #     #     for output in self.entry_point:
 
-def save_toolchain_session(database : Session, session : ToolchainSession):
+def save_toolchain_session(database : Session, 
+                           session : ToolchainSession):
     """
     Commit toolchain session to SQL database.
     """
@@ -646,14 +648,15 @@ def save_toolchain_session(database : Session, session : ToolchainSession):
     
 def retrieve_toolchain_from_db(database : Session,
                                  toolchain_function_caller,
-                                 auth : dict,
+                                 auth : AuthType,
                                  session_id : str,
                                  ws : WebSocket) -> ToolchainSession:
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     session_db_entry = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == session_id)).first()
     assert session_db_entry.author == auth["username"], "User not authorized"
     assert not session_db_entry is None, "Session not found" 
-    session = ToolchainSession(session_db_entry.toolchain_id, toolchain_function_caller, session_db_entry.hash_id, user.name, ws)
+    session = ToolchainSession(session_db_entry.toolchain_id, toolchain_function_caller, session_db_entry.hash_id, user_auth.username, ws)
     session.load({
         "title": session_db_entry.title,
         "toolchain_id": session_db_entry.toolchain_id,
@@ -665,14 +668,14 @@ def retrieve_toolchain_from_db(database : Session,
     return session
 
 def get_available_toolchains(database : Session,
-                             username : str, 
-                             password_prehash : str):
+                             auth : AuthType):
     """
     Returns available toolchains with chat window settings and all.
     Will find organization locked
     If there are organization locked toolchains, they will be added to the database.
     """
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     toolchains_available = {}
     for key, toolchain in TOOLCHAINS.items():
         if toolchain["category"] not in toolchains_available:
@@ -691,7 +694,7 @@ def get_available_toolchains(database : Session,
 
 def create_toolchain_session(database : Session,
                              toolchain_function_caller,
-                             auth: dict,
+                             auth : AuthType,
                              toolchain_id : str,
                              ws : WebSocket) -> ToolchainSession:
     """
@@ -699,11 +702,12 @@ def create_toolchain_session(database : Session,
     This token is the session ID, and the session will be stored in the
     database accordingly.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     session_hash = random_hash()
     # toolchain_get = TOOLCHAINS[toolchain_id]
     
-    created_session = ToolchainSession(toolchain_id, toolchain_function_caller, session_hash, user.name, ws)
+    created_session = ToolchainSession(toolchain_id, toolchain_function_caller, session_hash, user_auth.username, ws)
     # return {"success": True, "session_id": session_hash}
 
     new_session_in_database = sql_db_tables.toolchain_session(
@@ -720,21 +724,21 @@ def create_toolchain_session(database : Session,
     return created_session
 
 def fetch_toolchain_sessions(database : Session, 
-                            username : str, 
-                            password_prehash : str,
-                            cutoff_date: str = None):
+                             auth : AuthType,
+                             cutoff_date: str = None):
     """
     Get previous toolchain sessions of user. Returned as a list of objects sorted by timestamp.
     """
 
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if not cutoff_date is None:
-        condition = and_(sql_db_tables.toolchain_session.author == username, 
+        condition = and_(sql_db_tables.toolchain_session.author == user_auth.username, 
                         not_(is_(sql_db_tables.toolchain_session.title, None)),
                         sql_db_tables.toolchain_session.hidden == False,
                         sql_db_tables.toolchain_session.creation_timestamp > cutoff_date)
     else:
-        condition = and_(sql_db_tables.toolchain_session.author == username, 
+        condition = and_(sql_db_tables.toolchain_session.author == user_auth.username, 
                         not_(is_(sql_db_tables.toolchain_session.title, None)),
                         sql_db_tables.toolchain_session.hidden == False)
 
@@ -752,15 +756,16 @@ def fetch_toolchain_sessions(database : Session,
     return {"sessions": return_sessions[::-1]}
 
 def fetch_toolchain_session(database : Session,
-                             toolchain_function_caller,
-                             auth : dict,
-                             session_id : str,
-                             ws : WebSocket):
+                            toolchain_function_caller,
+                            auth : AuthType,
+                            session_id : str,
+                            ws : WebSocket):
     """
     Retrieve toolchain session from session id.
     If not in memory, it is loaded from the database.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     return retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id, ws)
 
 def get_session_state(database : Session,
@@ -785,12 +790,13 @@ def get_session_state(database : Session,
 
 def retrieve_files_for_session(database : Session,
                                toolchain_function_caller,
-                               auth,
+                               auth : AuthType,
                                session_id : str):
     """
     Retrieve uploaded files for a session, return them as a list of bytes objects.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
     file_db_entries = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.toolchain_session_hash_id == session.session_hash)).all()
@@ -798,9 +804,7 @@ def retrieve_files_for_session(database : Session,
 
 async def toolchain_file_upload_event_call(database : Session,
                                             toolchain_function_caller,
-                                            vector_database : ClientAPI,
-                                            llm_ensemble,
-                                            auth : dict,
+                                            auth : AuthType,
                                             session_id : str,
                                             event_parameters : dict,
                                             document_hash_id : str,
@@ -809,15 +813,14 @@ async def toolchain_file_upload_event_call(database : Session,
     """
     Trigger file upload event call in toolchain.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if session is None:
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
 
     system_args = {
         "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": llm_ensemble,
     }
     system_args.update(auth)
     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
@@ -843,9 +846,7 @@ async def toolchain_file_upload_event_call(database : Session,
 
 async def toolchain_entry_call(database : Session,
                                toolchain_function_caller,
-                               vector_database : ClientAPI,
-                               llm_ensemble,
-                               auth : dict,
+                               auth : AuthType,
                                session_id : str,
                                entry_parameters : dict,
                                session : ToolchainSession = None):
@@ -854,7 +855,8 @@ async def toolchain_entry_call(database : Session,
     entry parameters can be provided, however there must be special cases for
     things like files.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if session is None:
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
@@ -862,8 +864,6 @@ async def toolchain_entry_call(database : Session,
 
     system_args = {
         "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": llm_ensemble
     }
     system_args.update(auth)
     # return {"success": True, "result": await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_prop(entry_parameters)}
@@ -879,9 +879,7 @@ async def toolchain_entry_call(database : Session,
 
 async def toolchain_event_call(database : Session,
                                toolchain_function_caller,
-                               vector_database : ClientAPI,
-                               llm_ensemble,
-                               auth: dict,
+                               auth: AuthType,
                                session_id : str,
                                event_node_id : str,
                                event_parameters : dict,
@@ -892,7 +890,8 @@ async def toolchain_event_call(database : Session,
     entry parameters can be provided, however there must be special cases for
     things like files.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if session is None:
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
@@ -900,9 +899,7 @@ async def toolchain_event_call(database : Session,
     print("Calling Session Event:", event_node_id)
 
     system_args = {
-        "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": llm_ensemble
+        "database": database
     }
     system_args.update(auth)
     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
@@ -925,7 +922,9 @@ async def toolchain_event_call(database : Session,
         })
 
 
-    result = await session.event_prop(event_node_id, event_parameters, system_args)
+    result = await session.event_prop(event_node_id, 
+                                      event_parameters, 
+                                      system_args)
     print("Event Result:", result)
     # if not TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called:
     #     TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called = True
@@ -946,9 +945,7 @@ async def toolchain_event_call(database : Session,
     return result
 
 async def toolchain_stream_node_propagation_call(database : Session,
-                                                 toolchain_function_caller,  
-                                                 vector_database : ClientAPI,
-                                                 llm_ensemble,
+                                                 toolchain_function_caller,
                                                  auth : dict,
                                                  session_id : str,
                                                  event_node_id : str,
@@ -958,7 +955,8 @@ async def toolchain_stream_node_propagation_call(database : Session,
     Call node with stream output in toolchain and propagate forward.
     Returns generator.
     """
-    user = get_user(database, **auth)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if session is None:
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
@@ -968,9 +966,7 @@ async def toolchain_stream_node_propagation_call(database : Session,
     # print("Event Result:", result)
     # return {"success": True, "result": result}
     system_args = {
-        "database": database,
-        "vector_database": vector_database,
-        "llm_ensemble": llm_ensemble
+        "database": database
     }
     system_args.update(auth)
     
@@ -984,18 +980,20 @@ async def toolchain_stream_node_propagation_call(database : Session,
     # return await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].get_stream_node_output(event_node_id, stream_variable_id)
 
 async def toolchain_session_notification(database : Session,
-                                        toolchain_function_caller,
-                                        auth : dict,
-                                        session_id : str,
-                                        message : dict,
-                                        session : ToolchainSession = None):
-    user = get_user(database, **auth)
+                                         toolchain_function_caller,
+                                         auth : AuthType,
+                                         session_id : str,
+                                         message : dict,
+                                         session : ToolchainSession = None):
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     if session is None:
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     assert session.author == user.name, "User not authorized"
     session.send_state_notification(json.dumps(message))
 
-async def get_toolchain_output_file_response(server_zip_hash : str, document_password : str):
+async def get_toolchain_output_file_response(server_zip_hash : str, 
+                                             document_password : str) -> FileResponse:
     file_zip_save_path = user_db_path+server_zip_hash+".7z"
     file = aes_decrypt_zip_file(document_password, file_zip_save_path)
     keys = list(file.keys())

@@ -8,7 +8,7 @@ from .single_user_auth import get_user
 from .hashing import random_hash, hash_function
 from ray import get
 from ray.actor import ActorHandle
-from ..typing.config import Config
+from ..typing.config import Config, AuthType, getUserType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 user_db_path = server_dir+"/user_db/files/"
@@ -20,11 +20,15 @@ membership_value_map = {
     "viewer": 1
 }
 
-def create_organization(database : Session, username : str, password_prehash : str, organization_name : str, organization_description : str = None):
+def create_organization(database : Session, 
+                        auth : AuthType, 
+                        organization_name : str, 
+                        organization_description : str = None):
     """
     Add an organization to the db. Verify the user first.
     """
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     
     (public_key, private_key) = encryption.ecc_generate_public_private_key()
 
@@ -43,7 +47,7 @@ def create_organization(database : Session, username : str, password_prehash : s
     new_membership = sql_db_tables.organization_membership(
         role="owner",
         organization_id=new_organization.id,
-        user_name=user.name,
+        user_name=user_auth.username,
         organization_private_key_secure=private_key_secured,
         invite_still_open=False
     )
@@ -53,20 +57,25 @@ def create_organization(database : Session, username : str, password_prehash : s
     # return {"success": True, "organization_id": new_organization.id, "organization_dict": new_organization.__dict__, "membership_dict": new_membership.__dict__}
     return {"organization_id": new_organization.id, "organization_dict": new_organization.__dict__, "membership_dict": new_membership.__dict__}
 
-def invite_user_to_organization(database : Session, username : str, password_prehash : str, username_to_invite : str, organization_id : int, member_class : str = "member"):
+def invite_user_to_organization(database : Session, 
+                                auth : AuthType, 
+                                username_to_invite : str, 
+                                organization_id : int, 
+                                member_class : str = "member"):
     """
     Invite a user to organization. 
     Raise an error if they are already in the organization.
     """
     assert member_class in ["owner", "admin", "member", "viewer"], "Invalid member class"
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     invitee = database.exec(select(sql_db_tables.user).where(sql_db_tables.user.name == username_to_invite)).first()
 
     org_get = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).all()
     assert len(org_get) > 0, "Organization not found"
     membership_get = database.exec(select(sql_db_tables.organization_membership).where(
         sql_db_tables.organization_membership.organization_id == organization_id and \
-        sql_db_tables.organization_membership.user_name == username)).all()
+        sql_db_tables.organization_membership.user_name == user_auth.username)).all()
     
     assert len(membership_get) > 0, "Not a member of given organization"
 
@@ -85,7 +94,7 @@ def invite_user_to_organization(database : Session, username : str, password_pre
 
     # user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
     private_key_encryption_salt = user.private_key_encryption_salt
-    user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+    user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
     user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
@@ -97,7 +106,7 @@ def invite_user_to_organization(database : Session, username : str, password_pre
         role=member_class,
         organization_id=organization_id,
         organization_private_key_secure=encryption.ecc_encrypt_string(invitee.public_key, organization_private_key),
-        invite_sender_user_name=username,
+        invite_sender_user_name=user_auth.username,
         user_name=username_to_invite
     )
 
@@ -107,18 +116,22 @@ def invite_user_to_organization(database : Session, username : str, password_pre
     # return {"success" : True}
     return True
 
-def resolve_organization_invitation(database : Session, username : str, password_prehash : str, organization_id : int, accept : bool):
+def resolve_organization_invitation(database : Session, 
+                                    auth : AuthType, 
+                                    organization_id : int, 
+                                    accept : bool):
     """
     Given the index of an organization, find the membership between user and org and accept or decline the invite.
     """
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
     # invitee = database.exec(select(sql_db.user).where(sql_db.user.name == username_to_invite)).first()
 
     org_get = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).all()
     assert len(org_get) > 0, "Organization not found"
     membership_get = database.exec(select(sql_db_tables.organization_membership).where(
         and_(sql_db_tables.organization_membership.organization_id == organization_id,
-        sql_db_tables.organization_membership.user_name == username))).all()
+        sql_db_tables.organization_membership.user_name == user_auth.username))).all()
 
     if membership_get[0].invite_still_open == False:
         raise ValueError("Invitation already accepted")
@@ -133,7 +146,9 @@ def resolve_organization_invitation(database : Session, username : str, password
     # return {"success": True}
     return True
 
-def fetch_memberships(database : Session, username : str, password_prehash : str, return_subset : str = "accepted"):
+def fetch_memberships(database : Session, 
+                      auth : AuthType, 
+                      return_subset : str = "accepted"):
     """
     Returns a list of dicts for organizations for which the user has a membership table connecting the two.
     return_subset is "accepted" | "open_invitations" | "all".
@@ -141,17 +156,20 @@ def fetch_memberships(database : Session, username : str, password_prehash : str
     """
     assert return_subset in ["accepted", "open_invitations", "all"], "Invalid return type specification."
 
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
+    
+    
     if return_subset == "all":
-        membership_get = database.exec(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.user_name == username)).all()
+        membership_get = database.exec(select(sql_db_tables.organization_membership).where(sql_db_tables.organization_membership.user_name == user_auth.username)).all()
     elif return_subset == "open_invitations":
         membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
-            sql_db_tables.organization_membership.user_name == username,
+            sql_db_tables.organization_membership.user_name == user_auth.username,
             sql_db_tables.organization_membership.invite_still_open == True
             ))).all()
     else:
          membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
-            sql_db_tables.organization_membership.user_name == username,
+            sql_db_tables.organization_membership.user_name == user_auth.username,
             sql_db_tables.organization_membership.invite_still_open == False
             ))).all()
     
@@ -174,18 +192,21 @@ def fetch_memberships(database : Session, username : str, password_prehash : str
     # return {"success": True, "memberships": organizations, "admin": user.is_admin}
     return {"memberships": organizations, "admin": user.is_admin}
 
-def fetch_memberships_of_organization(database : Session, username : str, password_prehash : str, organization_id : int):
+def fetch_memberships_of_organization(database : Session, 
+                                      auth : AuthType, 
+                                      organization_id : int):
     """
     Fetches all active memberships of an organization, first verifying that the user is in the given organization.
     """
 
-    user = get_user(database, username, password_prehash)
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
 
     organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).first()
 
     membership_get = database.exec(select(sql_db_tables.organization_membership).where(
         sql_db_tables.organization_membership.organization_id == organization_id and \
-        sql_db_tables.organization_membership.user_name == username)).all()
+        sql_db_tables.organization_membership.user_name == user_auth.username)).all()
     
     assert len(membership_get) > 0, "Not a member of given organization"
 

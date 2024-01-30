@@ -1,5 +1,5 @@
 from hashlib import sha256
-from typing import List
+from typing import List, Callable, Awaitable, Dict
 import os
 from fastapi import UploadFile
 from ..database import sql_db_tables
@@ -19,6 +19,7 @@ import json
 import py7zr
 from fastapi.responses import StreamingResponse
 import ocrmypdf
+from ..typing.config import AuthType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 user_db_path = server_dir+"/user_db/files/"
@@ -32,17 +33,16 @@ user_db_path = server_dir+"/user_db/files/"
 #     database.add(new_collection)
 #     database.commit()
 
-def upload_document(database : Session, 
-                    vector_database : ClientAPI,
-                    username : str, 
-                    password_prehash : str, 
-                    file : UploadFile, 
-                    collection_hash_id : str, 
-                    collection_type : str = "user",
-                    organization_hash_id : str = None,
-                    public : bool = False,
-                    return_file_hash : bool = False,
-                    add_to_vector_db : bool = True) -> dict:
+async def upload_document(database : Session,
+                          text_models_callback : Callable,
+                          auth : AuthType, 
+                          file : UploadFile, 
+                          collection_hash_id : str, 
+                          collection_type : str = "user",
+                          organization_hash_id : str = None,
+                          public : bool = False,
+                          return_file_hash : bool = False,
+                          add_to_vector_db : bool = True) -> dict:
     """
     Upload file to server. Possibly with encryption.
     Can be a user document, organization document, or global document, or a toolchain_session document.
@@ -63,12 +63,12 @@ def upload_document(database : Session,
     if collection_type == "global":
         public = True
 
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
 
     
     password_salt = user.password_salt
     password_hash_truth = user.password_hash
-    password_hash = hash_function(password_prehash, password_salt, only_salt=True)
+    password_hash = hash_function(user_auth.password_prehash, password_salt, only_salt=True)
     if (password_hash != password_hash_truth):
         return {"file_upload_success": False, "note": "Incorrect Key"}
     # file_id = hash_function(file.filename+" "+str(time.time()))
@@ -81,12 +81,12 @@ def upload_document(database : Session,
 
     if collection_type == "user":
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == collection_hash_id)).first()
-        assert collection.author_user_name == username, "User not authorized"
+        assert collection.author_user_name == user_auth.username, "User not authorized"
     elif collection_type == "organization":
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
-                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
+                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
     elif collection_type == "global":
         collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.hash_id == collection_hash_id)).first()
@@ -141,8 +141,9 @@ def upload_document(database : Session,
     database.add(new_db_file)
     database.commit()
     if (file.filename.split(".")[-1].lower() == "pdf" and add_to_vector_db):
-        thread = Thread(target=create_embeddings_in_database, args=(database, file_data_bytes, new_db_file, vector_database, file.filename))
-        thread.start()
+        # thread = Thread(target=create_embeddings_in_database, args=(database, text_models_callback, file_data_bytes, new_db_file, file.filename))
+        # thread.start()
+        await create_embeddings_in_database(database, text_models_callback, file_data_bytes, new_db_file, file.filename)
     time_taken = time.time() - time_start
 
     print("Took %.2fs to upload" % (time_taken))
@@ -151,30 +152,35 @@ def upload_document(database : Session,
     return True
     
 def delete_document(database : Session, 
-                    username : str, 
-                    password_prehash : str,
+                    auth : AuthType,
                     hash_id: str):
     """
     Authorizes that user has permission to delete document, then does so.
     """
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
 
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
-        assert collection.author_user_name == username, "User not authorized"
+        assert collection.author_user_name == user_auth.username, "User not authorized"
     elif not document.organization_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
 
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
-                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
+                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
     
     os.remove(document.server_zip_archive_path)
 
+    document_embeddings = database.exec(select(sql_db_tables.DocumentEmbedding).where(sql_db_tables.DocumentEmbedding.document_id == hash_id)).all()
+    for e in document_embeddings:
+        database.delete(e)
+    database.commit()
+    
+    
     database.delete(document)
 
     collection.document_count -= 1
@@ -184,8 +190,7 @@ def delete_document(database : Session,
     return True
 
 def get_document_secure(database : Session, 
-                        username : str, 
-                        password_prehash : str,
+                        auth: AuthType,
                         hash_id: str,
                         return_document : bool = False):
     """
@@ -193,15 +198,15 @@ def get_document_secure(database : Session,
     Primarily used for internal calls.
     """
 
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
 
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
-        assert collection.author_user_name == username, "User not authorized"
+        assert collection.author_user_name == user_auth.username, "User not authorized"
         private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
         user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
@@ -211,11 +216,11 @@ def get_document_secure(database : Session,
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
 
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
-                                                                                    sql_db_tables.organization_membership.user_name == username))).all()
+                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0, "User not authorized"
 
         private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
         user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
@@ -224,7 +229,7 @@ def get_document_secure(database : Session,
         document_password = encryption.ecc_decrypt_string(organization_private_key, document.encryption_key_secure)
     elif not document.toolchain_session_hash_id is None:
         private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(password_prehash, private_key_encryption_salt, only_salt=True)
+        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
         user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
@@ -234,31 +239,30 @@ def get_document_secure(database : Session,
         return document
     return {"password": document_password, "database_path": document.server_zip_archive_path}
 
-def query_vector_db(database : Session, 
-                    vector_database : ClientAPI, 
-                    username : str, 
-                    password_prehash : str,
-                    query: str,
-                    collection_hash_ids: List[str],
-                    k : int = 10,
-                    use_rerank : bool = False):
+async def query_vector_db(database : Session,
+                          text_models_callback : Callable[[Dict, str], Awaitable[List[List[float]]]],
+                          auth : AuthType,
+                          query: str,
+                          collection_hash_ids: List[str],
+                          k : int = 10,
+                          use_rerank : bool = False):
     """
     Query from the vector database.
     """
-    user = get_user(database, username, password_prehash)
-    return {"result": query_database(vector_database, query, collection_hash_ids, k=k, use_rerank=use_rerank)}
+    (user, user_auth) = get_user(database, auth)
+    results = await query_database(database, text_models_callback, query, collection_hash_ids, k=k, use_rerank=use_rerank)
+    return {"result": results}
 
 def craft_document_access_token(database : Session, 
                                 public_key: str,
-                                username : str, 
-                                password_prehash : str,
+                                auth : AuthType,
                                 hash_id: str,
                                 validity_window: float = 60): # In seconds
     """
     Craft a document access token using the global server public key.
     Default expiration is 60 seconds, but client can specify otherwise.
     """
-    document = get_document_secure(database, username, password_prehash, hash_id, return_document=True)
+    document = get_document_secure(database, auth, hash_id, return_document=True)
     token_hash = random_hash()
     
     new_document_access_token = sql_db_tables.document_access_token(
@@ -270,8 +274,8 @@ def craft_document_access_token(database : Session,
     database.commit()
 
     access_encrypted = encryption.ecc_encrypt_string(public_key, json.dumps({
-        "username": username,
-        "password_prehash": password_prehash,
+        "username": auth.username,
+        "password_prehash": auth.password_prehash,
         "document_hash_id": hash_id,
         "token_hash": token_hash
     }))
@@ -281,6 +285,7 @@ def craft_document_access_token(database : Session,
 def get_file_bytes(database : Session,
                    hash_id : str,
                    encryption_key : str):
+    
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
     print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
@@ -300,8 +305,8 @@ def get_file_bytes(database : Session,
     #     return file_get.getbuffer().tobytes()
 
 async def fetch_document(database : Session,
-                   auth_access : str,
-                   server_private_key : str):
+                         auth_access : str,
+                         server_private_key : str):
     """
     Decrypt document in memory for the user's viewing.
     """
@@ -337,13 +342,12 @@ async def fetch_document(database : Session,
         # raise ValueError(str(e))
 
 def ocr_pdf_file(database : Session,
-                username : str, 
-                password_prehash : str,
-                file: bytes):
+                 auth : AuthType,
+                 file: bytes):
     """
     OCR a pdf file and return the raw text.
     """
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
     ocr_bytes_target = BytesIO()
 
     ocrmypdf.ocr(file, ocr_bytes_target, redo_ocr=True)
