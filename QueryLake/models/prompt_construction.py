@@ -1,7 +1,8 @@
 from sqlmodel import Session, select
 from ..database.sql_db_tables import model
-
+from ..typing.config import Padding, Model, ChatHistoryEntry
 import tiktoken
+from typing import Callable, List
 
 def num_tokens_from_string(string: str, model : str) -> int:
     """Returns the number of tokens in a text string."""
@@ -44,15 +45,15 @@ def construct_params(database: Session, model_id):
         context_pad = default_context_wrapper
         return sys_instr_pad, usr_entry_pad, bot_response_pad, context_pad
 
-def construct_chat_history(max_tokens : int, 
-                           token_counter, 
-                           sys_instr_pad : str, 
-                           usr_entry_pad : str, 
-                           bot_response_pad : str, 
-                           chat_history: list,
-                           system_instruction : str,
-                           new_question : str,
-                           minimum_context_room : int = 1000):
+def construct_chat_history_old(max_tokens : int, 
+                               token_counter : Callable[[str], int], 
+                               sys_instr_pad : str, 
+                               usr_entry_pad : str, 
+                               bot_response_pad : str, 
+                               chat_history: list,
+                               system_instruction : str,
+                               new_question : str,
+                               minimum_context_room : int = 1000) -> str:
     """
     Construct model input, trimming from beginning until minimum context room is allowed.
     chat history should be ordered from oldest to newest, and entries in the input list
@@ -62,7 +63,9 @@ def construct_chat_history(max_tokens : int,
     sys_token_count = token_counter(system_instruction_prompt)
 
     new_question_formatted = usr_entry_pad.replace("{question}", new_question)
-
+    new_question_formatted += bot_response_pad.split("{response}")[0]
+    
+    
     chat_history_new, token_counts = [], []
     for entry in chat_history:
         new_entry = usr_entry_pad.replace("{question}", entry[1])+bot_response_pad.replace("{response}", entry[1])
@@ -85,5 +88,30 @@ def construct_chat_history(max_tokens : int,
     # print("FINAL PROMPT")
     # print(final_result)
     return final_result
+
+def construct_chat_history(model : Model, 
+                           token_counter : Callable[[str], int],
+                           chat_history : List[dict],
+                           minimum_free_token_space : int) -> str:
+    chat_history : List[ChatHistoryEntry] = [ChatHistoryEntry(**entry) for entry in chat_history]
+    if chat_history[0].role != "system":
+        chat_history = [ChatHistoryEntry(role="system", content=model.default_system_instructions)] + chat_history
+    
+    assert all([entry.role != "system" for entry in chat_history[1:]])
+    assert all([entry.role == "user" for entry in chat_history[1::2]])
+    assert len(chat_history) % 2 == 0
+    
+    if len(chat_history) > 2:
+        assert all([entry.role == "assistant" for entry in chat_history[2::2]])
+    return construct_chat_history_old(model.max_model_len, 
+                                      token_counter, 
+                                      model.padding.system_instruction_wrap, 
+                                      model.padding.question_wrap, 
+                                      model.padding.response_wrap, 
+                                      chat_history[:-1], 
+                                      model.default_system_instructions, 
+                                      chat_history[-1].content, 
+                                      minimum_free_token_space)
+    
 
 

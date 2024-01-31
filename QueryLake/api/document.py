@@ -279,7 +279,8 @@ def craft_document_access_token(database : Session,
         "username": user_auth.username,
         "password_prehash": user_auth.password_prehash,
         "document_hash_id": hash_id,
-        "token_hash": token_hash
+        "token_hash": token_hash,
+        "auth": auth
     }))
     # return {"success": True, "result": [document.file_name, access_encrypted]}
     return {"file_name": document.file_name, "access_encrypted": access_encrypted}
@@ -307,16 +308,15 @@ def get_file_bytes(database : Session,
     #     return file_get.getbuffer().tobytes()
 
 async def fetch_document(database : Session,
-                         auth : AuthType,
                          document_auth_access : str,
                          server_private_key : str):
     """
     Decrypt document in memory for the user's viewing.
     """
-    print("Fetching document with auth:", document_auth_access)
+    # print("Fetching document with auth:", document_auth_access)
     
     document_auth_access = json.loads(encryption.ecc_decrypt_string(server_private_key, document_auth_access))
-    print(json.dumps(document_auth_access, indent=4))
+    # print(json.dumps(document_auth_access, indent=4))
 
     document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
 
@@ -326,7 +326,7 @@ async def fetch_document(database : Session,
 
     fetch_parameters = get_document_secure(**{
         "database" : database, 
-        "auth" : auth,
+        "auth" : document_auth_access["auth"],
         "hash_id": document_auth_access["hash_id"],
     })
     path=fetch_parameters["database_path"]

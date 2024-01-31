@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Union, Tuple
+from typing import List, Dict, Optional, Union, Tuple, Literal
 from pydantic import BaseModel
 from ..database.sql_db_tables import user
 
@@ -18,8 +18,10 @@ class Padding(BaseModel):
     question_wrap: str
     response_wrap: str
 
-class Models(BaseModel):
+class Model(BaseModel):
     name: str
+    id : str
+    quantization: Optional[Literal["awq", "gptq", "squeezellm"]]
     modelcard: str
     system_path: str
     default_parameters: ModelArgs
@@ -47,10 +49,15 @@ class LoaderParameters(BaseModel):
 
 class Config(BaseModel):
     default_model: str
-    models: List[Models]
+    models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
     
     
+
+class ChatHistoryEntry(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
 
 
 

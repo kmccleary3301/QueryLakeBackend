@@ -8,6 +8,8 @@ def get_user(database : Session,
     """
     Returns the a user by lookup after verifying, raises an error otherwise.
     """
+    print("Auth:", auth)
+    
     if type(auth) is dict:
         if "password_prehash" in auth:
             auth = AuthType1(**auth)

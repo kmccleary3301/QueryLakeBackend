@@ -51,10 +51,10 @@ class document_access_token(SQLModel, table=True):
 
 
 class model(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: str = Field(primary_key=True, unique=True)
     name: str = Field(index=True, unique=True)
     path_on_server: str
-    necessary_loader: str #Only a few possible values, "llama.cpp" | "exllama" | "exllamav2"
+    quantization: Optional[str] = Field(default=None) # Only qunatization supported by vLLM, "awq" | "gptq" | "squeezellm"
     default_settings: str #This will be a stringified JSON that will be parsed out kwargs on load.
 
     # Let's store wrappers as something like prepend_string+"\<system_instruction}\>"+append_string,

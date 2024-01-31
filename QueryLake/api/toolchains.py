@@ -24,6 +24,7 @@ from fastapi import WebSocket
 import zipfile
 from ..function_run_clean import run_function_safe
 from ..typing.config import AuthType, getUserType
+from typing import Callable, Any
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -132,7 +133,7 @@ class ToolchainSession():
         # self.session_state_generator_log = []
     
     def send_state_notification(self, message):
-        self.session_state_generator_log.append(message)
+        # self.session_state_generator_log.append(message)
         # if not self.session_state_generator is None:
         #     self.session_state_generator.send(message)
         self.ws.send_text(json.dumps({"state_notification": message}))
@@ -693,7 +694,7 @@ def get_available_toolchains(database : Session,
     return result
 
 def create_toolchain_session(database : Session,
-                             toolchain_function_caller,
+                             toolchain_function_caller : Callable[[], Callable],
                              auth : AuthType,
                              toolchain_id : str,
                              ws : WebSocket) -> ToolchainSession:
@@ -716,11 +717,11 @@ def create_toolchain_session(database : Session,
         state_arguments=json.dumps(created_session.state_arguments),
         creation_timestamp=time.time(),
         toolchain_id=toolchain_id,
-        author=auth["username"]
+        author=user_auth.username
     )
     database.add(new_session_in_database)
     database.commit()
-
+    
     return created_session
 
 def fetch_toolchain_sessions(database : Session, 
@@ -785,11 +786,6 @@ def get_session_state(database : Session,
         session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
     # session["last_activity"] = time.time()
     return {"success": True, "result": session.state_arguments}
-
-# def inject_generator_into_toolchain_session(generator : ThreadedGenerator, session_id : str):
-#     generator.send(json.dumps({"message": "Generator created"}))
-#     TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].session_state_generator = generator
-    # await asyncio.sleep(0.5)
 
 def retrieve_files_for_session(database : Session,
                                toolchain_function_caller,
