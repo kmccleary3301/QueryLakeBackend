@@ -2,6 +2,10 @@ from ..api.api_admin import add_model
 import json
 from ..database import sql_db_tables
 from sqlmodel import Session, select
+from ..database import sql_db_tables
+from typing import Dict, List
+from ..typing.config import Model
+
 # from sqlmodel import Session, select, and_
 
 def add_llama2_to_db(database):
@@ -42,37 +46,52 @@ For example code would look like:
 And math expressions would look like:
 $$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$
 """)
-    
 
-
-def add_models_to_database(database, models):
-    for model in models:
+def add_models_to_database(database, models : List[Model]) -> None:
+    for model_config in models:
         try:
-            model_args = model["model_args"]
-            necessary_loader = model["loader"]
-            # model_name = model_args["model_path"].split("/")[-1]
-            padding = model["padding"]
-            default_system_instruction = model["default_system_instructions"]
 
-            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.name == model["name"])).all()
+            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.id == model_config.id)).all()
             if len(find_existing_model) > 0:
                 continue
 
             new_model = sql_db_tables.model(
-                name=model["name"],
-                path_on_server=model_args["model_path"],
-                necessary_loader=necessary_loader,
-                default_settings=json.dumps(model_args),
-                system_instruction_wrapper=padding["system_instruction_wrap"],
-                context_wrapper=padding["context_wrap"],
-                user_question_wrapper=padding["question_wrap"],
-                bot_response_wrapper=padding["response_wrap"],
-                default_system_instruction=default_system_instruction
+                id=model_config.name,
+                name=model_config.name,
+                path_on_server=model_config.system_path,
+                quantization=model_config.quantization,
+                default_settings=json.dumps(model_config.default_parameters.dict(), indent=4),
+                system_instruction_wrapper=model_config.padding.system_instruction_wrap,
+                context_wrapper=model_config.padding.context_wrap,
+                user_question_wrapper=model_config.padding.question_wrap,
+                bot_response_wrapper=model_config.padding.response_wrap,
+                default_system_instruction=model_config.default_system_instruction
             )
-            print("Adding model to db:", new_model.__dict__)
+            # print("Adding model to db:", new_model.__dict__)
 
             database.add(new_model)
             database.commit()
         except:
             pass
     
+def add_toolchains_to_database(database : Session,
+                               toolchains : Dict[str, dict]) -> None:
+    for toolchain_id, toolchain_content in toolchains.items():
+        try:
+            find_existing_toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).all()
+            if len(find_existing_toolchain) > 0:
+                continue
+
+            new_toolchain = sql_db_tables.toolchain(
+                toolchain_id=toolchain_id,
+                title=toolchain_content["name"],
+                category=toolchain_content["category"],
+                content=json.dumps(toolchain_content, indent=4)
+            )
+            # print("Adding toolchain to db:", new_toolchain.__dict__)
+
+            database.add(new_toolchain)
+            database.commit()
+        except:
+            pass
+    return

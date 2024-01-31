@@ -1,0 +1,159 @@
+{
+    "default_model": "Llama-2-7b-Chat-GPTQ-ExLLaMA_V2",
+    "models": [
+        {
+            "loader": "exllama",
+            "name": "Llama-2-7b-Chat-GPTQ-ExLLaMA",
+            "model_card": "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GPTQ",
+            "model_args": {
+                "streaming": true,
+                "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+                "temperature": 0,
+                "top_k": 1,
+                "top_p": 1,
+                "verbose": false,
+                "max_seq_len": 4096,
+                "repetition_penalty": 1.15,
+                "truncation": true,
+                "padding": true,
+                "stop_sequences": ["</s><s>"]
+            },
+            "padding": {
+                "system_instruction_wrap": "<s>[INST] <<SYS>>\n{system_instruction}\n<</SYS>>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "{question} [/INST] ",
+                "response_wrap": "{response} </s><s> [INST] "
+            },
+            "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+        },
+        {
+            "name": "Llama-2-7b-Chat-GPTQ",
+            "model_card": "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GPTQ",
+            "loader": "exllama_v2",
+            "model_args": {
+                "streaming": true,
+                "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+                "verbose": false,
+                "temperature": 0,
+                "top_k": 1,
+                "top_p": 1,
+                "max_seq_len": 4096,
+                "repetition_penalty": 1.15,
+                "truncation": true,
+                "padding": true,
+                "stop_sequences": ["</s><s>"]
+            },
+            "padding": {
+                "system_instruction_wrap": "<s>[INST] <<SYS>>\n{system_instruction}\n<</SYS>>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "{question} [/INST] ",
+                "response_wrap": "{response} </s><s> [INST] "
+            },
+            "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+        },
+        {
+            "name": "Mistral-7B-OpenOrca-GPTQ-ExLLaMA_V2",
+            "model_card": "https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-GPTQ",
+            "loader": "exllama_v2",
+            "model_args": {
+                "streaming": true,
+                "model_path": "/home/user/python_projects/3035/models/Mistral-7B-OpenOrca-GPTQ",
+                "verbose": false,
+                "temperature": 0,
+                "top_k": 1,
+                "top_p": 1,
+                "max_seq_len": 4096,
+                "repetition_penalty": 1.15,
+                "truncation": true,
+                "padding": true,
+                "stop_sequences": ["<|im_end|>"]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|im_start|>system\n{system_instruction}<|im_end|>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n",
+                "response_wrap": "{response}<|im_end|>\n"
+            },
+            "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+        }, 
+        {
+            "name": "Llama-2-7b-Chat-GPTQ-LLaMA_CPP",
+            "loader": "llama_cpp",
+            "model_args": {
+                "model_path": "/home/user/python_projects/3035/models/llama-2-7b-chat.Q4_K_M.gguf",
+                "verbose": false,
+                "streaming": true,
+                "max_tokens": 4095
+            },
+            "padding": {
+                "system_instruction_wrap": "<s>[INST] <<SYS>>\n{system_instruction}\n<</SYS>>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "{question} [/INST] ",
+                "response_wrap": "{response} </s><s> [INST] "
+            },
+            "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+        }
+    ],
+    "external_model_providers": {
+        "openai": {
+            "gpt-4-1106-preview": {
+                "context": 128000,
+                "model_card": "https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo"
+            },
+            "gpt-3.5-turbo-1106": {
+                "context": 16385,
+                "model_card": "https://platform.openai.com/docs/models/gpt-3-5"
+            }
+        }
+    },
+    "loader_parameters": {
+        "exllama": {
+            "temperature": {"type": "float", "min" : 0, "max": 2},
+            "top_k": {},
+            "top_p": {},
+            "min_p": {},
+            "typical": {},
+            "token_repetition_penalty_max": {},
+            "token_repetition_penalty_sustain": {},
+            "token_repetition_penalty_decay": {},
+            "beams": {},
+            "beam_length": {}
+        }
+    },
+    "mistral_example_config": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ",
+        "temperature": 0.3,
+        "max_seq_len": 4096,
+        "token_repetition_penalty_max": 1.15,
+        "max_len": 4096,
+        "truncation": true,
+        "padding": true
+    },
+    "config_example_all_parameters_exllama": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/Llama-2-7b-Chat-GPTQ", 
+        "lora_path": null,
+        "temperature": 0.3,
+        "typical": 0.7,
+        "verbose": true,
+        "max_seq_len": 2095,
+        "fused_attn": false,
+        "beams": 1, 
+        "beam_length": 40, 
+        "alpha_value": 1.0,
+        "compress_pos_emb": 4.0,
+        "set_auto_map": "3, 2",
+        "stop_sequences": ["### Input", "### Response", "### Instruction", "Human:", "Assistant", "User:", "AI:"]
+    },
+    "config_example_llamacpp": {
+        "streaming": true,
+        "model_path": "/home/user/python_projects/langchain/llama2_7b_chat/llama-2-7b-chat.Q4_K_M.gguf", 
+        "n_ctx": 6000,
+        "n_gpu_layers": 512,
+        "n_batch": 30,
+        "temperature": 0.9,
+        "max_tokens": 4095,
+        "n_parts": 1
+    }
+}

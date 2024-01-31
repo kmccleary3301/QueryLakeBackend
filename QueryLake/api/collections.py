@@ -4,28 +4,32 @@ from sqlmodel import Session, select, and_
 import time
 from .user_auth import *
 from .hashing import random_hash
+from ..typing.config import AuthType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 user_db_path = server_dir+"/user_db/files/"
 
-def fetch_document_collections_belonging_to(database : Session, username : str, password_prehash : str, organization_id : int = None, global_collections : bool = False):
+def fetch_document_collections_belonging_to(database : Session, 
+                                            auth : AuthType, 
+                                            organization_id : int = None, 
+                                            global_collections : bool = False):
     """
     Gets a list of dicts for document collections. 
     If organization_id is none, return the user's personal collections. 
     If it is provided, check the user is an accepted member of the org, then retrieve the collections.
     """
     
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
     if global_collections:
         collections_get = database.exec(select(sql_db_tables.global_document_collection)).all()
     if not organization_id is None:
         membership_get = database.exec(select(sql_db_tables.organization_membership).where(
-            sql_db_tables.organization_membership.user_name == username and \
+            sql_db_tables.organization_membership.user_name == user_auth.username and \
             sql_db_tables.organization_membership.organization_id == organization_id)).all()
         assert len(membership_get) > 0, "User not in organization"
         collections_get = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.author_organization_id == organization_id)).all()
     else:
-        collections_get = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.author_user_name == username)).all()
+        collections_get = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.author_user_name == user_auth.username)).all()
     collections_return = []
     for collection in collections_get:
         collections_return.append({
@@ -37,8 +41,7 @@ def fetch_document_collections_belonging_to(database : Session, username : str, 
     return {"collections": collections_return}
 
 def create_document_collection(database : Session, 
-                               username : str, 
-                               password_prehash : str, 
+                               auth : AuthType, 
                                name : str,
                                description : str = None,
                                public : bool = False,
@@ -49,10 +52,10 @@ def create_document_collection(database : Session,
     """
     hash_id = random_hash()
 
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
     if not organization_id is None:
         membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
-            sql_db_tables.organization_membership.user_name == username,
+            sql_db_tables.organization_membership.user_name == user_auth.username,
             sql_db_tables.organization_membership.organization_id == organization_id))).all()
         assert len(membership_get) > 0, "User not in organization"
         assert membership_get[0].role != "viewer", "Invalid Permissions"
@@ -69,7 +72,7 @@ def create_document_collection(database : Session,
         new_collection = sql_db_tables.user_document_collection(
             name=name,
             hash_id=hash_id,
-            author_user_name=username,
+            author_user_name=user_auth.username,
             creation_timestamp=time.time(),
             public=public,
             description=description
@@ -81,15 +84,14 @@ def create_document_collection(database : Session,
     return {"hash_id": new_collection.hash_id}
 
 def fetch_all_collections(database : Session, 
-                            username : str, 
-                            password_prehash : str):
+                          auth : AuthType):
     """
     Fetches all collections that a user has priviledge to read.
     """
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
 
     fetch_memberships = database.exec(select(sql_db_tables.organization_membership).where(
-            sql_db_tables.organization_membership.user_name == username and sql_db_tables.organization_membership.invite_still_open == False)).all()
+            sql_db_tables.organization_membership.user_name == user_auth.username and sql_db_tables.organization_membership.invite_still_open == False)).all()
     organizations = []
     for membership in fetch_memberships:
         if not membership.invite_still_open:
@@ -117,7 +119,7 @@ def fetch_all_collections(database : Session,
             "document_count": collection.document_count,
             "type": "global"
         })
-    user_collections = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.author_user_name == username)).all()
+    user_collections = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.author_user_name == user_auth.username)).all()
     for collection in user_collections:
         return_value["user_collections"].append({
             "name": collection.name,
@@ -129,27 +131,26 @@ def fetch_all_collections(database : Session,
     return {"collections": return_value}
 
 def fetch_collection(database : Session,
-                        username : str,
-                        password_prehash : str,
-                        collection_hash_id : str,
-                        collection_type : str = "user"):
+                     auth : AuthType,
+                     collection_hash_id : str,
+                     collection_type : str = "user"):
     """
     Retrieves details of a collection for user, 
     including all documents in the collection.
     """
 
     assert collection_type in ["user", "organization", "global"], "Invalid collection type"
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
     if collection_type == "user":
         collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.hash_id == collection_hash_id))).first()
         if collection.public == False:
-            assert collection.author_user_name == username, "User not authorized to view collection"
+            assert collection.author_user_name == user_auth.username, "User not authorized to view collection"
         documents = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.user_document_collection_hash_id == collection_hash_id)).all()
         owner = "personal"
     else:
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
         user_membership = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization_id,
-                                                                                          sql_db_tables.organization_membership.user_name == username))).all()
+                                                                                          sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(user_membership) > 0 or collection.public == True, "User not authorized to view collection"
         documents = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.organization_document_collection_hash_id == collection_hash_id)).all()
 
@@ -172,10 +173,8 @@ def fetch_collection(database : Session,
     # return {"success": True, "result": data}
     return data
 
-
 def modify_document_collection(database : Session,
-                                username : str,
-                                password_prehash : str,
+                                auth : AuthType,
                                 collection_hash_id : str,
                                 title : str = None,
                                 description : str = None,
@@ -185,16 +184,16 @@ def modify_document_collection(database : Session,
     """
 
     assert collection_type in ["user", "organization", "global"], "Invalid collection type"
-    user = get_user(database, username, password_prehash)
+    (user, user_auth) = get_user(database, auth)
 
     if collection_type == "user":
         collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.hash_id == collection_hash_id))).first()
         if collection.public == False:
-            assert collection.author_user_name == username, "User not authorized to modify collection"
+            assert collection.author_user_name == user_auth.username, "User not authorized to modify collection"
     elif collection_type == "organization":
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization_id,
-                                                                                          sql_db_tables.organization_membership.user_name == username))).all()
+                                                                                          sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 or collection.public == True, "User not authorized to modify collection"
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized to modify collection"
     else:

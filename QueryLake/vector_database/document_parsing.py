@@ -1,6 +1,6 @@
 from langchain.docstore.document import Document
 from typing import List
-from langchain.document_loaders import PyPDFium2Loader
+# from langchain.document_loaders import PyPDFium2Loader
 from langchain.document_loaders.blob_loaders import Blob
 # import PyPDF2
 from PyPDF2 import PdfReader

@@ -1,0 +1,15 @@
+services:
+  postgres_db:
+    image: ankane/pgvector
+    restart: always
+    environment:
+      - POSTGRES_DB=server_database
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin # Doesn't matter, as the DB will only be accessible from the backend
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+     - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+     - ./db_data:/var/lib/postgresql/data
+    # Uncomment if you want to access the DB from outside the docker network
+    ports: 
+      - 5432:5432

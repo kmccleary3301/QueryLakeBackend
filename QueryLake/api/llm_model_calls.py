@@ -1,4 +1,4 @@
-from ..models.model_manager import LLMEnsemble
+# from ..models.model_manager import LLMEnsemble
 from .user_auth import get_user
 from sqlmodel import Session, select, and_
 from ..database import sql_db_tables
@@ -11,7 +11,7 @@ from chromadb.api import ClientAPI
 
 
 async def llm_call_chat_session(database : Session,
-                                llm_ensemble : LLMEnsemble,
+                                llm_ensemble,
                                 vector_database : ClientAPI,
                                 username : str, 
                                 password_prehash : str,
@@ -37,7 +37,7 @@ async def llm_call_chat_session(database : Session,
     
 
 def llm_call_chat_session_direct(database : Session,
-                                llm_ensemble : LLMEnsemble,
+                                llm_ensemble,
                                 vector_database : ClientAPI,
                                 username : str, 
                                 password_prehash : str,
@@ -136,7 +136,7 @@ def llm_call_chat_session_direct(database : Session,
         return result
 
 def craft_google_query_from_history(database : Session,
-                                    llm_ensemble : LLMEnsemble,
+                                    llm_ensemble,
                                     username : str, 
                                     password_prehash : str,
                                     history: list,
@@ -162,7 +162,7 @@ def craft_google_query_from_history(database : Session,
 
 
 def llm_call_model_synchronous(database : Session,
-                               llm_ensemble : LLMEnsemble,
+                               llm_ensemble,
                                username : str, 
                                password_prehash : str,
                                history: list,

@@ -1,16 +1,16 @@
 langchain
-llama-cpp-python
+# llama-cpp-python
 uvicorn
 fastapi
 sse_starlette
 safetensors
-exllama @ git+https://github.com/jllllll/exllama
+# exllama @ git+https://github.com/jllllll/exllama
 sentencepiece>=0.1.99
 # flash-attn
 pypdf
 pycryptodome
 # flash-attn --no-build-isolation
-exllamav2
+# exllamav2
 sqlmodel
 py7zr
 eciespy
@@ -20,5 +20,12 @@ ray
 transformers
 markdownify
 pypdf2
+openai
+tiktoken
+ocrmypdf
+google-search-results
+sentence-transformers
+lm-format-enforcer
+vllm
 # pluggy
 # rich

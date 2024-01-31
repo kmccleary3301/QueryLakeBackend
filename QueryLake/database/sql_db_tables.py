@@ -1,27 +1,29 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON
 from sqlalchemy.sql.schema import Column
 from sqlmodel import Session, create_engine
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column
+from ..api.hashing import random_hash
+import pgvector
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
 
-# class TestArray(SQLModel, table=True):
-#     id: Optional[int] = Field(default=None, primary_key=True)
-#     elements: List[float] = Field(sa_column=Column(ARRAY(Float)))
 
+# COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
-# class Hero(SQLModel, table=True):
-#     id: Optional[int] = Field(default=None, primary_key=True)
-#     name: str = Field(index=True)
-#     secret_name: str
-#     age: Optional[int] = Field(default=None, index=True)
-
-#     team_id: Optional[int] = Field(default=None, foreign_key="team.id")
-
-
-# Experimental
-
+class DocumentEmbedding(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
+    collection_type: str = Field(index=True)
+    document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
+    document_integrity: Optional[str] = Field(default=None)
+    parent_collection_hash_id: str = Field(index=True)
+    document_name: str = Field()
+    website_url : Optional[str] = Field(default=None)
+    embedding: List[float] = Field(sa_column=Column(Vector(1024)))
+    text: str = Field()
+    private: bool = Field(default=False)
 
 class toolchain_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -42,11 +44,6 @@ class toolchain(SQLModel, table=True):
     category: str
     content: str #JSON loads this portion.
 
-
-
-
-
-
 class document_access_token(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     hash_id: str = Field(index=True, unique=True)
@@ -54,10 +51,10 @@ class document_access_token(SQLModel, table=True):
 
 
 class model(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: str = Field(primary_key=True, unique=True)
     name: str = Field(index=True, unique=True)
     path_on_server: str
-    necessary_loader: str #Only a few possible values, "llama.cpp" | "exllama" | "exllamav2"
+    quantization: Optional[str] = Field(default=None) # Only qunatization supported by vLLM, "awq" | "gptq" | "squeezellm"
     default_settings: str #This will be a stringified JSON that will be parsed out kwargs on load.
 
     # Let's store wrappers as something like prepend_string+"\<system_instruction}\>"+append_string,
@@ -158,7 +155,7 @@ class model_query_raw(SQLModel, table=True):
     prompt_size_tokens: int
     response_size_tokens: int
     model: str
-    model_settings: str
+    settings: str
     timestamp: float #UnixEpoch
     time_taken: float # In milliseconds
     access_token_id: Optional[int] = Field(foreign_key="access_token.id", index=True, default=None)
@@ -218,7 +215,6 @@ class organization_membership(SQLModel, table=True):
     # This way, it is exchanged securely between users, and only decrypted for file retrieval
     # Or when an invite is extended
     organization_private_key_secure: str 
-
     invite_still_open: Optional[bool] = Field(default=True)
 
 class view_priviledge(SQLModel, table=True):
