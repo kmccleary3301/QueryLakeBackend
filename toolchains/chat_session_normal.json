@@ -39,13 +39,6 @@
             "function": "<<EVENT>>",
             "arguments": [
                 {
-                    "argument_name": "user_question",
-                    "origin": "<<USER>>",
-                    "type": "string",
-                    "iterable": false,
-                    "optional": false
-                },
-                {
                     "argument_name": "chat_history",
                     "origin": "<<STATE>>",
                     "type": "list",
@@ -53,7 +46,7 @@
                     "optional": false
                 },
                 {
-                    "argument_name": "model_choice",
+                    "argument_name": "model_parameters",
                     "origin": "<<USER>>"
                 },
                 {
@@ -65,8 +58,8 @@
             "execution": "synchronous",
             "output_arguments": [
                 {
-                    "id": "user_question",
-                    "type": "string",
+                    "id": "model_parameters",
+                    "type": "dict",
                     "stream": false
                 }
             ],
@@ -81,8 +74,8 @@
                             "value": "user"
                         },
                         {
-                            "output_argument_id": "user_question",
-                            "target_argument": "content"
+                            "target_argument": "content",
+                            "value": "question_placeholder"
                         }
                     ]
                 },
@@ -91,8 +84,8 @@
                     "split_outputs": false,
                     "input": [
                         {
-                            "output_argument_id": "model_choice",
-                            "target_argument": "model_choice"
+                            "output_argument_id": "model_parameters",
+                            "target_argument": "model_parameters"
                         },
                         {
                             "output_argument_id": "collection_hash_ids",
@@ -106,30 +99,14 @@
         },
         {
             "id": "third_step",
-            "function": "llm_call_chat_session_direct",
+            "function": "llm",
             "arguments": [
                 {
-                    "argument_name": "database",
-                    "origin": "<<SERVER_ARGS>>"
-                },
-                {
-                    "argument_name": "llm_ensemble",
-                    "origin": "<<SERVER_ARGS>>"
-                },
-                {
-                    "argument_name": "vector_database",
-                    "origin": "<<SERVER_ARGS>>"
-                },
-                {
-                    "argument_name": "username",
+                    "argument_name": "auth",
                     "origin": "<<USER>>"
                 },
                 {
-                    "argument_name": "password_prehash",
-                    "origin": "<<USER>>"
-                },
-                {
-                    "argument_name": "model_choice",
+                    "argument_name": "model_parameters",
                     "origin": "user_question_event"
                 },
                 {
@@ -142,7 +119,7 @@
             ],
             "output_arguments": [
                 {
-                    "id": "model_response",
+                    "id": "output",
                     "type": "string",
                     "stream": true
                 }
@@ -150,10 +127,10 @@
             "feed_to": [
                 {
                     "destination": "<<USER>>",
-                    "argument_class": "model_response",
+                    "argument_class": "output",
                     "input": [
                         {
-                            "output_argument_id": "model_response",
+                            "output_argument_id": "output",
                             "target_argument": "model_response"
                         }
                     ]

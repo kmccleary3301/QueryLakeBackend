@@ -1,17 +1,21 @@
 import inspect
 from copy import deepcopy
 
-def run_function_safe(function, kwargs):
+async def run_function_safe(function_actual, kwargs):
     """
     Run function without the danger of unknown kwargs.
     """
-    function_args = list(inspect.signature(function).parameters.items())
+    function_args = list(inspect.signature(function_actual).parameters.items())
     function_args = [arg[0] for arg in function_args]
     new_args = {}
     for key in function_args:
         if key in kwargs:
             new_args[key] = kwargs[key]
-    return function(**new_args)
+            
+    if inspect.iscoroutinefunction(function_actual):
+        return await function_actual(**new_args)
+    else:
+        return function_actual(**new_args)
 
 def get_function_args(function):
     """

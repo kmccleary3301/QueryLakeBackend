@@ -464,9 +464,9 @@ class UmbrellaClass:
         return return_tmp
     
     async def stream_results(self, 
-                                   results_generator: DeploymentResponseGenerator,
-                                   encode_output : bool = False,
-                                   on_new_token: Callable[[str], None] = None) -> AsyncGenerator[bytes, None]:
+                             results_generator: DeploymentResponseGenerator,
+                             encode_output : bool = False,
+                             on_new_token: Callable[[str], None] = None) -> AsyncGenerator[bytes, None]:
         
         num_returned, tokens_returned = 0, []
         async for request_output in results_generator:
@@ -822,6 +822,7 @@ class UmbrellaClass:
         
         system_args = {
             "database": self.database,
+            "toolchains_available": self.toolchain_configs,
             "text_models_callback": self.text_models_callback,
             "public_key": global_public_key,
             "server_private_key": global_private_key,
@@ -864,12 +865,23 @@ class UmbrellaClass:
                     
                     result_message = {}
                     
+                    
+                    # Make sure session is in system args
+                    if not toolchain_session is None and not "session" in system_args:
+                        system_args["session"] = toolchain_session
+                        print("Added session to system args")
+                        print(list(system_args.keys()))
+                    elif toolchain_session is None and "session" in system_args:
+                        del system_args["session"]
+                    
+                    
                     if command == "toolchain/load":
                         if not toolchain_session is None:
                             api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
                         toolchain_session = api.fetch_toolchain_session(**true_args)
+                        system_args["session"] = toolchain_session
                     elif command == "toolchain/create":
                         if not toolchain_session is None:
                             api.save_toolchain_session(self.database, toolchain_session)
@@ -877,7 +889,8 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.create_toolchain_session)
                         toolchain_session = api.create_toolchain_session(**true_args)
                         result_message.update({
-                            "success": True
+                            "success": True,
+                            "toolchain_session_id": toolchain_session.session_hash
                         })
                     elif command == "toolchain/file_upload_event_call":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
@@ -886,7 +899,9 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
                         result = await api.toolchain_entry_call(**true_args)
                     elif command == "toolchain/event":
+                        print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
+                        print("PASSED KEYS AT EVENT:", list(true_args.keys()))
                         result = await api.toolchain_event_call(**true_args)
                     
                     await ws.send_text((json.dumps(result_message)).encode("utf-8"))
@@ -901,12 +916,15 @@ class UmbrellaClass:
                     error_message = str(e)
                     stack_trace = traceback.format_exc()
                     await ws.send_text(json.dumps({"error": error_message, "trace": stack_trace}))
+                    await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
         except WebSocketDisconnect as e:
             print("Websocket disconnected")
             if not toolchain_session is None:
                 print("Unloading Toolchain")
                 api.save_toolchain_session(self.database, toolchain_session)
                 toolchain_session = None
+                if "session" in system_args:
+                    del system_args["session"]
     
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
