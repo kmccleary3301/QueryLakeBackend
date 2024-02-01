@@ -38,10 +38,31 @@ def retrieve_value_from_dict(input_dict : dict, directory : Union[str, List[str]
         else:
             current_dict = input_dict
             for entry in directory:
+                # print("Checking:", [entry], json.dumps(current_dict))
                 current_dict = current_dict[entry]
+            # print("Returning:", current_dict)
             return current_dict
+    except KeyError:
+        # print("Returning KeyError")
+        raise KeyError
     except:
+        # print("Returning None")
         return None
+
+def dict_path_is_valid(input_dict : dict, directory : Union[str, List[str]]):
+    try:
+        if isinstance(directory, str):
+            return input_dict[directory]
+        else:
+            current_dict = input_dict
+            for entry in directory:
+                # print("Checking:", [entry], json.dumps(current_dict))
+                current_dict = current_dict[entry]
+            # print("Returning:", current_dict)
+            return True
+    except:
+        # print("Returning False")
+        return False
 
 def safe_serialize(obj):
   default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
@@ -59,7 +80,7 @@ class ToolchainSession():
         self.author = author
         self.session_hash = session_hash
         self.toolchain_id = toolchain_id
-        print("toolchain_id:", toolchain_id)
+        # print("toolchain_id:", toolchain_id)
         self.toolchain = deepcopy(toolchain_pulled)
         self.function_getter = function_getter
         self.reset_everything()
@@ -109,7 +130,7 @@ class ToolchainSession():
                 if break_flag:
                     break
             
-            print("Loaded node id %s with \'outputs_stream_to_user\': %s" % (entry["id"], self.node_carousel[entry["id"]]["outputs_stream_to_user"]))
+            # print("Loaded node id %s with \'outputs_stream_to_user\': %s" % (entry["id"], self.node_carousel[entry["id"]]["outputs_stream_to_user"]))
 
             if entry["function"] == "<<ENTRY>>":
                 self.entry_point = entry
@@ -133,10 +154,7 @@ class ToolchainSession():
         # self.session_state_generator_log = []
     
     async def send_state_notification(self, message):
-        # self.session_state_generator_log.append(message)
-        # if not self.session_state_generator is None:
-        #     self.session_state_generator.send(message)
-        await self.ws.send_text(json.dumps({"state_notification": message}))
+        await self.ws.send_text(safe_serialize({"state_notification": message}))
 
     def reset_firing_queue(self):
         for entry in self.toolchain["pipeline"]:
@@ -144,8 +162,6 @@ class ToolchainSession():
                 self.queued_node_inputs[entry["id"]] = {}
                 self.firing_queue[entry["id"]] = False
     
-    # def find_recombination_of_split_output(self, origin_node_id, current_node_id, recombined_endpoint={"id": None}):
-
     def assert_split_inputs(self):
         for node_id in self.node_carousel.keys():
             self.node_carousel[node_id]["requires_split_inputs"] = False
@@ -172,18 +188,15 @@ class ToolchainSession():
                                          node : dict, 
                                          function_parameters : dict, 
                                          system_args : dict,
-                                         use_previous_outputs : bool = False,
-                                         inject_generator : ThreadedGenerator = None):
+                                         use_previous_outputs : bool = False):
         
-        print("Running node %s with args %s" % (node["id"], safe_serialize(function_parameters)))
+        # print("Running node %s with args %s" % (node["id"], safe_serialize(function_parameters)))
         node_arguments_possible = self.get_node_argument_requirements(node)
         node_argument_ids = [entry["argument_name"] for entry in node_arguments_possible]
         node_arguments_required = [entry for entry in node_arguments_possible if not ("optional" in entry and entry["optional"])]
         node_arguments_required_ids = [entry["argument_name"] for entry in node_arguments_required]
 
         filter_args = {}
-        if not inject_generator is None:
-            filter_args["provided_generator"] = inject_generator
 
         sum_list = 0
         if node["function"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
@@ -222,10 +235,11 @@ class ToolchainSession():
                 #     run_arguments = self.run_node_with_dependencies(node_source, function_parameters, use_previous_outputs=use_previous_outputs)
                 #     filter_args[argument["argument_name"]] = run_arguments[argument["argument_name"]]
             sum_list += 1
+        
         assert sum_list >= len(node_arguments_required), f"Failed to satisfy required arguments for node {node['id']}"
 
         if node["function"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
-            print("Calling %s" % (node["function"]))
+            # print("Calling %s" % (node["function"]))
             function_target = self.function_getter(node["function"])
             run_arguments = await run_function_safe(function_target, filter_args)
             # run_arguments = function_target(**filter_args)
@@ -253,10 +267,10 @@ class ToolchainSession():
 
             for feed_map in entry["input"]:
                 assert "value" in feed_map or \
-                        feed_map["output_argument_id"] in run_arguments or \
-                        feed_map["output_argument_id"] in function_parameters or \
+                        ("output_argument_id" in feed_map and (dict_path_is_valid(run_arguments, feed_map["output_argument_id"]) or \
+                         dict_path_is_valid(function_parameters, feed_map["output_argument_id"]))) or \
                         ("optional" in feed_map and feed_map["optional"]), \
-                        f"argument {feed_map['output_argument_id']} could not be found"
+                        f"argument {feed_map['output_argument_id']} could not be found"+json.dumps(run_arguments)+", "+json.dumps(function_parameters)
                 
                 target_arg = feed_map["target_argument"]
                 input_value = None
@@ -264,14 +278,15 @@ class ToolchainSession():
                 if "value" in feed_map:
                     input_value = feed_map["value"]
                 elif "input_argument_id" in feed_map:
-                    if feed_map["input_argument_id"] in run_arguments:
+                    if dict_path_is_valid(function_parameters, feed_map["input_argument_id"]):
                         input_value = retrieve_value_from_dict(function_parameters, feed_map["input_argument_id"])
-                elif feed_map["output_argument_id"] in run_arguments:
-                    if feed_map["output_argument_id"] in run_arguments:
-                        input_value = retrieve_value_from_dict(run_arguments, feed_map["output_argument_id"])
-                elif feed_map["output_argument_id"] in function_parameters:
-                    if feed_map["output_argument_id"] in function_parameters:
-                        input_value = function_parameters[feed_map["output_argument_id"]]
+                elif dict_path_is_valid(run_arguments, feed_map["output_argument_id"]):
+                    # if feed_map["output_argument_id"] in run_arguments:
+                    input_value = retrieve_value_from_dict(run_arguments, feed_map["output_argument_id"])
+                elif dict_path_is_valid(function_parameters, feed_map["output_argument_id"]):
+                    # if feed_map["output_argument_id"] in function_parameters:
+                    # input_value = function_parameters[feed_map["output_argument_id"]]
+                    input_value = retrieve_value_from_dict(function_parameters, feed_map["output_argument_id"])
                 if input_value is None:
                     continue
                 # print("Target Arg", target_arg, type(input_value), str(type(input_value)))
@@ -305,28 +320,28 @@ class ToolchainSession():
                     if "split_outputs" in entry and entry["split_outputs"]:
                         self.queued_node_inputs[entry["destination"]][feed_map["target_argument"]] = [e for e in input_value]
                         if not destination_merge_mapping_flag:
-                            print("%s attempts to add via split target %s" % (node["id"], entry["destination"]))
+                            # print("%s attempts to add via split target %s" % (node["id"], entry["destination"]))
                             split_targets.append({"node_id": entry["destination"], "split_argument_name": feed_map["target_argument"]})
                         else:
                             recombination_targets.append(entry["destination"])
 
             if entry["destination"] == "<<STATE>>":
-                self.special_state_action(node["id"], entry["action"], entry["target_value"], state_return)
+                await self.special_state_action(node["id"], entry["action"], entry["target_value"], state_return)
 
             if not destination_merge_mapping_flag and \
                 entry["destination"] not in ToolchainSession.SPECIAL_ARGUMENT_ORIGINS and \
                 not ("store" in entry and entry["store"]):
-                print("%s attempts to add %s" % (node["id"], entry["destination"]))
+                # print("%s attempts to add %s" % (node["id"], entry["destination"]))
                 self.attempt_to_add_to_firing_queue(entry["destination"])
                     # else:
                         
         self.firing_queue[node["id"]] = False
 
-        await self.send_state_notification(safe_serialize({
+        await self.send_state_notification({
             "type": "node_completion",
             "node_id": node["id"],
             "outputs": run_arguments
-        }))
+        })
         return run_arguments, user_return_args, split_targets, recombination_targets
 
     def attempt_to_add_to_firing_queue(self, node_id):
@@ -342,8 +357,8 @@ class ToolchainSession():
         # print(available_args)
         for arg in required_args:
             if arg not in required_args:
-                print("Input args not satisfied")
-                print(available_args, "vs", required_args)
+                # print("Input args not satisfied")
+                # print(available_args, "vs", required_args)
                 return
         # if available_args != required_args:
 
@@ -359,7 +374,7 @@ class ToolchainSession():
             return False
         return ("merge_parallel_outputs" in relevant_argument and relevant_argument["merge_parallel_outputs"])
 
-    def special_state_action(self, action_origin_node_id, state_action, target_arg, input_args):
+    async def special_state_action(self, action_origin_node_id, state_action, target_arg, input_args):
         """
         Router function for state actions. Multiple are necessary because of chat
         history appending and formatting.
@@ -378,13 +393,13 @@ class ToolchainSession():
             "target_arg": target_arg,
             "input_args": input_args
         })
-        self.notify_state_update(action_origin_node_id, target_arg, result)
+        await self.notify_state_update(action_origin_node_id, target_arg, result)
 
     def append_dict(self, target_arg, input_args : dict):
         """
         Append provided content to state argument with OpenAI's message format, with the role of assistant.
         """
-        print("append_model_response_to_chat_history")
+        # print("append_model_response_to_chat_history")
         assert target_arg in self.state_arguments, f"State argument \'{target_arg}\' not found"
         self.state_arguments[target_arg].append(input_args)
         return input_args
@@ -405,23 +420,23 @@ class ToolchainSession():
                                     clear_firing_queue : bool = True,
                                     display_tab_count : int = 0):
         # print("  "*display_tab_count + "Running node: %s" % (node["id"]))
-        await self.send_state_notification(message=json.dumps({
+        await self.send_state_notification({
             "type": "node_execution_start",
             "node_id": node["id"]
-        }))
-        if node["outputs_stream_to_user"] != False:
-            self.queued_node_inputs[node["id"]].update(parameters)
-            relevant_mappings = []
-            for feed_mapping in node["feed_to"]:
-                if feed_mapping["destination"] == "<<STATE>>":
-                    relevant_mappings.append(feed_mapping)
-            await self.send_state_notification(json.dumps({
-                "type": "stream_output_pause",
-                "node_id": node["id"],
-                "stream_argument": node["outputs_stream_to_user"],
-                "mapping": relevant_mappings
-            }))
-            return None
+        })
+        # if node["outputs_stream_to_user"] != False:
+        #     self.queued_node_inputs[node["id"]].update(parameters)
+        #     relevant_mappings = []
+        #     for feed_mapping in node["feed_to"]:
+        #         if feed_mapping["destination"] == "<<STATE>>":
+        #             relevant_mappings.append(feed_mapping)
+        #     await self.send_state_notification(json.dumps({
+        #         "type": "stream_output_pause",
+        #         "node_id": node["id"],
+        #         "stream_argument": node["outputs_stream_to_user"],
+        #         "mapping": relevant_mappings
+        #     }))
+        #     return None
         functions_fed_to = []
         for feed_mapping in node["feed_to"]:
             if feed_mapping["destination"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
@@ -446,7 +461,7 @@ class ToolchainSession():
                 # print("Firing node id from split entry %s" % (split_entry["node_id"]))
                 self.queued_node_inputs[split_entry["node_id"]][split_entry["split_argument_name"]] = value
                 # run_arguments
-                _, recombo_targets = await self.run_node_then_forward(self.node_carousel[split_entry["node_id"]], {}, system_args, no_split_inputs=True, clear_firing_queue=False, display_tab_count=display_tab_count+1)
+                _, recombo_targets = await self.run_node_then_forward(self.node_carousel[split_entry["node_id"]], parameters, system_args, no_split_inputs=True, clear_firing_queue=False, display_tab_count=display_tab_count+1)
                 for recombo_id in recombo_targets:
                     recombo_targets_review[recombo_id] = True
 
@@ -463,8 +478,11 @@ class ToolchainSession():
                 ((not self.node_carousel[node_id]["requires_split_inputs"]) or (not no_split_inputs)) and \
                 node_id in functions_fed_to:
                 # print("  "*display_tab_count + "Firing node id from firing queue %s" % (node_id))
-
-                await self.run_node_then_forward(self.node_carousel[node_id], self.queued_node_inputs[node_id], system_args, user_return_args=user_return_args, display_tab_count=display_tab_count+1)
+                tmp_args = deepcopy(parameters)
+                tmp_args.update(self.queued_node_inputs[node_id])
+                
+                
+                await self.run_node_then_forward(self.node_carousel[node_id], tmp_args, system_args, user_return_args=user_return_args, display_tab_count=display_tab_count+1)
                 if clear_firing_queue:
                     self.firing_queue[node["id"]] = False
         # print("  "*display_tab_count + "Returning RNTF %s" % (node["id"]))
@@ -472,14 +490,13 @@ class ToolchainSession():
         return user_return_args, recombo_targets
         # for entry in node["feed_to"]:
 
-    def run_stream_node(self, node_id, system_args : dict, provided_generator : ThreadedGenerator):
+    # def run_stream_node(self, node_id, system_args : dict):
 
-        user_return_args, _, _, _ = self.run_node_with_dependencies(self.node_carousel[node_id], 
-                                                                    self.queued_node_inputs[node_id],
-                                                                    system_args, 
-                                                                    inject_generator=provided_generator)
-        # loop = asyncio.get_event_loop()
-        asyncio.run(self.fire_node_mappings_follow_up(node_id, system_args, user_return_args=user_return_args))
+    #     user_return_args, _, _, _ = self.run_node_with_dependencies(self.node_carousel[node_id], 
+    #                                                                 self.queued_node_inputs[node_id],
+    #                                                                 system_args)
+    #     # loop = asyncio.get_event_loop()
+    #     asyncio.run(self.fire_node_mappings_follow_up(node_id, system_args, user_return_args=user_return_args))
     
     async def fire_node_mappings_follow_up(self, node_id, system_args : dict, user_return_args = {}):
         node = self.node_carousel[node_id]
@@ -490,11 +507,11 @@ class ToolchainSession():
         for node_id, _ in self.firing_queue.items():
             if node_id in functions_fed_to:
                 await self.run_node_then_forward(self.node_carousel[node_id], self.queued_node_inputs[node_id], system_args, user_return_args=user_return_args)
-        await self.send_state_notification(json.dumps({
+        await self.send_state_notification({
             "type": "completed_propagation",
             "entry_node": node_id,
             "outputs": user_return_args
-        }))
+        })
         return user_return_args
 
     async def fire_queued_nodes_without_entry(self, no_split_inputs : bool = False):
@@ -537,7 +554,7 @@ class ToolchainSession():
         if not arguments is None:
             send_information.update({"arguments": arguments})
         # if not self.session_state_generator is None:
-        await self.send_state_notification(json.dumps(send_information))
+        await self.send_state_notification(send_information)
 
     def notify_node_completion(self, node_id, result_arguments : dict):
         """
@@ -560,8 +577,8 @@ class ToolchainSession():
             return "".join(generator.sent_values)
         return generator.sent_values
 
-    def notify_state_update(self, action_origin_node_id, state_arg_id, add_value : None):
-        print("notify_state_update")
+    async def notify_state_update(self, action_origin_node_id, state_arg_id, add_value : None):
+        # print("notify_state_update")
         if not add_value is None:
             # add_value = await add_value
             # print("Sending Add Value:", add_value)
@@ -577,10 +594,10 @@ class ToolchainSession():
                 "content": add_value
             })
             # print("Sending dump")
-            self.session_state_generator.send(dump_get)
+            await self.ws.send_text(dump_get)
         else:
             # print("Sending Value:", self.state_arguments[state_arg_id])
-            self.session_state_generator.send(json.dumps({
+            await self.ws.send_text(json.dumps({
                 "type": "state_update",
                 "state_arg_id": state_arg_id,
                 "content_subset": "full",
@@ -628,7 +645,7 @@ class ToolchainSession():
 #     #     for output in self.entry_point:
 
 async def save_toolchain_session(database : Session, 
-                           session : ToolchainSession):
+                                 session : ToolchainSession):
     """
     Commit toolchain session to SQL database.
     """
@@ -643,10 +660,10 @@ async def save_toolchain_session(database : Session,
     existing_session.queue_inputs = safe_serialize(toolchain_data["queue_inputs"])
     existing_session.firing_queue = json.dumps(toolchain_data["firing_queue"])
     database.commit()
-    await session.send_state_notification(json.dumps({
+    await session.send_state_notification({
         "type": "session_saved",
         "title": existing_session.title
-    }))
+    })
     
 def retrieve_toolchain_from_db(database : Session,
                                toolchain_function_caller,
@@ -840,10 +857,10 @@ async def toolchain_file_upload_event_call(database : Session,
         "file_name": file_name
     })
     result = await session.event_prop("user_file_upload_event", event_parameters, system_args)
-    print("Event Result:", result)
+    # print("Event Result:", result)
     # if not TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called:
     #     TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called = True
-    save_toolchain_session(database, session_id)
+    await save_toolchain_session(database, session)
     # return {"success": True, "result": result}
     return result
 
@@ -873,7 +890,7 @@ async def toolchain_entry_call(database : Session,
         save_to_db_flag = True
     result = await session.entry_prop(entry_parameters, system_args)
     # if save_to_db_flag:
-    save_toolchain_session(database, session_id)
+    await save_toolchain_session(database, session)
 
     return result
 
@@ -885,16 +902,14 @@ async def toolchain_event_call(database : Session,
                                event_parameters : dict,
                                return_file_response : bool = False):
     """
-    Call event point in toolchain and propagate forward.
-    entry parameters can be provided, however there must be special cases for
+    Call an event node in provided toolchain session and propagate forward.
+    Entry parameters can be provided, however there must be special cases for
     things like files.
     """
     user_retrieved : getUserType  = get_user(database, auth)
     (user, user_auth) = user_retrieved
     assert session.author == user.name, "User not authorized"
-
-    print("Calling Session Event:", event_node_id)
-
+    
     system_args = {
         "database": database
     }
@@ -905,12 +920,8 @@ async def toolchain_event_call(database : Session,
                                                                                     sql_db_tables.document_raw.toolchain_session_hash_id == session_id,
                                                                                     sql_db_tables.document_raw.hash_id == event_parameters["hash_id"]
                                                                                 ))).first()
+        
         document_values = get_document_secure(database, auth["username"], auth["password_prehash"], event_parameters["hash_id"])
-
-        # usr_private_key = get_user_private_key(database, username, password_prehash)["private_key"]
-        # file_key = file_db_entry.encryption_key_secure
-        # file_key = ecc_decrypt_string(usr_private_key, file_key)
-        # print("Got file key:", file_key)
 
         file_bytes = get_file_bytes(database, file_db_entry.hash_id, document_values["password"])
 
@@ -918,19 +929,19 @@ async def toolchain_event_call(database : Session,
             "user_file": file_bytes,
         })
 
+    
+    event_parameters.update({"auth": auth})
 
     result = await session.event_prop(event_node_id, 
                                       event_parameters, 
                                       system_args)
-    print("Event Result:", result)
-    # if not TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called:
-    #     TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_called = True
-    save_toolchain_session(database, session_id)
-    await session.send_state_notification(json.dumps({
+    
+    await save_toolchain_session(database, session)
+    await session.send_state_notification({
         "type": "finished_event_prop",
         "node_id": event_node_id
-    }))
-    # return {"success": True, "result": result}
+    })
+    
     if return_file_response:
         assert "file_bytes" in result and "file_name" in result, "Output doesn't contain file bytes"
         file_name_hash, encryption_key = random_hash(), random_hash()
@@ -939,40 +950,41 @@ async def toolchain_event_call(database : Session,
         file_zip_save_path = user_db_path+file_name_hash+".7z"
         aes_encrypt_zip_file(encryption_key, save_dir, file_zip_save_path)
         return {"flag": "file_response", "server_zip_hash": file_name_hash, "password": encryption_key, "file_name": result["file_name"]}
+    
     return result
 
-async def toolchain_stream_node_propagation_call(database : Session,
-                                                 toolchain_function_caller,
-                                                 session : ToolchainSession,
-                                                 auth : dict,
-                                                 session_id : str,
-                                                 event_node_id : str,
-                                                 stream_variable_id : str):
-    """
-    Call node with stream output in toolchain and propagate forward.
-    Returns generator.
-    """
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
-    assert session.author == user.name, "User not authorized"
+# async def toolchain_stream_node_propagation_call(database : Session,
+#                                                  toolchain_function_caller,
+#                                                  session : ToolchainSession,
+#                                                  auth : dict,
+#                                                  session_id : str,
+#                                                  event_node_id : str,
+#                                                  stream_variable_id : str):
+#     """
+#     Call node with stream output in toolchain and propagate forward.
+#     Returns generator.
+#     """
+#     user_retrieved : getUserType  = get_user(database, auth)
+#     (user, user_auth) = user_retrieved
+#     assert session.author == user.name, "User not authorized"
 
-    # threaded_generator = ThreadedGenerator()
-    # result = await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].event_prop(event_node_id, event_parameters)
-    # print("Event Result:", result)
-    # return {"success": True, "result": result}
-    system_args = {
-        "database": database
-    }
-    system_args.update(auth)
+#     # threaded_generator = ThreadedGenerator()
+#     # result = await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].event_prop(event_node_id, event_parameters)
+#     # print("Event Result:", result)
+#     # return {"success": True, "result": result}
+#     system_args = {
+#         "database": database
+#     }
+#     system_args.update(auth)
     
-    # Thread(target=TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].run_stream_node, kwargs={
-    #     "node_id": event_node_id,
-    #     "provided_generator": threaded_generator,
-    #     "system_args": system_args
-    # }).start()
-    # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
-    return await session.run_stream_node(node_id=event_node_id, system_args=system_args)
-    # return await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].get_stream_node_output(event_node_id, stream_variable_id)
+#     # Thread(target=TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].run_stream_node, kwargs={
+#     #     "node_id": event_node_id,
+#     #     "provided_generator": threaded_generator,
+#     #     "system_args": system_args
+#     # }).start()
+#     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
+#     return await session.run_stream_node(node_id=event_node_id, system_args=system_args)
+#     # return await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].get_stream_node_output(event_node_id, stream_variable_id)
 
 async def toolchain_session_notification(database : Session,
                                          toolchain_function_caller,
@@ -983,7 +995,7 @@ async def toolchain_session_notification(database : Session,
     user_retrieved : getUserType  = get_user(database, auth)
     (user, user_auth) = user_retrieved
     assert session.author == user.name, "User not authorized"
-    await session.send_state_notification(json.dumps(message))
+    await session.send_state_notification(message)
 
 async def get_toolchain_output_file_response(server_zip_hash : str, 
                                              document_password : str) -> FileResponse:

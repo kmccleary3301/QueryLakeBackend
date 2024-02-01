@@ -74,8 +74,8 @@
                             "value": "user"
                         },
                         {
-                            "target_argument": "content",
-                            "value": "question_placeholder"
+                            "output_argument_id": ["model_parameters", "chat_history", -1, "content"],
+                            "target_argument": "content"
                         }
                     ]
                 },
@@ -131,7 +131,7 @@
                     "input": [
                         {
                             "output_argument_id": "output",
-                            "target_argument": "model_response"
+                            "target_argument": "output"
                         }
                     ]
                 },
@@ -145,7 +145,7 @@
                             "value": "assistant"
                         },
                         {
-                            "output_argument_id": "model_response",
+                            "output_argument_id": "output",
                             "target_argument": "content"
                         },
                         {

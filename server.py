@@ -233,6 +233,8 @@ class LLMDeploymentClass:
         else:
             chat_history = request_dict.pop("chat_history")
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, self.minimum_free_token_space)
+        
+        print("Prompt:", prompt)
             
         request_id = random_uuid()
         # stream = request_dict.pop("stream", False)
@@ -482,7 +484,7 @@ class UmbrellaClass:
             if encode_output:
                 yield (json.dumps(ret) + "\n").encode("utf-8")
             else:
-                yield ret
+                yield text_output
             num_returned += len(text_output)
             tokens_returned.append(text_output)
         # return tokens_returned
@@ -492,33 +494,37 @@ class UmbrellaClass:
                        model_parameters : dict,
                        on_new_token: Callable[[str], None] = None):
         
-        print("Calling LLM with:", json.dumps(model_parameters, indent=4))
+        # print("Calling LLM with:", json.dumps(model_parameters, indent=4))
         
         (user, user_auth) = api.get_user(self.database, auth)
         assert "model_choice" in model_parameters, "Model choice not specified"
         model_choice = model_parameters.pop("model_choice")
         
-        print("LLM Call 1")
+        # print("LLM Call 1")
         assert model_choice in self.llm_handles, "Model choice not available"
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
-        print("LLM Call 2")
+        # print("LLM Call 2")
         gen: DeploymentResponseGenerator = (
             llm_handle.generator.remote(model_parameters)
         )
-        print("LLM Call 3")
+        # print("LLM Call 3")
         return_stream_response = model_parameters.pop("stream_response_normal", False)
-        print("LLM Call 4")
+        # print("LLM Call 4")
         if return_stream_response:
+            # print("STREAMING")
             return StreamingResponse(
                 self.stream_results(gen, on_new_token=on_new_token, encode_output=True),
             )
         else:
+            # print("NO STREAMING")
             results = []
             async for result in self.stream_results(gen, on_new_token=on_new_token):
                 results.append(result)
-        print("LLM Call 5")
+        # print("LLM Call 5")
         # assert final_output is not None
+        # print("RESULTS:", results)
+        
         text_outputs = "".join(results)
         return {"output": text_outputs, "token_count": len(results)}
     
@@ -838,7 +844,7 @@ class UmbrellaClass:
         try:
             while True:
                 text = await ws.receive_text()
-                print("Got text:", text)
+                # print("Got text:", text)
                 try:
                     arguments_websocket = json.loads(text)
                     assert "auth" in arguments_websocket, "No auth provided"
@@ -869,15 +875,15 @@ class UmbrellaClass:
                     # Make sure session is in system args
                     if not toolchain_session is None and not "session" in system_args:
                         system_args["session"] = toolchain_session
-                        print("Added session to system args")
-                        print(list(system_args.keys()))
+                        # print("Added session to system args")
+                        # print(list(system_args.keys()))
                     elif toolchain_session is None and "session" in system_args:
                         del system_args["session"]
                     
                     
                     if command == "toolchain/load":
                         if not toolchain_session is None:
-                            api.save_toolchain_session(self.database, toolchain_session)
+                            await api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
                         toolchain_session = api.fetch_toolchain_session(**true_args)
@@ -899,10 +905,12 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
                         result = await api.toolchain_entry_call(**true_args)
                     elif command == "toolchain/event":
-                        print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
+                        # print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
-                        print("PASSED KEYS AT EVENT:", list(true_args.keys()))
+                        # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
                         result = await api.toolchain_event_call(**true_args)
+                        # print("RESULT AT EVENT:", result)
+                        
                     
                     await ws.send_text((json.dumps(result_message)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
@@ -911,7 +919,8 @@ class UmbrellaClass:
                     
                     # await self.llm_call(request_dict, ws)
                 
-                
+                except WebSocketDisconnect:
+                    raise WebSocketDisconnect
                 except Exception as e:
                     error_message = str(e)
                     stack_trace = traceback.format_exc()
@@ -921,7 +930,7 @@ class UmbrellaClass:
             print("Websocket disconnected")
             if not toolchain_session is None:
                 print("Unloading Toolchain")
-                api.save_toolchain_session(self.database, toolchain_session)
+                await api.save_toolchain_session(self.database, toolchain_session)
                 toolchain_session = None
                 if "session" in system_args:
                     del system_args["session"]
