@@ -1,0 +1,116 @@
+{
+	"name": "Chat",
+    "id": "chat_session_normal",
+    "category": "General",
+	"display_configuration": {
+		"display_mappings": [
+            {
+                "route" : [ "chat_history" ],
+                "display_as": "chat"
+            }
+        ],
+        "max_files": 10,
+        "enable_rag": true
+	},
+    "initial_state": {
+        "title": "Chat",
+        "chat_history": []
+    },
+    "nodes": [
+        {
+            "id": "user_question_event",
+            "is_event": true,
+            "input_arguments": [
+                {
+                    "key": "chat_history",
+                    "from_server": true
+                },
+                {
+                    "key": "model_parameters",
+                    "from_user": true
+                },
+                {
+                    "key": "collection_hash_ids",
+                    "from_user": true,
+                    "optional": true
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<STATE>>",
+                    "sequenceInDestination": [
+                        "chat_history", 
+                        {
+                            "type": "createAction", 
+                            "initialValue": {
+                                "role": "user"           
+                            },
+                            "route" : [ "content" ]
+                        }
+                    ],
+                    "getFromInputs": {
+                        "route": [
+                            "model_parameters", 
+                            "chat_history", 
+                            -1,
+                            "content"
+                        ]
+                    }
+                },
+                {
+                    "destination": "third_step",
+                    "sequenceInDestination": [
+                        { "type": "createAction", "route" : [ "model_parameters" ] }
+                    ],
+                    "getFromInputs": { "route": [ "model_parameters" ] }
+                },
+                {
+                    "destination": "third_step",
+                    "sequenceInDestination": [ {"type" : "createAction", "route" : [ "collection_hash_ids" ] } ],
+                    "getFromInputs": { "route" : [ "collection_hash_ids" ] }
+                }
+            ]
+        },
+        {
+            "id": "third_step",
+            "api_function": "llm",
+            "arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "model_parameters"
+                },
+                {
+                    "key": "chat_history",
+                    "from_state": { "route" : [ "chat_history" ] }
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<USER>>",
+                    "getFromOutputs": {
+                        "route" : [ "output" ]
+                    },
+                    "stream": true
+                },
+                {
+                    "destination" : "<<STATE>>",
+                    "getFromOutputs" : {
+                        "route" : [ "output" ]
+                    },
+                    "sequenceInDestination": [
+                        {
+                            "type": "createAction",
+                            "initialValue" : {
+                                "role": "assistant"
+                            },
+                            "route" : [ "content" ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
