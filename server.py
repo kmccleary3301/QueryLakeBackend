@@ -499,42 +499,40 @@ class UmbrellaClass:
     async def llm_call(self,
                        auth : AuthType, 
                        model_parameters : dict,
+                       chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
+        """
+        Call an LLM model, possibly with parameters.
         
-        # print("Calling LLM with:", json.dumps(model_parameters, indent=4))
-        
+        TODO: Move OpenAI calls here for integration.
+        TODO: Add optionality via default values to the model parameters.
+        """
         (user, user_auth) = api.get_user(self.database, auth)
         assert "model_choice" in model_parameters, "Model choice not specified"
         model_choice = model_parameters.pop("model_choice")
+        
+        if not chat_history is None:
+            model_parameters["chat_history"] = chat_history
         
         on_new_token = None
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        # print("LLM Call 1")
         assert model_choice in self.llm_handles, "Model choice not available"
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
-        # print("LLM Call 2")
         gen: DeploymentResponseGenerator = (
             llm_handle.generator.remote(model_parameters)
         )
-        # print("LLM Call 3")
         return_stream_response = model_parameters.pop("stream_response_normal", False)
-        # print("LLM Call 4")
         if return_stream_response:
-            # print("STREAMING")
             return StreamingResponse(
                 self.stream_results(gen, on_new_token=on_new_token, encode_output=True),
             )
         else:
-            # print("NO STREAMING")
             results = []
             async for result in self.stream_results(gen, on_new_token=on_new_token):
                 results.append(result)
-        # print("LLM Call 5")
-        # assert final_output is not None
-        # print("RESULTS:", results)
         
         text_outputs = "".join(results)
         return {"output": text_outputs, "token_count": len(results)}
@@ -690,6 +688,11 @@ class UmbrellaClass:
     
     @fastapi_app.post("/api/{rest_of_path:path}")
     async def api_general_call(self, req: Request, rest_of_path: str):
+        """
+        This is a wrapper around every api function that is allowed. 
+        It will call the function with the arguments provided, after filtering them for security.
+        """
+        
         try:
             # arguments = req.query_params._dict
             print("Calling:", rest_of_path)
@@ -848,17 +851,18 @@ class UmbrellaClass:
                             await api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
-                        toolchain_session = api.fetch_toolchain_session(**true_args)
+                        toolchain_session : ToolchainSession = api.fetch_toolchain_session(**true_args)
                         system_args["session"] = toolchain_session
                     elif command == "toolchain/create":
                         if not toolchain_session is None:
                             api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.create_toolchain_session)
-                        toolchain_session = api.create_toolchain_session(**true_args)
+                        toolchain_session : ToolchainSession = api.create_toolchain_session(**true_args)
                         result = {
                             "success": True,
-                            "toolchain_session_id": toolchain_session.session_hash
+                            "toolchain_session_id": toolchain_session.session_hash,
+                            "toolchain_state": toolchain_session.state,
                         }
                     elif command == "toolchain/file_upload_event_call":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
@@ -874,12 +878,14 @@ class UmbrellaClass:
                         # print("RESULT AT EVENT:", result)
                     
                     
+                    
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
                     del result_message
                     generate = {"STOP_GENERATION": False}
                     print("\n\n\n\n\n\n\n\n\n")
                     # await self.llm_call(request_dict, ws)
+                    await api.save_toolchain_session(self.database, toolchain_session)
                 
                 except WebSocketDisconnect:
                     raise WebSocketDisconnect
@@ -892,24 +898,17 @@ class UmbrellaClass:
             print("Websocket disconnected")
             if not toolchain_session is None:
                 print("Unloading Toolchain")
-                await api.save_toolchain_session(self.database, toolchain_session)
+                toolchain_session.write_logs()
                 toolchain_session = None
                 if "session" in system_args:
                     del system_args["session"]
+                    del toolchain_session
     
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-GLOBAL_CONFIG = Config.parse_file('config.json')
+GLOBAL_CONFIG, TOOLCHAINS = Config.parse_file('config.json'), {}
 
-TOOLCHAINS = {}
-
-def safe_serialize(obj):
-  default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
-  return json.dumps(obj, default=default)
-
-# default_toolchain = "document_q_and_a_test"
 default_toolchain = "chat_session_normal"
-# default_toolchain = "breast_cancer_staging"
 
 toolchain_files_list = os.listdir("toolchains")
 for toolchain_file in toolchain_files_list:

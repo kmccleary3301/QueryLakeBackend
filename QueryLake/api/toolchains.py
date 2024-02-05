@@ -5,7 +5,7 @@ from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 from ..database import sql_db_tables
 from ..models.langchain_sse import ThreadedGenerator
-from copy import deepcopy
+from copy import deepcopy, copy
 from time import sleep
 from .hashing import random_hash
 from ..toolchain_functions import toolchain_node_functions
@@ -49,11 +49,10 @@ async def save_toolchain_session(database : Session,
                                                                                    )).first()
     existing_session.title = toolchain_data["title"]
     existing_session.state_arguments = json.dumps(toolchain_data["state_arguments"])
-    existing_session.queue_inputs = safe_serialize(toolchain_data["queue_inputs"])
     existing_session.firing_queue = json.dumps(toolchain_data["firing_queue"])
     database.commit()
     if not ws is None:
-        await session.send_state_notification({
+        await session.send_websocket_msg({
             "type": "session_saved",
             "title": existing_session.title
         })
@@ -331,7 +330,7 @@ async def toolchain_event_call(database : Session,
                                       ws)
     
     await save_toolchain_session(database, session)
-    await session.send_state_notification({
+    await session.send_websocket_msg({
         "type": "finished_event_prop",
         "node_id": event_node_id
     }, ws)
@@ -390,7 +389,7 @@ async def toolchain_session_notification(database : Session,
     user_retrieved : getUserType  = get_user(database, auth)
     (user, user_auth) = user_retrieved
     assert session.author == user.name, "User not authorized"
-    await session.send_state_notification(message, ws)
+    await session.send_websocket_msg(message, ws)
 
 async def get_toolchain_output_file_response(server_zip_hash : str, 
                                              document_password : str) -> FileResponse:

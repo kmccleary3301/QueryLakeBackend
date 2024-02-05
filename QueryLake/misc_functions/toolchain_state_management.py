@@ -31,7 +31,7 @@ def dict_path_is_valid(input_dict : dict, directory : Union[str, List[str]]):
         return False
 
 
-def safe_serialize(obj):
+def safe_serialize(obj, **kwargs) -> str:
     """
     Serialize an object, but if an element is not serializable, return a string representation of said element.
     """
@@ -43,7 +43,7 @@ def safe_serialize(obj):
     
     # default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     default = lambda o: default_callable(o)
-    return json.dumps(obj, default=default)
+    return json.dumps(obj, default=default, **kwargs)
 
 
 def traverse_static_route_global(object_for_static_route : Union[list, dict], 
@@ -182,7 +182,6 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
         
     return object_for_static_route
 
-
 def run_sequence_action_on_object(subject_state : Union[list, dict],
                                   toolchain_state : Union[list, dict],
                                   node_inputs_state : Union[list, dict],
@@ -236,31 +235,31 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             else:
                 initial_created_obj = provided_object
             
-            print("initial_created_obj", initial_created_obj)
-            
-            # object_create_route, creation_route = traverse_static_route(object_in_focus, action.route)
-            
             for s_list_i, insertion_route in enumerate(action.insertions):
-                
-                # Can set insertion value to None to use the given value.
                 passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
-
                 initial_created_obj = insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs)
             
             object_in_focus = insert_in_static_route_global(object_in_focus, action.route, initial_created_obj, **state_kwargs)
-            
-            print("object_in_focus", object_in_focus)
-            
             object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
             
-            print("object", object)
+        elif isinstance(action, appendAction): # Same as createAction, but appends to a list at the route.
+            if not action.initialValue is None:
+                initial_created_obj = get_value_obj_global(action.initialValue, **state_kwargs)
+            else:
+                initial_created_obj = provided_object
             
-            # route_shortend = action.route[:-1] if len(action.route) > 1 else []
+            for s_list_i, insertion_route in enumerate(action.insertions):
+                passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
+                initial_created_obj = insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs)
             
-            # object_in_focus_tmp, compiled_indices = traverse_static_route(object_in_focus, route_shortend)
-            # object_in_focus_tmp[action.route[-1]] = initial_value
-            # # object_in_focus_tmp = insert_in_static_route(object_in_focus, action.route[:-1], initial_value)
             
+            
+            object_in_focus_tmp, tmp_indices = traverse_static_route_global(object_in_focus, action.route, **state_kwargs)
+            assert isinstance(object_in_focus_tmp, list), "appendAction used, but the object in focus was not a list"
+            object_in_focus_tmp.append(initial_created_obj)
+            object_in_focus = insert_in_static_route_global(object_in_focus, tmp_indices, object_in_focus_tmp, **state_kwargs)
+            object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
+        
         elif isinstance(action, deleteAction):
             if not action.route is None:
                 route_get = action.route
@@ -274,7 +273,9 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                     object_in_focus_tmp, tmp_indices = traverse_static_route_global(object_in_focus, route_get[:-1], **state_kwargs)
                     del object_in_focus_tmp[route_get[-1]]
                     object_in_focus = insert_in_static_route_global(object_in_focus, tmp_indices, object_in_focus_tmp, **state_kwargs)
-        
+
+            object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
+                    
         elif isinstance(action, updateAction):
             if not action.value is None:
                 new_value = get_value_obj_global(action.value, **state_kwargs)
@@ -282,18 +283,8 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 new_value = provided_object
             
             object_in_focus = insert_in_static_route_global(object_in_focus, action.route, new_value, **state_kwargs)
-        
-        elif isinstance(action, appendAction):
-            if not action.value is None:
-                new_value = get_value_obj_global(action.value, **state_kwargs)
-            else:
-                new_value = provided_object
+            object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
             
-            object_in_focus_tmp, tmp_indices = traverse_static_route_global(object_in_focus, action.route, **state_kwargs)
-            assert isinstance(object_in_focus_tmp, list), "appendAction used, but the object in focus was not a list"
-            object_in_focus_tmp.append(new_value)
-            object_in_focus = insert_in_static_route_global(object_in_focus, tmp_indices, object_in_focus_tmp, **state_kwargs)
-        
         elif isinstance(action, operatorAction):
             if not action.value is None:
                 new_value = get_value_obj_global(action.value, **state_kwargs)
@@ -307,7 +298,9 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             else:
                 object_in_focus_tmp -= new_value
             object_in_focus = insert_in_static_route_global(object_in_focus, operator_indices, object_in_focus_tmp, **state_kwargs)
-        
+            object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
+            
+            
         # May add insertions here.
         
         elif isinstance(action, backOut):

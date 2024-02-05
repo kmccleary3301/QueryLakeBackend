@@ -23,10 +23,15 @@
             "input_arguments": [
                 {
                     "key": "model_parameters",
-                    "from_user": true
+                    "from_user": true,
+                    "optional": true
                 },
                 {
                     "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "question",
                     "from_user": true
                 },
                 {
@@ -41,22 +46,19 @@
                     "sequence": [
                         {
                             "type": "appendAction", 
-                            "value": {
+                            "initialValue": {
                                 "type": "staticValue",
                                 "value": {
                                     "role": "user"           
                                 }
                             },
+                            "insertion_values": [ null ],
+                            "insertions": [ [ "content" ] ],
                             "route" : [ "chat_history" ]
                         }
                     ],
                     "getFromInputs": {
-                        "route": [
-                            "model_parameters", 
-                            "chat_history", 
-                            -1,
-                            "content"
-                        ]
+                        "route": [ "question" ]
                     }
                 },
                 {
@@ -84,12 +86,17 @@
         {
             "id": "third_step",
             "api_function": "llm",
-            "arguments": [
+            "input_arguments": [
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
                 {
                     "key": "auth"
                 },
                 {
-                    "key": "model_parameters"
+                    "key": "model_parameters",
+                    "optional": true
                 }
             ],
             "feed_mappings": [
@@ -101,19 +108,24 @@
                     "stream": true
                 },
                 {
-                    "destination" : "<<STATE>>",
-                    "getFromOutputs" : {
-                        "route" : [ "output" ]
-                    },
+                    "destination": "<<STATE>>",
                     "sequence": [
                         {
-                            "type": "createAction",
-                            "initialValue" : {
-                                "role": "assistant"
+                            "type": "appendAction", 
+                            "initialValue": {
+                                "type": "staticValue",
+                                "value": {
+                                    "role": "assistant"           
+                                }
                             },
-                            "route" : [ "content" ]
+                            "insertion_values": [ null ],
+                            "insertions": [ [ "content" ] ],
+                            "route" : [ "chat_history" ]
                         }
-                    ]
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "output" ]
+                    }
                 }
             ]
         }

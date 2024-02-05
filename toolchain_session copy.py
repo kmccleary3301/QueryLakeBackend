@@ -393,12 +393,6 @@ if __name__ == "__main__":
     inputs_2 = {
         "model_parameters": {
             "model_choice": "mistral-7b-instruct-v0.1",
-            "chat_history": [
-                {
-                    "role": "user",
-                    "content": "What is the Riemann-Roch theorem?"
-                }
-            ],
             "max_tokens": 1000,
             "temperature": 0.5,
             "top_p": 0.9,
@@ -410,31 +404,39 @@ if __name__ == "__main__":
         "auth": {
             "username": "0abb9949-ec97-4f4c-85a8-6557a31c",
             "password_prehash": "7fa5a964699e1ffb695a6785f97d3f4c3fca673e8596040868fa6dc667583dd0"
-        }
+        },
+        "question": "What is the Riemann-Roch theorem?"
     }
     
     sequence_2 = [
         {
-            "type": "createAction",
-            "route": [
-                "model_parameters"
-            ]
+            "type": "appendAction", 
+            "value": {
+                "type": "staticValue",
+                "value": {
+                    "role": "user"           
+                },
+                "insertion_values": [ None ],
+                "insertions": [ [ "content" ] ]
+            },
+            "route" : [ "chat_history" ]
         }
     ]
     
-    sequence_2 = [createAction(**elements) for elements in sequence_2]
+    sequence_2 = [appendAction(**elements) for elements in sequence_2]
     
-    init_val_2 = inputs_2["model_parameters"]
+    init_val_2 = inputs_2["question"]
     
     outputs_2 = {}
     
-    target_state = {}
+    target_state = {"chat_history": []}
+    
     
     start_time = time.time()
     modification_object_2 = run_sequence_action_on_object(
         target_state,
-        {},
-        outputs_2,
+        target_state,
+        inputs_2,
         outputs_2,
         sequence_2,
         init_val_2,

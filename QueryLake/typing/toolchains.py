@@ -130,9 +130,11 @@ class appendAction(rootActionType):
     Value is alread provided, but we can initialize an object to make changes to in place of it.
     """
     type : Optional[Literal["appendAction"]] = "appendAction"
-    route : "staticRoute"
-    value: Optional["valueObj"] = None # If None, then we use the given value.
-    # sequenceActions: Optional[List["sequenceAction"]] = []
+    initialValue: Optional["valueObj"] = None # If None, then we use the given value.
+    insertion_values: Optional[List[Union["valueObj", Literal[None]]]] = [] # Use None when you want to use the given value.
+    insertions: Optional[List[List["staticRouteElementType"]]] = []
+    route: Optional["staticRoute"] = [] # If None, assert the current object in focus is a list and append to it.
+
     
 class operatorAction(rootActionType):
     """
@@ -212,6 +214,7 @@ class feedMappingAtomic(BaseModel):
     """
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
+    route: Optional[staticRoute] = None # If not None, we simply store the given value at this route, and ignore the sequence.
     # getFrom: valueObj
     # sequenceInDestination: Optional[List[sequenceAction]] = []
     stream: Optional[bool] = False
