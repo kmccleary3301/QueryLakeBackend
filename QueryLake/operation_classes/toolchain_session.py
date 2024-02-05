@@ -1,182 +1,86 @@
 import os, json
+
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
+
+from QueryLake.typing.toolchains import *
 from ..api.single_user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
-from ..database import sql_db_tables
+# from ..database import sql_db_tables
+# from ..api import *
+
 from ..models.langchain_sse import ThreadedGenerator
 from copy import deepcopy
 from time import sleep
 from ..api.hashing import random_hash
-from ..toolchain_functions import toolchain_node_functions
-from fastapi import UploadFile
-from sse_starlette.sse import EventSourceResponse
-import asyncio
-from threading import Thread
-from chromadb.api import ClientAPI
-import time
+# from ..toolchain_functions import toolchain_node_functions
+# from fastapi import UploadFile
+# from sse_starlette.sse import EventSourceResponse
+# import asyncio
+# from threading import Thread
+# from chromadb.api import ClientAPI
+# import time
 from ..api.document import get_file_bytes, get_document_secure
 from ..api.user_auth import get_user_private_key
 from ..database.encryption import aes_encrypt_zip_file, aes_decrypt_zip_file
-from fastapi.responses import FileResponse, Response, StreamingResponse
+# from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi import WebSocket
 import zipfile
 from ..function_run_clean import run_function_safe
 from ..typing.config import AuthType, getUserType
 from typing import Callable, Any, List, Dict, Union, Awaitable
+
+from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
-
-
-
-
-server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
-user_db_path = server_dir+"/user_db/files/"
-
-
-def retrieve_value_from_dict(input_dict : dict, 
-                             directory : Union[str, List[str]]):
-    try:
-        if isinstance(directory, str):
-            return input_dict[directory]
-        else:
-            current_dict = input_dict
-            for entry in directory:
-                # print("Checking:", [entry], json.dumps(current_dict))
-                current_dict = current_dict[entry]
-            # print("Returning:", current_dict)
-            return current_dict
-    except KeyError:
-        # print("Returning KeyError")
-        raise KeyError
-    except:
-        # print("Returning None")
-        return None
-
-def dict_path_is_valid(input_dict : dict, directory : Union[str, List[str]]):
-    try:
-        if isinstance(directory, str):
-            return input_dict[directory]
-        else:
-            current_dict = input_dict
-            for entry in directory:
-                # print("Checking:", [entry], json.dumps(current_dict))
-                current_dict = current_dict[entry]
-            # print("Returning:", current_dict)
-            return True
-    except:
-        # print("Returning False")
-        return False
-
-def safe_serialize(obj):
-  default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
-  return json.dumps(obj, default=default)
-
-
-
-
-default_toolchain = "chat_session_normal"
-
 
 class ToolchainSession():
     SPECIAL_NODE_FUNCTIONS = ["<<ENTRY>>", "<<EVENT>>"]
     SPECIAL_ARGUMENT_ORIGINS = ["<<SERVER_ARGS>>", "<<USER>>", "<<STATE>>"]
 
-    def __init__(self, 
-                 toolchain_id, 
+    def __init__(self,
+                 toolchain_id,
                  toolchain_pulled : Union[dict, ToolChain], 
-                 function_getter : Callable[[Any], Union[Awaitable[Callable], Callable]],
-                 session_hash, 
+                 function_getter : Callable[[str], Union[Awaitable[Callable], Callable]],
+                 session_hash,
                  author : str) -> None:
+        """
+        This should initialize the toolchain session with the toolchain id and the toolchain object itself.
+        """
+        
         self.author = author
         self.session_hash = session_hash
         self.toolchain_id = toolchain_id
-        # print("toolchain_id:", toolchain_id)
         
-        if isinstance(toolchain_pulled, dict):
-            self.toolchain = ToolChain(**toolchain_pulled)
+        if isinstance( toolchain_pulled, dict ):
+            self.toolchain : ToolChain = ToolChain( **toolchain_pulled )
+        else:
+            self.toolchain : ToolChain = toolchain_pulled
         
-        self.toolchain : ToolChain = deepcopy(toolchain_pulled)
-        self.function_getter = function_getter
+        self.nodes_dict : Dict[str, toolchainNode] = { node.id : node for node in self.toolchain.nodes }
+        
+        self.function_getter : Callable[[str], Union[Awaitable[Callable], Callable]] = function_getter
         self.reset_everything()
-        self.assert_split_inputs()
 
     def reset_everything(self):
         """
-        Reset everything, as if the toolchain had just been loaded.
-        Only the toolchain json itself is unaffected.
+        Reset everything, as if the toolchain session had just been created.
+        Only the toolchain object itself is unaffected.
         """
         self.entry_called = False
         self.node_carousel = {}
-        self.state_arguments = {"session_hash": self.session_hash}
-        self.entry_point = None
-        self.entry_point_id = None
-        self.event_points = []
-        self.event_point_ids = []
-        self.processing_lock = False
-        self.layer_outputs = {}
-        self.return_to_user = {}
-        self.queued_node_inputs = {}
-        self.firing_queue = {}
+        # self.state_arguments = {"session_hash": self.session_hash}
+        self.state : dict = self.toolchain.initial_state
+        self.firing_queue : Dict[str, Union[Literal[False], dict]] = {}
         self.reset_firing_queue()
-
-
-        # Verify the toolchain
-        # for entry in self.toolchain["pipeline"]:
-            
-        #     self.node_carousel[entry["id"]] = entry
-
-        #     self.node_carousel[entry["id"]]["requires_event"] = False
-        #     self.node_carousel[entry["id"]]["outputs_stream_to_user"] = False
-
-        #     tmp_stream_outputs = {}
-        #     if "output_arguments" in entry:
-        #         for output_variable_entry in entry["output_arguments"]:
-        #             if "stream" in output_variable_entry and output_variable_entry["stream"] == True:
-        #                 tmp_stream_outputs[output_variable_entry["id"]] = True
-
-        #     for feed_mapping in entry["feed_to"]:
-        #         break_flag = False
-        #         if feed_mapping["destination"] == "<<USER>>":
-        #             for sub_mapping in feed_mapping["input"]:
-        #                 if sub_mapping["output_argument_id"] in tmp_stream_outputs:
-        #                     self.node_carousel[entry["id"]]["outputs_stream_to_user"] = sub_mapping["output_argument_id"]
-        #                     break_flag = True
-        #                     break
-        #         if break_flag:
-        #             break
-            
-        #     # print("Loaded node id %s with \'outputs_stream_to_user\': %s" % (entry["id"], self.node_carousel[entry["id"]]["outputs_stream_to_user"]))
-
-        #     if entry["function"] == "<<ENTRY>>":
-        #         self.entry_point = entry
-        #         self.entry_point_id = entry["id"]
-        #     elif entry["function"] == "<<EVENT>>":
-        #         self.event_points.append(entry)
-        #         self.event_point_ids.append(entry["id"])
-        #     # else:
-        #     #     self.function_getter(entry["function"])
-        
-        # for event_point in self.event_points:
-        #     self.assert_event_path(event_point)
-        
-        # for key, value in self.toolchain["state_initialization"].items():
-        #     self.state_arguments[key] = value
-        
-        # if "title" not in self.state_arguments:
-        #     self.state_arguments["title"] = self.toolchain["name"]
-        
-        # self.session_state_generator = None
-        # self.session_state_generator_log = []
     
     async def send_state_notification(self, message, ws : WebSocket = None):
         if not ws is None:
             await ws.send_text(safe_serialize({"state_notification": message}))
 
     def reset_firing_queue(self):
-        for entry in self.toolchain["pipeline"]:
-            if not (entry["function"] == "<<ENTRY>>" or entry["function"] == "<<EVENT>>"):
-                self.queued_node_inputs[entry["id"]] = {}
-                self.firing_queue[entry["id"]] = False
+        self.firing_queue : Dict[str, Union[Literal[False], dict]] = {
+            key : False for key, node in self.nodes_dict.items() if not (node.is_event)
+        }
     
     def assert_split_inputs(self):
         for node_id in self.node_carousel.keys():
@@ -196,396 +100,301 @@ class ToolchainSession():
                 if self.node_carousel[target_node["id"]]["requires_event"]:
                     continue
                 self.assert_event_path(target_node)
-
-    def get_node_argument_requirements(self, node : dict):
-        return deepcopy(node["arguments"])
-
-    async def run_node_with_dependencies(self,
-                                         node : dict, 
-                                         function_parameters : dict, 
-                                         system_args : dict,
-                                         ws : WebSocket = None,
-                                         use_previous_outputs : bool = False):
+    
+    def create_streaming_callables(self, 
+                                   node : toolchainNode, 
+                                   assigned_id : str,
+                                   ws : WebSocket = None) -> Dict[str, Awaitable[Callable[[Any], None]]]:
+        """
+        Create a dictionary of callables for streaming outputs to be passed to an API function.
+        """
+        pass
+    
+    async def run_node(self,
+                       node : toolchainNode, 
+                       node_arguments : dict,
+                       system_args : dict,
+                       user_arguments_from_propagation : dict,
+                       ws : WebSocket = None,
+                       user_existing_return_arguments : dict = {},
+                       use_firing_queue : bool = True) -> Tuple[dict, dict, List[str]]:
+        """
+        TODO
+        This has to collect the arguments for the node, then run the node and/or forward them.
+        It also has to manage forwarding in the firing queue.
         
-        # print("Running node %s with args %s" % (node["id"], safe_serialize(function_parameters)))
-        node_arguments_possible = self.get_node_argument_requirements(node)
-        node_argument_ids = [entry["argument_name"] for entry in node_arguments_possible]
-        node_arguments_required = [entry for entry in node_arguments_possible if not ("optional" in entry and entry["optional"])]
-        node_arguments_required_ids = [entry["argument_name"] for entry in node_arguments_required]
-
-        filter_args = {}
-
-        sum_list = 0
-        if node["function"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
-            for key, value in self.queued_node_inputs[node["id"]].items():
-                filter_args[key] = value
-                sum_list += 1
         
-        for key, value in function_parameters.items():
-            if key in node_argument_ids:
-                filter_args[key] = value
-                if key in node_arguments_required_ids:
-                    sum_list += 1
-
-        for key, value in system_args.items():
-            if key in node_argument_ids:
-                filter_args[key] = value
-                sum_list += 1
-
-        # print("Filter args:", filter_args)
-
-        for argument in node_arguments_possible:
-            if argument["argument_name"] in filter_args:
-                continue
-            argument["satisfied"] = False
-            if argument["argument_name"] in filter_args:
-                argument["satisfied"] = True
-            elif "origin" in argument and argument["origin"] == "<<STATE>>":
-                assert argument["argument_name"] in self.state_arguments, f"Required state argument {argument['argument_name']} could not be found."
-                arg_name = argument["argument_name"] if not ("rename_to" in argument) else argument["rename_to"]
-                filter_args[arg_name] = self.state_arguments[argument["argument_name"]]
-            else:
-                if "origin" in argument and argument["origin"] in self.layer_outputs and use_previous_outputs:
-                    filter_args[argument["argument_name"]] = self.layer_outputs[argument["origin"]][argument["argument_name"]]
-                # elif use_previous_outputs:
-                #     node_source = self.node_carousel[argument["origin"]]
-                #     run_arguments = self.run_node_with_dependencies(node_source, function_parameters, use_previous_outputs=use_previous_outputs)
-                #     filter_args[argument["argument_name"]] = run_arguments[argument["argument_name"]]
-            sum_list += 1
+        # IMPORTANT CAVEATS
         
-        assert sum_list >= len(node_arguments_required), f"Failed to satisfy required arguments for node {node['id']}"
-
-        if node["function"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
-            # print("Calling %s" % (node["function"]))
-            function_target = self.function_getter(node["function"])
-            run_arguments = await run_function_safe(function_target, filter_args)
-            # run_arguments = function_target(**filter_args)
-            if not type(run_arguments) is dict:
-                run_arguments = {"result": run_arguments}
-
-            self.layer_outputs[node["id"]] = run_arguments
-        else:
-            run_arguments = function_parameters
-
-        user_return_args = {}
-
-        split_targets = []
-
-        recombination_targets = []
-
-        if self.node_carousel[node["id"]]["outputs_stream_to_user"] != False:
-            run_arguments[self.node_carousel[node["id"]]["outputs_stream_to_user"]] = self.await_generator_completion(run_arguments[self.node_carousel[node["id"]]["outputs_stream_to_user"]] )
-
-        for entry in node["feed_to"]:
-            destination_merge_mapping_flag = False
-
-            if entry["destination"] == "<<STATE>>":
-                state_return = {}
-
-            for feed_map in entry["input"]:
-                assert "value" in feed_map or \
-                        ("output_argument_id" in feed_map and (dict_path_is_valid(run_arguments, feed_map["output_argument_id"]) or \
-                         dict_path_is_valid(function_parameters, feed_map["output_argument_id"]))) or \
-                        ("optional" in feed_map and feed_map["optional"]), \
-                        f"argument {feed_map['output_argument_id']} could not be found"+json.dumps(run_arguments)+", "+json.dumps(function_parameters)
+        *   It should return a list of node ids that need to be fired based on the feed mappings,
+            ommitting if `store` is True.
+        *   Handle stream outputs by creating a local function to send to the target api function
+            if `stream` is true.
+        *   Run sequenceActions in feedmappings.
+        """
+        
+        await self.send_state_notification({
+            "type": "node_execution_start",
+            "node_id": node.id,
+            "inputs": node_arguments,
+            "system_args": system_args,
+            "user_args": user_arguments_from_propagation,
+            "existing_user_return_args": user_existing_return_arguments,
+        }, ws)
+        
+        
+        node_inputs, node_outputs, user_return_arguments, firing_targets = {}, {}, {}, []
+        
+        
+        # Initialize the node inputs with existing firing queue if it exists.
+        if (use_firing_queue) and (not node.is_event) and (self.firing_queue[node.id] != False):
+            node_inputs.update(self.firing_queue[node.id])
+        
+        
+        # Construct the node inputs.
+        
+        for node_input_arg in node.input_arguments:
+            
+            if not node_input_arg.initalValue is None:
+                node_inputs[node_input_arg.key] = node_input_arg.initalValue
+            
+            # If active, this give priority to the firing queue initial values.
+            # elif node_input_arg.key in node_inputs:
+            #     continue
+            
+            elif node_input_arg.from_user == True:
+                assert (node_input_arg.key in user_arguments_from_propagation) or node_input_arg.optional, f"Required input argument \'{node_input_arg.key}\' in node \'{node.id}\' not found in function parameters"
                 
-                target_arg = feed_map["target_argument"]
-                input_value = None
+                if node_input_arg.key in user_arguments_from_propagation:
+                    node_inputs[node_input_arg.key] = user_arguments_from_propagation[node_input_arg.key]
+            
+            elif not node_input_arg.from_state is None:
+                # For now, optionality will not be supported for state arguments. May change in the future.
+                assert node_input_arg.key in self.state, f"State argument \'{node_input_arg.key}\' not provided while firing node {node.id} \n{self.state}"
+                node_inputs[node_input_arg.key] = self.state[node_input_arg.key]
+            
+            elif node_input_arg.from_server:
+                assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
+            
+            else:
+                assert node_input_arg.key in node_arguments, f"Node argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                node_inputs[node_input_arg.key] = node_arguments[node_input_arg.key]
+                print("Got input key from node arguments: ", node_input_arg.key, node_arguments[node_input_arg.key])
+        
+        await self.send_state_notification({
+            "type": "node_execution_created_inputs",
+            "node_id": node.id,
+            "inputs": node_inputs,
+        }, ws)
+        
+        
+        # Fire the node or assert that it is an event node and the mappings are valid.
+        
+        
+        
+        if node.is_event:
+            assert all([
+                not any([
+                    hasattr(feed_map, "getFromOutputs"),
+                    hasattr(feed_map, "getFrom") and feed_map.getFrom.type == "getNodeOutput", 
+                ]) \
+                for feed_map in node.feed_mappings
+            ]), f"Event node \'{node.id}\' has mappings grabbing outside node outputs, which do not exist since it is an event."
+            node_outputs = {}
+        else:
+            node_firing_id = random_hash()
+            stream_callables = self.create_streaming_callables(node, node_firing_id, ws)
+            get_function = self.function_getter(node.api_function)
+            node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
+        
+        state_kwargs = {
+            "toolchain_state" : self.state,
+            "node_inputs_state" : node_inputs,
+            "node_outputs_state" : node_outputs
+            # "branching_state" : branching_state       # Figure out branches later
+        }
+        
+        # TODO: is shallow copy sufficient?
+        previous_state = self.state.copy()
+        
+        
+        
+        
+        await self.send_state_notification({"type": "1"}, ws)
+        
+        for feed_map in node.feed_mappings:
+            
+            await self.send_state_notification({"type": "2"})
+            await self.send_state_notification({
+                "type": "node_execution_running_feed_map",
+                "node_id": node.id,
+                "feed_map": feed_map
+            }, ws)
+            
+            if hasattr(feed_map, "value") or "value" in feed_map:
+                initial_value = feed_map.value
+                print("\n\n\n\n\n\n\n\n\n\n GOT VALUE \n\n\n\n\n\n\n\n\n\n")
+                await self.send_state_notification({
+                    "type": "node_execution_got_init_value",
+                    "value": initial_value,
+                }, ws)
+            else:
+                
+                # TODO: I think this is the source of our error. The get_value_obj_global function is limited in scope.
+                value_obj_not_run = [getattr(feed_map, attr_check) for attr_check in [
+                    "getFromOutputs", "getFrom", "getFromState", "getFromInputs"
+                ] if hasattr(feed_map, attr_check)]     # There are multiple flexible types here for syntax.
+                
+                print("\n\n\n\n\n\n\n\n\n\n GOT VALUE \n\n\n\n\n\n\n\n\n\n")
+                print("\n\n\n\n\n\n\n\n\n\n value_obj_not_run  ", value_obj_not_run, "\n\n\n\n\n\n\n\n\n\n")
+                
+                
+                initial_value = get_value_obj_global(value_obj_not_run[0], **state_kwargs)
+                
+                await self.send_state_notification({
+                    "type": "node_execution_got_val_obj",
+                    "value_obj_type": str(type(value_obj_not_run[0])),
+                    "value": initial_value,
+                }, ws)
 
-                if "value" in feed_map:
-                    input_value = feed_map["value"]
-                elif "input_argument_id" in feed_map:
-                    if dict_path_is_valid(function_parameters, feed_map["input_argument_id"]):
-                        input_value = retrieve_value_from_dict(function_parameters, feed_map["input_argument_id"])
-                elif dict_path_is_valid(run_arguments, feed_map["output_argument_id"]):
-                    # if feed_map["output_argument_id"] in run_arguments:
-                    input_value = retrieve_value_from_dict(run_arguments, feed_map["output_argument_id"])
-                elif dict_path_is_valid(function_parameters, feed_map["output_argument_id"]):
-                    # if feed_map["output_argument_id"] in function_parameters:
-                    # input_value = function_parameters[feed_map["output_argument_id"]]
-                    input_value = retrieve_value_from_dict(function_parameters, feed_map["output_argument_id"])
-                if input_value is None:
-                    continue
-                # print("Target Arg", target_arg, type(input_value), str(type(input_value)))
-
-                if entry["destination"] == "<<STATE>>":
-                    # Need to await generator here.
-                    # if type(input_value) is ThreadedGenerator:
-                    #     input_value = self.await_generator_completion(input_value)
-                    state_return[target_arg] = input_value
-                elif entry["destination"] == "<<USER>>":
-                    # In the case of a generator, run create_generator. No need to wait.
-                    if type(input_value) is ThreadedGenerator:
-                        # await self.create_generator(node["id"], target_arg, input_value)
-                        # user_return_args[target_arg] = self.await_generator_completion(input_value)
-                        pass
-                    else:
-                        user_return_args[target_arg] = input_value
-                else:
-                    destination_merge_mapping_flag = destination_merge_mapping_flag or self.check_if_input_combination_required(entry["destination"], feed_map["target_argument"])
-
-                    # In the case of a generator, await the output and use that instead.
-                    # if type(input_value) is ThreadedGenerator:
-                    #     input_value = self.await_generator_completion(input_value)
-                    if destination_merge_mapping_flag:
-                        if feed_map["target_argument"] not in self.queued_node_inputs[entry["destination"]]:
-                            self.queued_node_inputs[entry["destination"]][feed_map["target_argument"]] = []
-                        self.queued_node_inputs[entry["destination"]][feed_map["target_argument"]].append(input_value)
-                    else:
-                        self.queued_node_inputs[entry["destination"]][feed_map["target_argument"]] = input_value  
-
-                    if "split_outputs" in entry and entry["split_outputs"]:
-                        self.queued_node_inputs[entry["destination"]][feed_map["target_argument"]] = [e for e in input_value]
-                        if not destination_merge_mapping_flag:
-                            # print("%s attempts to add via split target %s" % (node["id"], entry["destination"]))
-                            split_targets.append({"node_id": entry["destination"], "split_argument_name": feed_map["target_argument"]})
-                        else:
-                            recombination_targets.append(entry["destination"])
-
-            if entry["destination"] == "<<STATE>>":
-                await self.special_state_action(node["id"], entry["action"], entry["target_value"], state_return)
-
-            if not destination_merge_mapping_flag and \
-                entry["destination"] not in ToolchainSession.SPECIAL_ARGUMENT_ORIGINS and \
-                not ("store" in entry and entry["store"]):
-                # print("%s attempts to add %s" % (node["id"], entry["destination"]))
-                self.attempt_to_add_to_firing_queue(entry["destination"])
-                    # else:
-                        
-        self.firing_queue[node["id"]] = False
+            if feed_map.destination == "<<USER>>":
+                user_return_arguments = run_sequence_action_on_object(user_return_arguments, sequence=feed_map.sequence, provided_object=initial_value, **state_kwargs)
+            elif feed_map.destination == "<<STATE>>":
+                self.state = run_sequence_action_on_object(self.state, sequence=feed_map.sequence, provided_object=initial_value, **state_kwargs)
+                
+                append_state, update_state = dict_diff_append_and_update(self.state.copy(), previous_state.copy())
+                delete_state = dict_diff_deleted(previous_state.copy(), self.state.copy())
+                
+                
+                if any([(delete_state != []), (append_state != {}), (update_state != {})]):
+                    await self.send_state_notification({
+                        "type": "state_update",
+                        "delete": delete_state,
+                        "append": append_state,
+                        "update": update_state
+                    }, ws)
+                
+            else:
+                # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
+                
+                if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
+                    print("Previous firing queue entry was False. Creating new entry.", self.firing_queue[feed_map.destination])
+                    
+                    self.firing_queue[feed_map.destination] = {}
+                
+                if not feed_map.sequence is None:
+                    await self.send_state_notification({
+                        "type": "node_execution_running_sequence_action",
+                        "node_id": node.id,
+                        "initial_value": initial_value,
+                        "sequence": feed_map.sequence,
+                        "target": self.firing_queue[feed_map.destination],
+                        **state_kwargs
+                    }, ws)
+                
+                result_of_sequence = run_sequence_action_on_object(
+                    self.firing_queue[feed_map.destination].copy(), 
+                    sequence=feed_map.sequence, 
+                    provided_object=initial_value, 
+                    **state_kwargs
+                )
+                
+                print(result_of_sequence)
+                
+                await self.send_state_notification({"type": "node_execution_running_sequence_action_result", "result": result_of_sequence}, ws)
+                self.firing_queue[feed_map.destination].update(result_of_sequence)
+                self.firing_queue[feed_map.destination].update({"bogus_entry": "bogus_value"})
+                
+                
+                if not feed_map.sequence is None:
+                    await self.send_state_notification({
+                        "type": "node_execution_running_sequence_action_complete",
+                        "node_id": node.id,
+                        "sequence": feed_map.sequence,
+                        "target": self.firing_queue[feed_map.destination]
+                    }, ws)
+                
+                if not feed_map.store:
+                    firing_targets.append(feed_map.destination)
+        
+        self.firing_queue[node.id] = False
 
         await self.send_state_notification({
             "type": "node_completion",
-            "node_id": node["id"],
-            "outputs": run_arguments
+            "node_id": node.id,
+            **state_kwargs
         }, ws)
-        return run_arguments, user_return_args, split_targets, recombination_targets
-
-    def attempt_to_add_to_firing_queue(self, node_id):
-        # print("Attempting to add %s" % (node_id))
-        required_args = []
-        for entry in self.node_carousel[node_id]["arguments"]:
-            if entry["origin"] not in ToolchainSession.SPECIAL_ARGUMENT_ORIGINS and not ("optional" in entry and entry["optional"]):
-                required_args.append(entry["argument_name"])
         
-        required_args = sorted(list(set(required_args)))
-        available_args = sorted(list(set(list(self.queued_node_inputs[node_id].keys()))))
-        # print(required_args)
-        # print(available_args)
-        for arg in required_args:
-            if arg not in required_args:
-                # print("Input args not satisfied")
-                # print(available_args, "vs", required_args)
-                return
-        # if available_args != required_args:
-
-        self.firing_queue[node_id] = True
-
-    def check_if_input_combination_required(self, node_id, input_argument) -> bool:
-        relevant_argument = None
-        for arg_entry in self.node_carousel[node_id]["arguments"]:
-            if arg_entry["argument_name"] == input_argument:
-                relevant_argument = arg_entry
-                break
-        if relevant_argument is None:
-            return False
-        return ("merge_parallel_outputs" in relevant_argument and relevant_argument["merge_parallel_outputs"])
-
-    async def special_state_action(self, 
-                                   action_origin_node_id, 
-                                   state_action, 
-                                   target_arg, 
-                                   input_args,
-                                   ws : WebSocket = None):
-        """
-        Router function for state actions. Multiple are necessary because of chat
-        history appending and formatting.
-        """
-        assert state_action in [
-            "append_dict",
-            "set_state_value"
-        ], f"state action \'{state_action}\' not found"
-
-        key_get = list(input_args.keys())[0]
-        if key_get == "<<VALUE_OVERWRITE_DICT>>":
-            input_args = input_args[key_get]
+        user_existing_return_arguments.update(user_return_arguments)
         
-        action = getattr(self, state_action)
-        result = action(**{
-            "target_arg": target_arg,
-            "input_args": input_args
-        })
-        await self.notify_state_update(action_origin_node_id, target_arg, result, ws)
-
-    def append_dict(self, target_arg, input_args : dict):
-        """
-        Append provided content to state argument with OpenAI's message format, with the role of assistant.
-        """
-        # print("append_model_response_to_chat_history")
-        assert target_arg in self.state_arguments, f"State argument \'{target_arg}\' not found"
-        self.state_arguments[target_arg].append(input_args)
-        return input_args
-
-    def set_state_value(self, target_arg, input_args : dict):
-        """
-        Set a provided state value to the input.
-        """
-        self.state_arguments[target_arg] = input_args
+        return user_existing_return_arguments, firing_targets #, split_targets
 
     async def run_node_then_forward(self, 
-                                    node, 
-                                    parameters : dict,
+                                    node : Union[str, toolchainNode], 
+                                    node_arguments : dict,
+                                    user_provided_arguments : dict,
                                     system_args : dict, 
-                                    ws : WebSocket = None,
-                                    user_return_args = {}, 
-                                    is_event : bool = False, 
-                                    no_split_inputs : bool = False,
+                                    ws : WebSocket = None, 
+                                    # no_split_inputs : bool = False,
                                     clear_firing_queue : bool = True,
-                                    display_tab_count : int = 0):
-        # print("  "*display_tab_count + "Running node: %s" % (node["id"]))
+                                    user_return_arguments : dict = {}):
+        
+        if isinstance(node, str):
+            node : toolchainNode = self.node_carousel[node]
+        
         await self.send_state_notification({
             "type": "node_execution_start",
-            "node_id": node["id"]
+            "node_id": node.id
         }, ws)
-        # if node["outputs_stream_to_user"] != False:
-        #     self.queued_node_inputs[node["id"]].update(parameters)
-        #     relevant_mappings = []
-        #     for feed_mapping in node["feed_to"]:
-        #         if feed_mapping["destination"] == "<<STATE>>":
-        #             relevant_mappings.append(feed_mapping)
-        #     await self.send_state_notification(json.dumps({
-        #         "type": "stream_output_pause",
-        #         "node_id": node["id"],
-        #         "stream_argument": node["outputs_stream_to_user"],
-        #         "mapping": relevant_mappings
-        #     }))
-        #     return None
-        functions_fed_to = []
-        for feed_mapping in node["feed_to"]:
-            if feed_mapping["destination"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
-                functions_fed_to.append(feed_mapping["destination"])
-
-        run_arguments, user_return_args_get, split_targets, recombo_targets = await self.run_node_with_dependencies(node, parameters, system_args, ws)
-        # self.send_state_notification(json.dumps({
-        #     "type": "node_completion",
-        #     "node_id": node["id"],
-        #     "outputs": run_arguments
-        # }))
         
-        user_return_args.update(user_return_args_get)
-        recombo_targets_review = {}
-        for split_entry in split_targets:
-            # print("Got split target:", split_entry)
-            get_split_arguments = deepcopy(self.queued_node_inputs[split_entry["node_id"]][split_entry["split_argument_name"]])
-            # print("Got split argument:", get_split_arguments)
-
-
-            for value in get_split_arguments:
-                # print("Firing node id from split entry %s" % (split_entry["node_id"]))
-                self.queued_node_inputs[split_entry["node_id"]][split_entry["split_argument_name"]] = value
-                # run_arguments
-                _, recombo_targets = await self.run_node_then_forward(self.node_carousel[split_entry["node_id"]], 
-                                                                      parameters, 
-                                                                      system_args,
-                                                                      ws,
-                                                                      no_split_inputs=True, 
-                                                                      clear_firing_queue=False, 
-                                                                      display_tab_count=display_tab_count+1)
-                for recombo_id in recombo_targets:
-                    recombo_targets_review[recombo_id] = True
-
-        for recombo_id, _ in recombo_targets_review.items():
-            self.attempt_to_add_to_firing_queue(recombo_id)
-
-        # if len(next_nodes) > 0:
-        #     for i in range(len(next_nodes)):
-        #         if next_nodes[i]["function"] not in ["<<ENTRY>>", "<<EVENT>>"] and (not next_nodes[i]["requires_event"] or is_event):
-        #             _ = self.run_node_then_forward(next_nodes[i], next_node_args[i], user_return_args=user_return_args, is_event=is_event)
-
-        for node_id, value in self.firing_queue.items():
-            if value and \
-                ((not self.node_carousel[node_id]["requires_split_inputs"]) or (not no_split_inputs)) and \
-                node_id in functions_fed_to:
-                # print("  "*display_tab_count + "Firing node id from firing queue %s" % (node_id))
-                tmp_args = deepcopy(parameters)
-                tmp_args.update(self.queued_node_inputs[node_id])
-                
-                
-                await self.run_node_then_forward(self.node_carousel[node_id], 
-                                                 tmp_args, 
-                                                 system_args, 
-                                                 ws,
-                                                 user_return_args=user_return_args, 
-                                                 display_tab_count=display_tab_count+1)
-                if clear_firing_queue:
-                    self.firing_queue[node["id"]] = False
-        # print("  "*display_tab_count + "Returning RNTF %s" % (node["id"]))
-        # print("  "*display_tab_count + "Got user return args", user_return_args)
-        return user_return_args, recombo_targets
+        user_return_arguments, firing_targets = await self.run_node(
+            node=node, 
+            node_arguments=node_arguments,
+            system_args=system_args,
+            user_arguments_from_propagation=user_provided_arguments,
+            ws=ws,
+            user_existing_return_arguments=user_return_arguments,
+            use_firing_queue=True
+        )
+        
+        for node_id in firing_targets:
+            user_return_arguments = await self.run_node_then_forward(self.nodes_dict[node_id], 
+                                                                     self.firing_queue[node_id], 
+                                                                     user_provided_arguments,
+                                                                     system_args,
+                                                                     ws,
+                                                                     user_return_arguments=user_return_arguments)
+        
+        return user_return_arguments
+        
+        
         # for entry in node["feed_to"]:
 
-    # def run_stream_node(self, node_id, system_args : dict):
-
-    #     user_return_args, _, _, _ = self.run_node_with_dependencies(self.node_carousel[node_id], 
-    #                                                                 self.queued_node_inputs[node_id],
-    #                                                                 system_args)
-    #     # loop = asyncio.get_event_loop()
-    #     asyncio.run(self.fire_node_mappings_follow_up(node_id, system_args, user_return_args=user_return_args))
-    
-    async def fire_node_mappings_follow_up(self, 
-                                           node_id, 
-                                           system_args : dict, 
-                                           ws : WebSocket = None,
-                                           user_return_args = {}):
-        node = self.node_carousel[node_id]
-        functions_fed_to = []
-        for feed_mapping in node["feed_to"]:
-            if feed_mapping["destination"] not in ToolchainSession.SPECIAL_NODE_FUNCTIONS:
-                functions_fed_to.append(feed_mapping["destination"])
-        for node_id, _ in self.firing_queue.items():
-            if node_id in functions_fed_to:
-                await self.run_node_then_forward(self.node_carousel[node_id], 
-                                                 self.queued_node_inputs[node_id], 
-                                                 system_args, 
-                                                 ws,
-                                                 user_return_args=user_return_args)
-        await self.send_state_notification({
-            "type": "completed_propagation",
-            "entry_node": node_id,
-            "outputs": user_return_args
-        }, ws)
-        return user_return_args
-
-    async def fire_queued_nodes_without_entry(self, no_split_inputs : bool = False):
-        user_return_args = {}
-        for node_id, value in self.firing_queue.items():
-            if value and ((not self.node_carousel[node_id]["requires_split_inputs"]) or (not no_split_inputs)):
-                # print("Firing node id %s" % (node_id))
-                await self.run_node_then_forward(self.node_carousel[node_id], 
-                                                 self.queued_node_inputs[node_id],
-                                                 {},
-                                                 None,
-                                                 user_return_args=user_return_args)
-        return user_return_args
-
-    async def entry_prop(self, input_parameters, system_args : dict):
-        """
-        Activate the entry node with parameters, then propagate forward.
-        """
-        # print("entry_prop")
-        self.entry_called = True
-        if self.entry_point is None:
-            return None
-        result, _ = await self.run_node_then_forward(self.entry_point, input_parameters, system_args)
-        return result
-    
-    async def event_prop(self, event_id, input_parameters, system_args : dict):
+    async def event_prop(self, 
+                         event_id : str,
+                         input_parameters : dict, 
+                         system_args : dict,
+                         ws : WebSocket = None):
         """
         Activate an event node with parameters by id, then propagate forward.
         """
         # print("event_prop")
-        target_event = self.node_carousel[event_id]
-        result, _ = await self.run_node_then_forward(target_event, input_parameters, system_args, is_event=True)
+        target_event = self.nodes_dict[event_id]
+        
+        
+        
+        result = await self.run_node_then_forward(target_event,
+                                                  {}, 
+                                                  input_parameters, 
+                                                  system_args,
+                                                  ws=ws)
+        await self.send_state_notification({
+            "type": "event_completion",
+            "event_id": event_id,
+            "output": result
+        }, ws)
+        
         return result
     
     async def update_active_node(self, 
@@ -605,81 +414,28 @@ class ToolchainSession():
         # if not self.session_state_generator is None:
         await self.send_state_notification(send_information, ws)
 
-    def notify_node_completion(self, node_id, result_arguments : dict):
-        """
-        Upon completion of a node, notify globally of the result of the node.
-        """
-        pass
-    
-    def await_generator_completion(self, generator : ThreadedGenerator, join_array : bool = True):
-        """
-        Wait for a threaded generator to finish, then return the completed sequence.
-        """
-        # print("await_generator_completion")
-        # print("Awaiting generator")
-        if type(generator) is str:
-            return generator
-        while not generator.done:
-            sleep(0.01)
-        # print("Got generator")
-        if join_array:
-            return "".join(generator.sent_values)
-        return generator.sent_values
-
-    async def notify_state_update(self, 
-                                  action_origin_node_id, 
-                                  state_arg_id,
-                                  add_value = None,
-                                  ws : WebSocket = None):
-        # print("notify_state_update")
-        if not add_value is None:
-            # add_value = await add_value
-            # print("Sending Add Value:", add_value)
-            # print("Dumping", state_arg_id)
-            # json.dumps({"state_arg_id": state_arg_id})
-            # print("Dumping", add_value, type(add_value))
-            # json.dumps({"add_value": add_value})
-            # print("Actually dumping")
-            dump_get = json.dumps({
-                "type": "state_update",
-                "state_arg_id": state_arg_id,
-                "content_subset": "append",
-                "content": add_value
-            })
-            # print("Sending dump")
-            if not ws is None:
-                await ws.send_text(dump_get)
-        else:
-            # print("Sending Value:", self.state_arguments[state_arg_id])
-            if not ws is None:
-                await ws.send_text(json.dumps({
-                    "type": "state_update",
-                    "state_arg_id": state_arg_id,
-                    "content_subset": "full",
-                    "content": self.state_arguments[state_arg_id]
-                }))
-
     def dump(self):
         return {
-            "title": self.state_arguments["title"],
+            "title": self.state["title"],
             "toolchain_id": self.toolchain_id,
-            "state_arguments": self.state_arguments,
+            "state_arguments": self.state,
             "session_hash_id": self.session_hash,
-            "queue_inputs": self.queued_node_inputs,
             "firing_queue": self.firing_queue
         }
     
-    def load(self, data, toolchains_available : Dict[str, dict]):
+    def load(self, data, toolchains_available : Dict[str, ToolChain]):
+        
+        
         if type(data) is str:
             data = json.loads(data)
+        
         self.toolchain_id = data["toolchain_id"]
         self.toolchain = deepcopy(toolchains_available[data["toolchain_id"]])
+        self.nodes_dict : Dict[str, toolchainNode] = { node.id : node for node in self.toolchain.nodes }
+        
         self.session_hash = data["session_hash_id"]
         self.reset_everything()
-        self.assert_split_inputs()
-        self.state_arguments["title"] = data["title"]
-        self.state_arguments = data["state_arguments"]
-        self.queued_node_inputs = data["queue_inputs"]
+        # self.assert_split_inputs()
+        self.state = data["state_arguments"]
+        self.state["title"] = data["title"]
         self.firing_queue = data["firing_queue"]
-
-# def

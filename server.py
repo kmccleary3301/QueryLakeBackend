@@ -37,7 +37,7 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 from starlette.testclient import TestClient
 
 import re, json
-from typing import AsyncGenerator, Optional, Literal, Tuple, Union, List, AsyncIterator, Dict
+from typing import AsyncGenerator, Optional, Literal, Tuple, Union, List, AsyncIterator, Dict, Awaitable
 from pydantic import BaseModel
 
 from fastapi import FastAPI, WebSocket, BackgroundTasks
@@ -68,7 +68,8 @@ import torch
 
 from grammar_sampling_functions import get_token_id, get_logits_processor_from_grammar_options
 from math import exp
-from QueryLake.api.toolchains import ToolchainSession
+# from QueryLake.api.toolchains import ToolchainSession
+from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.api.hashing import random_hash
 import openai
 
@@ -76,11 +77,15 @@ import pgvector
 from pydantic import BaseModel
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
 from QueryLake.models.prompt_construction import construct_chat_history
+from QueryLake.typing.toolchains import *
 
 from FlagEmbedding import FlagReranker
 import math
 
 from sqlalchemy import util
+
+
+
 
 # from sqlmodel.sql.expression import Select
 # from sqlalchemy.engine.result import TupleResult
@@ -413,13 +418,13 @@ class RerankerDeployment:
 class UmbrellaClass:
     def __init__(self,
                  configuration: Config,
-                 toolchains: Dict[str, dict],
+                 toolchains: Dict[str, ToolChain],
                  llm_handles: Dict[str, DeploymentHandle],
                  embedding_handle: DeploymentHandle,
                  rerank_handle: DeploymentHandle):
         
         self.config : Config = configuration
-        self.toolchain_configs : Dict[str, dict] = toolchains
+        self.toolchain_configs : Dict[str, ToolChain] = toolchains
         # self.llm_handle = llm_handle.options(
         #     # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
         #     stream=True,
@@ -468,7 +473,7 @@ class UmbrellaClass:
     async def stream_results(self, 
                              results_generator: DeploymentResponseGenerator,
                              encode_output : bool = False,
-                             on_new_token: Callable[[str], None] = None) -> AsyncGenerator[bytes, None]:
+                             on_new_token: Awaitable[Callable[[str], None]] = None) -> AsyncGenerator[bytes, None]:
         
         num_returned, tokens_returned = 0, []
         async for request_output in results_generator:
@@ -477,10 +482,12 @@ class UmbrellaClass:
             text_output = text_outputs[0][num_returned:]
             ret = {"text": text_output}
             if not on_new_token is None:
+                
                 if inspect.iscoroutinefunction(on_new_token):
                     await on_new_token(text_output)
                 else:
                     on_new_token(text_output)
+                
             if encode_output:
                 yield (json.dumps(ret) + "\n").encode("utf-8")
             else:
@@ -492,13 +499,17 @@ class UmbrellaClass:
     async def llm_call(self,
                        auth : AuthType, 
                        model_parameters : dict,
-                       on_new_token: Callable[[str], None] = None):
+                       stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
         
         # print("Calling LLM with:", json.dumps(model_parameters, indent=4))
         
         (user, user_auth) = api.get_user(self.database, auth)
         assert "model_choice" in model_parameters, "Model choice not specified"
         model_choice = model_parameters.pop("model_choice")
+        
+        on_new_token = None
+        if not stream_callables is None and "output" in stream_callables:
+            on_new_token = stream_callables["output"]
         
         # print("LLM Call 1")
         assert model_choice in self.llm_handles, "Model choice not available"
@@ -558,44 +569,6 @@ class UmbrellaClass:
             except:
                 pass
         return {"output": "".join(response), "token_count": len(response)}
-    
-    # async def run_llm_new(self,
-    #                       auth : AuthType,
-    #                       history: list,
-    #                       model_settings : dict = None,
-    #                       model_choice : str = None,
-    #                       collection_hash_ids : list = None,
-    #                       context : list = None,
-    #                       web_search : bool = False,
-    #                       organization_hash_id : str = None,
-    #                       on_new_token: Callable[[str], None] = None):
-    #     """
-    #     Returns a json with the following fields:
-    #     `output`: the full output text of the LLM
-    #     `token_count`: the full count of tokens generated
-    #     """
-    #     user = api.get_user(self.database, **auth)
-        
-    #     model_choice = model_choice.split("/")
-    #     if len(model_choice) > 1:
-    #         provider = model_choice[0]
-    #         if provider == "openai":
-    #             result = await self.openai_llm_call(
-    #                 api_kwargs = user.openai_api_keys,
-    #                 model_choice = model_choice[1],
-    #                 chat_history = history,
-    #                 model_parameters = model_settings,
-    #                 on_new_token = on_new_token
-    #             )
-            
-    #         model_choice = model_choice[0]
-    #     else:
-    #         result = await self.llm_call(
-    #             model_parameters = model_settings,
-    #             llm_handle = self.llm_handle,
-    #             on_new_token = on_new_token
-    #         )
-    #     return result
     
     def api_function_getter(self, function_name):
         if function_name == "llm":
@@ -740,6 +713,7 @@ class UmbrellaClass:
                 true_args = clean_function_arguments_for_api({
                     "database": self.database,
                     "text_models_callback": self.text_models_callback,
+                    "toolchains_available": self.toolchain_configs,
                     "public_key": global_public_key,
                     "server_private_key": global_private_key,
                     "toolchain_function_caller": self.api_function_getter,
@@ -813,18 +787,6 @@ class UmbrellaClass:
         the new id to the websocket via `toolchain/file_upload_event_call`.
         """
         
-
-        
-        
-       
-        
-        
-        # system_args = {
-        #     "database": self.database,
-        #     "public_key": global_public_key,
-        #     "server_private_key": global_private_key,
-        #     "toolchain_function_caller": self.api_function_getter,
-        # }
         
         system_args = {
             "database": self.database,
@@ -871,7 +833,7 @@ class UmbrellaClass:
                     
                     result_message = {}
                     
-                    
+                    print("\n\n\n\n\n\n\n\n\nRUNNING TOOLCHAIN\n\n")
                     # Make sure session is in system args
                     if not toolchain_session is None and not "session" in system_args:
                         system_args["session"] = toolchain_session
@@ -894,10 +856,10 @@ class UmbrellaClass:
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.create_toolchain_session)
                         toolchain_session = api.create_toolchain_session(**true_args)
-                        result_message.update({
+                        result = {
                             "success": True,
                             "toolchain_session_id": toolchain_session.session_hash
-                        })
+                        }
                     elif command == "toolchain/file_upload_event_call":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
                         result = await api.toolchain_file_upload_event_call(**true_args)
@@ -910,13 +872,13 @@ class UmbrellaClass:
                         # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
                         result = await api.toolchain_event_call(**true_args)
                         # print("RESULT AT EVENT:", result)
-                        
                     
-                    await ws.send_text((json.dumps(result_message)).encode("utf-8"))
+                    
+                    await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
                     del result_message
                     generate = {"STOP_GENERATION": False}
-                    
+                    print("\n\n\n\n\n\n\n\n\n")
                     # await self.llm_call(request_dict, ws)
                 
                 except WebSocketDisconnect:
@@ -956,7 +918,7 @@ for toolchain_file in toolchain_files_list:
     with open("toolchains/"+toolchain_file, 'r', encoding='utf-8') as f:
         toolchain_retrieved = json.loads(f.read())
         f.close()
-    TOOLCHAINS[toolchain_retrieved["id"]] = toolchain_retrieved
+    TOOLCHAINS[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 for model_entry in GLOBAL_CONFIG.models:

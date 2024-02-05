@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 from ..database import sql_db_tables
 from typing import Dict, List
 from ..typing.config import Model
+from ..typing.toolchains import ToolChain
 
 # from sqlmodel import Session, select, and_
 
@@ -75,23 +76,25 @@ def add_models_to_database(database, models : List[Model]) -> None:
             pass
     
 def add_toolchains_to_database(database : Session,
-                               toolchains : Dict[str, dict]) -> None:
+                               toolchains : Dict[str, ToolChain]) -> None:
     for toolchain_id, toolchain_content in toolchains.items():
-        try:
-            find_existing_toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).all()
-            if len(find_existing_toolchain) > 0:
-                continue
-
-            new_toolchain = sql_db_tables.toolchain(
-                toolchain_id=toolchain_id,
-                title=toolchain_content["name"],
-                category=toolchain_content["category"],
-                content=json.dumps(toolchain_content, indent=4)
-            )
-            # print("Adding toolchain to db:", new_toolchain.__dict__)
-
-            database.add(new_toolchain)
+        
+        find_existing_toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).all()
+        if len(find_existing_toolchain) > 0:
+            find_existing_toolchain[0].title = toolchain_content.name
+            find_existing_toolchain[0].category = toolchain_content.category
+            find_existing_toolchain[0].content = json.dumps(toolchain_content.dict(), indent=4)
             database.commit()
-        except:
-            pass
+            continue
+
+        new_toolchain = sql_db_tables.toolchain(
+            toolchain_id=toolchain_id,
+            title=toolchain_content.name,
+            category=toolchain_content.category,
+            content=json.dumps(toolchain_content.dict(), indent=4)
+        )
+        # print("Adding toolchain to db:", new_toolchain.__dict__)
+
+        database.add(new_toolchain)
+        database.commit()
     return

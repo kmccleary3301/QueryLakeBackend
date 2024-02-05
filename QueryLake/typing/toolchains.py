@@ -83,63 +83,79 @@ class valueFromBranchingState(BaseModel):
     """
     type : Optional[Literal["valueFromBranchingState"]] = "valueFromBranchingState"
     route: "staticRoute"
-    dimension: int
+    # dimension: int
 
 
 
+class rootActionType(BaseModel):
+    """
+    This is the parent class for all the action types.
+    It's only here for reusage of the condition field.
+    """
+    condition: Optional[Union["Condition", "conditionBasic"]] = None
 
-
-class createAction(BaseModel):
-    type : Optional[Literal["createAction"]] = "createAction"
-    initialValue: Optional[Union[Dict, List]] = None # If None, then we use the given value.
-    insertions: Optional[List[List["sequenceAction"]]] = []
-    route: "staticRoute"
-
-class deleteAction(BaseModel):
-    type : Optional[Literal["deleteAction"]] = "deleteAction"
-    route: "staticRoute"
+class createAction(rootActionType):
+    """
+    This will create a new object in the toolchain state, or modify an existing one.
+    This will be created at the given route within the current working directory/route.
     
-class updateAction(BaseModel):
+    
+    The logic on this is probably one of the craziest ones, because you can construct the object
+    with `valueObj` strewn about wherever via the `insertion_values` and `insertions` fields.
+    """
+    
+    type : Optional[Literal["createAction"]] = "createAction"
+    initialValue: Optional["valueObj"] = None # If None, then we use the given value.
+    insertion_values: Optional[List[Union["valueObj", Literal[None]]]] = [] # Use None when you want to use the given value.
+    insertions: Optional[List[List["staticRouteElementType"]]] = []
+    route: Optional["staticRoute"] = [] # If None, assert the current object in focus is a list and append to it.
+
+class deleteAction(rootActionType):
+    """
+    Delete object at route or multiple routes.
+    
+    Using `routes` doesn't work at the moment.
+    """
+    type : Optional[Literal["deleteAction"]] = "deleteAction"
+    route: Optional["staticRoute"] = None
+    routes: Optional[List["staticRoute"]] = None
+    
+class updateAction(rootActionType):
     type : Optional[Literal["updateAction"]] = "updateAction"
     route: "staticRoute"
-    value: "valueObj"
+    value: Optional["valueObj"] = None
     
-class appendAction(BaseModel):
+class appendAction(rootActionType):
     """
     Value is alread provided, but we can initialize an object to make changes to in place of it.
     """
     type : Optional[Literal["appendAction"]] = "appendAction"
     route : "staticRoute"
-    initialValue: Optional[Any] = None # If None, then we use the given value.
-    sequenceActions: Optional[List["sequenceAction"]] = []
+    value: Optional["valueObj"] = None # If None, then we use the given value.
+    # sequenceActions: Optional[List["sequenceAction"]] = []
     
-    
-class operatorAction(BaseModel):
+class operatorAction(rootActionType):
     """
     Value is alread provided, but we can initialize an object to make changes to in place of it.
     """
     type : Optional[Literal["operatorAction"]] = "operatorAction"
     action: Literal["+=", "-="]
-    target: "staticRoute" 
-
-
-class deleteListElementsAction(BaseModel):
-    type : Optional[Literal["deleteListElementsAction"]] = "deleteListElementsAction"
-    route : Optional["staticRoute"] = []
-    indices: List["staticRouteElementType"]
-
-class insertListElementAction(BaseModel):
-    type : Optional[Literal["insertListElementsAction"]] = "insertListElementsAction"
-    route : Optional["staticRoute"] = []
-    index: "staticRouteElementType"
     value: Optional["valueObj"] = None # If None, then we use the given value.
+    route: "staticRoute" 
 
+# Completely unnecessary as deleteAction supports multiple routes.
+# class deleteListElementsAction(BaseModel):
+#     type : Optional[Literal["deleteListElementsAction"]] = "deleteListElementsAction"
+#     route : Optional["staticRoute"] = []
+#     indices: List["staticRouteElementType"]
 
+# class insertListElementAction(rootActionType):
+#     type : Optional[Literal["insertListElementsAction"]] = "insertListElementsAction"
+#     route : Optional["staticRoute"] = []
+#     index: "staticRouteElementType"
+#     value: Optional["valueObj"] = None # If None, then we use the given value.
 
-
-
-
-class backOut(BaseModel):
+class backOut(rootActionType):
     """
     Within sequenceActions, this is equivalent to a "cd ../" command in bash.
     The count represents the number of times to go back.
@@ -147,7 +163,7 @@ class backOut(BaseModel):
     type : Optional[Literal["backOut"]] = "backOut"
     count : Optional[int] = 1
 
-class insertValue(BaseModel):
+class insertAction(rootActionType):
     """
     TODO: Logic not quite clear. Needs some of the actions of `sequenceAction`, but
     functionality is different as the value is already known and provided.
@@ -158,13 +174,16 @@ class insertValue(BaseModel):
     """
     type : Optional[Literal["insertSequenceAction"]] = "insertSequenceAction"
     route : "staticRoute"
+    replace: Optional[bool] = True
 
-valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput]
-staticRouteBasicElementType = Union[str, int]
+valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput, valueFromBranchingState]
+staticRouteBasicElementType = Union[int, str]
 staticRouteBasic = List[staticRouteBasicElementType]
-staticRouteElementType = Union[str, int, indexRouteRetrievedNew, valueFromBranchingState, backOut]
+
+# It actually seems to matter that int be before string, because otherwise it converts the int to a string.
+staticRouteElementType = Union[int, str, indexRouteRetrievedNew, valueFromBranchingState]
 staticRoute = List[staticRouteElementType]
-sequenceAction = Union[staticRouteElementType, createAction, deleteAction, updateAction, appendAction, operatorAction, backOut]
+sequenceAction = Union[staticRouteElementType, createAction, updateAction, appendAction, deleteAction, operatorAction, backOut]
 
 
 
@@ -174,18 +193,17 @@ sequenceAction = Union[staticRouteElementType, createAction, deleteAction, updat
 
 
 
-class feedConditionBasic(BaseModel):
+class conditionBasic(BaseModel):
     """
     Detail a condition on which a feedMapping should be executed.
     """
-    variableOne: "valueObj"
+    variableOne: Optional["valueObj"] = None # Use a provided variable or value.
     variableTwo: "valueObj"
-    operator: Literal["==", "!=", ">", "<", ">=", "<=", "in", "not in", "is", "is not", "is instance"]
+    operator: Literal["==", "!=", ">", "<", ">=", "<=", "in", "not in", "is", "is not"]
 
-class feedCondition(BaseModel):
-    type: Optional[Literal["singular", "and", "or"]] = "singular"
-    statement: Union[feedConditionBasic, List[Union["feedCondition", feedConditionBasic]]]
-
+class Condition(BaseModel):
+    type: Optional[Literal["singular", "and", "or", "not"]] = "singular"
+    statement: Union[conditionBasic, List[Union["Condition", conditionBasic]]]
 
 class feedMappingAtomic(BaseModel):
     """
@@ -193,15 +211,14 @@ class feedMappingAtomic(BaseModel):
     Output mapping from a node to a destination.
     """
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
-    sequence: Optional[List[sequenceAction]] = []
+    sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
     # getFrom: valueObj
-    sequenceInDestination: Optional[List[sequenceAction]] = []
+    # sequenceInDestination: Optional[List[sequenceAction]] = []
     stream: Optional[bool] = False
     store: Optional[bool] = False
-    
-    
-    # condition: ... # Do this later
-    
+
+    condition: Optional[Union[Condition, conditionBasic]] = None
+
 
 # The following five classes are used to shorten the syntax in getting values in feedMappings.
 # They all have different retrieval field names, so the logic is non-ambiguous and allows for flexibility in choices.
@@ -227,12 +244,14 @@ class feedMappingOutputValue(feedMappingAtomic):
     getFromOutputs: getNodeOutput
 
 
+# The ordering here actually caused a massive headache. It seems that the order of the classes
+# is a defaulting order, and it's checking is limited.
 feedMapping = Union[
-    feedMappingOriginal, 
-    feedMappingStaticValue, 
-    feedMappingStateValue, 
+    feedMappingOutputValue,
     feedMappingInputValue, 
-    feedMappingOutputValue
+    feedMappingStateValue, 
+    feedMappingStaticValue, 
+    feedMappingOriginal, 
 ]
 
     
@@ -243,12 +262,13 @@ class nodeInputArgument(BaseModel):
     Value is statically provided.
     """
     key: str
+    
+    initalValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None
     
     
-    initalValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
     sequence: Optional[List[sequenceAction]] = []
     
     optional: Optional[bool] = False
@@ -281,7 +301,6 @@ class displayConfiguration(BaseModel):
     max_files: Optional[int] = 0
     enable_rag: Optional[bool] = False 
 
-
 class toolchainNode(BaseModel):
     """
     This is a node within the toolchain. It has a unique ID and a sequence of actions.
@@ -292,6 +311,7 @@ class toolchainNode(BaseModel):
     is_event: Optional[bool] = False
     api_function: Optional[str] = None
     
+    # arguments: Optional[List[str]] = []
     
     input_arguments: Optional[List[nodeInputArgument]] = []
     
@@ -317,18 +337,23 @@ class ToolChain(BaseModel):
 
 
 
+
 stateValue.update_forward_refs()
 getNodeInput.update_forward_refs()
 getNodeOutput.update_forward_refs()
 indexRouteRetrieved.update_forward_refs()
 valueFromBranchingState.update_forward_refs()
 
+# valueObj.update_forward_refs()
+
 createAction.update_forward_refs()
 deleteAction.update_forward_refs()
 updateAction.update_forward_refs()
 appendAction.update_forward_refs()
-deleteListElementsAction.update_forward_refs()
-insertListElementAction.update_forward_refs()
+# deleteListElementsAction.update_forward_refs()
+# insertListElementAction.update_forward_refs()
+operatorAction.update_forward_refs()
+insertAction.update_forward_refs()
 
 chatWindowMapping.update_forward_refs()
 
