@@ -70,7 +70,7 @@ class ToolchainSession():
         self.entry_called = False
         self.node_carousel = {}
         # self.state_arguments = {"session_hash": self.session_hash}
-        self.state : dict = self.toolchain.initial_state
+        self.state : dict = deepcopy(self.toolchain.initial_state)
         
         if not "title" in self.state:
             self.state["title"] = self.toolchain.name

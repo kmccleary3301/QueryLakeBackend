@@ -818,7 +818,6 @@ class UmbrellaClass:
                     auth : AuthType = arguments_websocket["auth"]
                     arguments : dict = arguments_websocket["arguments"]
                     
-                    
                     arguments.update({"auth": auth})
                     
                     assert command in [
@@ -832,18 +831,13 @@ class UmbrellaClass:
                     
                     (user, user_auth) = api.get_user(self.database, auth)
                     
-                    
-                    
                     result_message = {}
                     
-                    print("\n\n\n\n\n\n\n\n\nRUNNING TOOLCHAIN\n\n")
                     # Make sure session is in system args
-                    if not toolchain_session is None and not "session" in system_args:
-                        system_args["session"] = toolchain_session
-                        # print("Added session to system args")
-                        # print(list(system_args.keys()))
-                    elif toolchain_session is None and "session" in system_args:
-                        del system_args["session"]
+                    # if not toolchain_session is None and not "session" in system_args:
+                    #     system_args["session"] = toolchain_session
+                    # elif toolchain_session is None and "session" in system_args:
+                    #     del system_args["session"]
                     
                     
                     if command == "toolchain/load":
@@ -852,7 +846,9 @@ class UmbrellaClass:
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
                         toolchain_session : ToolchainSession = api.fetch_toolchain_session(**true_args)
-                        system_args["session"] = toolchain_session
+                        # system_args["session"] = toolchain_session
+                    
+                    
                     elif command == "toolchain/create":
                         if not toolchain_session is None:
                             api.save_toolchain_session(self.database, toolchain_session)
@@ -864,20 +860,21 @@ class UmbrellaClass:
                             "toolchain_session_id": toolchain_session.session_hash,
                             "toolchain_state": toolchain_session.state,
                         }
+                    
                     elif command == "toolchain/file_upload_event_call":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
-                        result = await api.toolchain_file_upload_event_call(**true_args)
+                        result = await api.toolchain_file_upload_event_call(**true_args, session=toolchain_session)
+                    
                     elif command == "toolchain/entry":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
-                        result = await api.toolchain_entry_call(**true_args)
+                        result = await api.toolchain_entry_call(**true_args, session=toolchain_session)
+                    
                     elif command == "toolchain/event":
                         # print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
                         # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
-                        result = await api.toolchain_event_call(**true_args)
+                        result = await api.toolchain_event_call(**true_args, session=toolchain_session)
                         # print("RESULT AT EVENT:", result)
-                    
-                    
                     
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
@@ -900,9 +897,7 @@ class UmbrellaClass:
                 print("Unloading Toolchain")
                 toolchain_session.write_logs()
                 toolchain_session = None
-                if "session" in system_args:
-                    del system_args["session"]
-                    del toolchain_session
+                del toolchain_session
     
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
