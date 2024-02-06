@@ -169,10 +169,7 @@ class UmbrellaClass:
             text_output = text_outputs[0][num_returned:]
             ret = {"text": text_output}
             
-            print(ret)
-            
             if not on_new_token is None:
-                print("CALLING ON_NEW_TOKEN")
                 if inspect.iscoroutinefunction(on_new_token):
                     await on_new_token(text_output)
                 else:
@@ -544,7 +541,7 @@ class UmbrellaClass:
                         result = {
                             "success": True,
                             "toolchain_session_id": toolchain_session.session_hash,
-                            "toolchain_state": toolchain_session.state,
+                            "state": toolchain_session.state,
                         }
                     
                     elif command == "toolchain/file_upload_event_call":

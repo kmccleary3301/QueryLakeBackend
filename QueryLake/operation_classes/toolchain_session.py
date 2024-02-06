@@ -76,7 +76,7 @@ class ToolchainSession():
         self.log.append(string_make)
     
     async def send_websocket_msg(self, message : json, ws : WebSocket = None):
-        self.log_event("WEBSOCKET MESSAGE", message)
+        # self.log_event("WEBSOCKET MESSAGE", message)
         
         if not ws is None:
             await ws.send_text(safe_serialize(message))
@@ -124,7 +124,7 @@ class ToolchainSession():
             
             assert feed_map.destination == "<<STATE>>", f"Streaming feed map \'{feed_map.id}\' does not have destination <<STATE>>"
             
-            random_streaming_id = random_hash()
+            random_streaming_id = random_hash()[:16]
             
             # self.state = await self.run_feed_map_on_object(target_object=self.state, feed_map=feed_map, **state_args)    
             self.state, new_routes = run_sequence_action_on_object(self.state, 
@@ -141,19 +141,28 @@ class ToolchainSession():
             }, ws)
             
             async def update_state_with_streaming_output(value):
-                print("WOWOWOWOW", value)
-                self.log_event("STREAM UPDATE", {
-                    "type": "stream_output",
-                    "stream_id": random_streaming_id,
-                    "value": value
-                })
+                # self.log_event("STREAM UPDATE", {
+                #     "type": "stream_output",
+                #     "stream_id": random_streaming_id,
+                #     "value": value
+                # })
                 await self.send_websocket_msg({
                     "type": "stream_output",
                     "stream_id": random_streaming_id,
                     "value": value
                 }, ws)
-                for route in new_routes:
-                    self.state = insert_in_static_route_global(self.state, route, value, **state_args, append=True)
+                for route_direct in new_routes:
+                    # previous_state_tmp = deepcopy(self.state)
+                    
+                    self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=True)
+                    # self.log_event("STREAM UPDATE AT ROUTE", {
+                    #     "type": "stream_output",
+                    #     "stream_id": random_streaming_id,
+                    #     "route": route_direct,
+                    #     "value": value,
+                    #     "previous_state": previous_state_tmp,
+                    #     "new_state": self.state
+                    # })
             
             # Use the first route index as the id
             # Assuming only top-level results are streamed.
@@ -162,7 +171,8 @@ class ToolchainSession():
             streaming_callables[callable_index] = update_state_with_streaming_output
 
         self.log_event("STREAM CALLABLES CREATED", {
-            "streaming_callables": streaming_callables
+            "streaming_callables": streaming_callables,
+            "state": self.state
         })
         
         return self.state, streaming_callables
@@ -319,17 +329,28 @@ class ToolchainSession():
         """
         Notify the websocket of the difference between the previous and current state.
         """
-        append_state, update_state = dict_diff_append_and_update(current_state, previous_state)
+        self.log_event("STATE DIFF CALL ENTERED", {})
+        
+        append_routes, append_state, update_state = dict_diff_append_and_update(current_state, previous_state)
         delete_state = dict_diff_deleted(previous_state, current_state)
-        if any([(append_state != {}), (update_state != {}), (delete_state != [])]):
+        
+        update_state_values = {
+            "append_routes": append_routes,
+            "append_state": append_state,
+            "update_state": update_state,
+            "delete_state": delete_state
+        }
+        
+        self.log_event("STATE DIFFERENCE NOTIFICATION", {
+            "state_diff": update_state_values
+        })
+        
+        if any([(len(v) > 0) for v in update_state_values.values()]):
             await self.send_websocket_msg({
                 "type": "state_diff",
-                **{k: v for k, v in{
-                    "append_state": append_state,
-                    "update_state": update_state,
-                    "delete_state": delete_state
-                }.items() if len(v) > 0}
+                **{k: v for k, v in update_state_values.items() if len(v) > 0}
             }, ws)
+            
     
     async def run_node(self,
                        node : toolchainNode, 
@@ -393,7 +414,9 @@ class ToolchainSession():
             node_outputs = {}
         else:
             self.state, stream_callables = await self.create_streaming_callables(node, state_kwargs, ws)
-            self.notify_ws_state_difference(early_state_reference, self.state, ws)
+            
+            self.log_event("STATE DIFF CALL STARTED", {})
+            await self.notify_ws_state_difference(early_state_reference, self.state, ws)
             
             get_function = self.function_getter(node.api_function)
             node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
@@ -420,10 +443,13 @@ class ToolchainSession():
             # Feed to state case.
             elif feed_map.destination == "<<STATE>>":
                 
+                if feed_map.stream:
+                    continue
                 self.state = await self.run_feed_map_on_object(target_object=self.state, **feed_map_args)
                 
                 # append_state, update_state = dict_diff_append_and_update(self.state.copy(), previous_state.copy())
                 # delete_state = dict_diff_deleted(previous_state.copy(), self.state.copy())
+                
                 
                 self.log_event("UPDATED STATE WITH FEED MAP", {
                     "node_id": node.id,
@@ -438,8 +464,6 @@ class ToolchainSession():
                     if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
                         self.firing_queue[feed_map.destination] = {}
                     self.firing_queue[feed_map.destination] = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], **feed_map_args)
-                elif feed_map.stream:
-                    continue
                 else:
                     node_argument_templates[feed_map.destination] = await self.run_feed_map_on_object(target_object=node_argument_templates.get(feed_map.destination, {}), **feed_map_args)
                     

@@ -3,6 +3,22 @@ from copy import deepcopy, copy
 from typing import Callable, Any, List, Dict, Union, Awaitable
 from ..typing.toolchains import *
 
+
+def append_in_route(object_for_static_route : Union[list, dict], route : List[Union[str, int]], value : Any) -> Union[list, dict]:
+    """
+    Insert a value into an object using a list of strings and ints.
+    """
+    
+    if len(route) > 0:
+        object_for_static_route[route[0]] = append_in_route(object_for_static_route[route[0]], route[1:], value)
+    else:
+        if isinstance(object_for_static_route, list):
+            object_for_static_route.append(value)
+        else:
+            object_for_static_route += value
+    
+    return object_for_static_route
+
 def retrieve_value_from_obj(input_dict : Union[list, dict], 
                             directory : Union[str, List[str]]):
     try:
@@ -179,10 +195,14 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
         
     
     if len(route) > 1:
+        # Recursively call insert_in_static_route_global.
+        
         next_directory, routes_evaluated_tmp = traverse_static_route_global(object_for_static_route, [route[0]], **state_kwargs)
-        object_for_static_route[route[0]], routes_recurrent_evaluated_tmp = insert_in_static_route_global(next_directory, route[1:], value, **state_kwargs, return_indices=True)
+        object_for_static_route[route[0]], routes_recurrent_evaluated_tmp = insert_in_static_route_global(next_directory, route[1:], value, **state_kwargs, append=append, return_indices=True)
         route_evaluated = routes_evaluated_tmp + routes_recurrent_evaluated_tmp
     else:
+        # Single route case.
+        
         if isinstance(object_for_static_route, list):
             print("LIST", object_for_static_route, route[0])
             
@@ -191,7 +211,7 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
                 
                 # TODO: Resolve route to static strings and ints.
                 route_evaluated = route + [len(object_for_static_route)]
-                print("Appending to list", object_for_static_route, value)
+                # print("Appending to list", object_for_static_route, value)
                 object_for_static_route.append(value)
                 
         else:
@@ -202,10 +222,16 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
             route_evaluated = [route_last]
             
             if append:
+                # print("Appending to list", [object_for_static_route[route_last], value])
+                
                 if isinstance(object_for_static_route[route_last], list):
                     object_for_static_route[route_last].append(value)
                 else:
+                    
+                    
                     object_for_static_route[route_last] += value
+                    
+                # print("Appending to list done", [object_for_static_route[route_last], value])
             else:
                 object_for_static_route[route_last] = value
     
@@ -263,25 +289,30 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             current_indices += new_indices
         
         elif isinstance(action, createAction):
+            
+            # TODO: Thoughly review here to make sure the routes retrieved are always correct.
+            
             if not action.initialValue is None:
                 initial_created_obj, use_provided = get_value_obj_global(action.initialValue, **state_kwargs), False
             else:
                 initial_created_obj, use_provided = provided_object, True
             
+            object_in_focus, insertion_routes_tmp = insert_in_static_route_global(object_in_focus, action.route, initial_created_obj, **state_kwargs, return_indices=True)
+            
             for s_list_i, insertion_route in enumerate(action.insertions):
                 passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
                 initial_created_obj, insertion_routes_tmp = insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs, return_indices=True)
                 if action.insertion_values[s_list_i] is None:
-                    # TODO: action route here must be evaluated to static strings and ints.
-                    routes_for_provided_object.append(current_indices + action.route + insertion_routes_tmp)
+                    routes_for_provided_object.append(current_indices + insertion_routes_tmp + insertion_routes_tmp)
             
-            object_in_focus, insertion_routes_tmp = insert_in_static_route_global(object_in_focus, action.route, initial_created_obj, **state_kwargs, return_indices=True)
             if use_provided:
-                # TODO: action route here must be evaluated to static strings and ints.
-                routes_for_provided_object.append(current_indices + action.route + insertion_routes_tmp)
+                routes_for_provided_object.append(current_indices + insertion_routes_tmp + insertion_routes_tmp)
             object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
         
         elif isinstance(action, appendAction): # Same as createAction, but appends to a list at the route.
+            
+            # TODO: Thoughly review here to make sure the routes retrieved are always correct.
+            
             if not action.initialValue is None:
                 initial_created_obj, use_provided = get_value_obj_global(action.initialValue, **state_kwargs), False
             else:
@@ -300,7 +331,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 print("GOT TMP ROUTES IN APPEND FROM INSERTION", insertion_routes_tmp)
                 
                 if action.insertion_values[s_list_i] is None:
-                    routes_for_provided_object.append(tmp_indices + [len(object_in_focus_tmp)] + insertion_routes_tmp)
+                    routes_for_provided_object.append(current_indices + tmp_indices + [len(object_in_focus_tmp)] + insertion_routes_tmp)
             
             assert isinstance(object_in_focus_tmp, list), "appendAction used, but the object in focus was not a list"
             object_in_focus_tmp.append(initial_created_obj)
@@ -478,26 +509,30 @@ def dict_diff_append_and_update(d1 : dict, d2 : dict):
     """
     assert isinstance(d1, dict) and isinstance(d2, dict), "dict_diff_append_and_update called with non-dict type"
     
-    diff_append, diff_update = {}, {}
+    diff_append_routes, diff_append, diff_update = [], {}, {}
     for k, v in d1.items():
         if k not in d2:
             if isinstance(v, dict):
-                nested_diff_append, nested_diff_update = dict_diff_append_and_update(v, {})
+                nested_diff_append_routes, nested_diff_append, nested_diff_update = dict_diff_append_and_update(v, {})
                 if nested_diff_append:
                     diff_append[k] = nested_diff_append
+                    for route in nested_diff_append_routes:
+                        diff_append_routes.append([k] + route)
                 if nested_diff_update:
                     diff_update[k] = nested_diff_update
             else:
                 diff_update[k] = v
         elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff_append, nested_diff_update = dict_diff_append_and_update(v, d2[k])
+            nested_diff_append_routes, nested_diff_append, nested_diff_update = dict_diff_append_and_update(v, d2[k])
             
             if nested_diff_append:
                 diff_append[k] = nested_diff_append
+                for route in nested_diff_append_routes:
+                    diff_append_routes.append([k] + route)
             if nested_diff_update:
                 diff_update[k] = nested_diff_update
         elif isinstance(v, (str, list)) and len(v) > len(d2[k]) and v[:len(d2[k])] == d2[k]:
             diff_append[k] = v[len(d2[k]):]
         elif v != d2[k]:
             diff_update[k] = v
-    return diff_append, diff_update
+    return diff_append_routes, diff_append, diff_update

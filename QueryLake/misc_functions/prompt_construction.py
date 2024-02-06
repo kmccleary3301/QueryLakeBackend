@@ -113,8 +113,6 @@ def construct_chat_history(model : Model,
     if chat_history[0].role != "system":
         chat_history = [ChatHistoryEntry(role="system", content=model.default_system_instructions)] + chat_history
     
-    print("CHAT HISTORY", chat_history)
-    
     assert all([entry.role != "system" for entry in chat_history[1:]])
     assert all([entry.role == "user" for entry in chat_history[1::2]])
     assert len(chat_history) % 2 == 0
