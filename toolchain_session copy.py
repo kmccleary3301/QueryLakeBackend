@@ -5,7 +5,7 @@ from QueryLake.typing.toolchains import *
 import time
 
 from QueryLake.misc_functions.toolchain_state_management import *
-from QueryLake.models.prompt_construction import construct_chat_history
+from QueryLakeBackend.QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.config import Config, Model
 
 

@@ -4,7 +4,6 @@ from .user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 from ..database import sql_db_tables
-from ..models.langchain_sse import ThreadedGenerator
 from copy import deepcopy, copy
 from time import sleep
 from .hashing import random_hash

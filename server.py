@@ -24,11 +24,9 @@ import chromadb
 from copy import deepcopy
 import time
 
-from QueryLake.models.langchain_sse import ErrorAsGenerator
 from QueryLake.api import api
 from QueryLake.database import database_admin_operations, encryption, sql_db_tables
-from QueryLake.toolchain_functions import template_functions
-from QueryLake.models.langchain_sse import ThreadedGenerator
+# from QueryLake.toolchain_functions import template_functions
 from threading import Timer
 # from QueryLake.api import toolchains
 
@@ -76,7 +74,7 @@ import openai
 import pgvector
 from pydantic import BaseModel
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
-from QueryLake.models.prompt_construction import construct_chat_history
+from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.toolchains import *
 
 from FlagEmbedding import FlagReranker
@@ -112,7 +110,7 @@ global_public_key, global_private_key = encryption.ecc_generate_public_private_k
 
 # print("Model Loaded")
 
-TEMPLATE_FUNCTIONS = [pair[0] for pair in inspect.getmembers(template_functions, inspect.isfunction)]
+# TEMPLATE_FUNCTIONS = [pair[0] for pair in inspect.getmembers(template_functions, inspect.isfunction)]
 
 
 
@@ -580,10 +578,7 @@ class UmbrellaClass:
             return self.rerank_call
         
         assert function_name in API_FUNCTIONS, "Invalid API Function Called"
-        assert function_name in API_FUNCTIONS or function_name in TEMPLATE_FUNCTIONS, "Function not available"
-        if function_name in API_FUNCTIONS:
-            return getattr(api, function_name)
-        return getattr(template_functions, function_name)
+        return getattr(api, function_name)
     
     @fastapi_app.post("/upload_document")
     async def upload_document_new(self, req : Request, file : UploadFile):
@@ -730,9 +725,7 @@ class UmbrellaClass:
                 
                 print("Type of args_get:", type(args_get))
                 
-                if type(args_get) is ThreadedGenerator:
-                    return EventSourceResponse(args_get)
-                elif type(args_get) is StreamingResponse:
+                if type(args_get) is StreamingResponse:
                     return args_get
                 elif type(args_get) is FileResponse:
                     return args_get
