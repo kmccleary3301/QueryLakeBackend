@@ -15,7 +15,7 @@
                 "top_k": 0,
                 "top_p": 0.9, 
                 "repetition_penalty": 1.15,
-                "stop": ["<|im_end|>"]
+                "stop": [ "<|im_end|>" ]
             },
             "padding": {
                 "system_instruction_wrap": "<|im_start|>system\n{system_instruction}<|im_end|>\n",

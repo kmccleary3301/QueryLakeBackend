@@ -7,7 +7,7 @@ from ..api.single_user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 
-from copy import deepcopy
+from copy import deepcopy, copy
 from time import sleep, time
 from ..api.hashing import random_hash
 from ..api.document import get_file_bytes, get_document_secure
@@ -75,7 +75,6 @@ class ToolchainSession():
         assert isinstance(string_make, str), f"Log event is not a string: {string_make}"
         self.log.append(string_make)
     
-    
     async def send_websocket_msg(self, message : json, ws : WebSocket = None):
         self.log_event("WEBSOCKET MESSAGE", message)
         
@@ -106,15 +105,67 @@ class ToolchainSession():
                     continue
                 self.assert_event_path(target_node)
     
-    def create_streaming_callables(self, 
-                                   node : toolchainNode, 
-                                   assigned_id : str,
-                                   ws : WebSocket = None) -> Dict[str, Awaitable[Callable[[Any], None]]]:
+    async def create_streaming_callables(self, 
+                                         node : toolchainNode,
+                                         state_args : dict,
+                                         ws : WebSocket = None) -> Tuple[dict, Dict[str, Awaitable[Callable[[Any], None]]]]:
         """
         Create a dictionary of callables for streaming outputs to be passed to an API function.
+
+        Outputs new state and a dictionary of callables.
         """
-        pass
-    
+        
+        streaming_callables : Dict[str, Awaitable[Callable[[Any], None]]] = {}
+        
+        for feed_map in node.feed_mappings:
+            
+            if not feed_map.stream:
+                continue
+            
+            assert feed_map.destination == "<<STATE>>", f"Streaming feed map \'{feed_map.id}\' does not have destination <<STATE>>"
+            
+            random_streaming_id = random_hash()
+            
+            # self.state = await self.run_feed_map_on_object(target_object=self.state, feed_map=feed_map, **state_args)    
+            self.state, new_routes = run_sequence_action_on_object(self.state, 
+                                                                   sequence=feed_map.sequence, 
+                                                                   provided_object=feed_map.stream_initial_value, 
+                                                                   **state_args, 
+                                                                   return_provided_object_routes=True)
+            
+            await self.send_websocket_msg({
+                "type": "streaming_output_mapping",
+                "node_id": node.id,
+                "stream_id": random_streaming_id,
+                "routes": new_routes
+            }, ws)
+            
+            async def update_state_with_streaming_output(value):
+                print("WOWOWOWOW", value)
+                self.log_event("STREAM UPDATE", {
+                    "type": "stream_output",
+                    "stream_id": random_streaming_id,
+                    "value": value
+                })
+                await self.send_websocket_msg({
+                    "type": "stream_output",
+                    "stream_id": random_streaming_id,
+                    "value": value
+                }, ws)
+                for route in new_routes:
+                    self.state = insert_in_static_route_global(self.state, route, value, **state_args, append=True)
+            
+            # Use the first route index as the id
+            # Assuming only top-level results are streamed.
+            callable_index = feed_map.getFromOutputs.route[0]
+            
+            streaming_callables[callable_index] = update_state_with_streaming_output
+
+        self.log_event("STREAM CALLABLES CREATED", {
+            "streaming_callables": streaming_callables
+        })
+        
+        return self.state, streaming_callables
     
     def construct_node_run_inputs(self, 
                                   node : toolchainNode, 
@@ -133,6 +184,8 @@ class ToolchainSession():
             "system_args": system_args,
             "state_args": self.state,
         })
+        
+        state_copied_reference = deepcopy(self.state)
         
         if (use_firing_queue) and (not node.is_event) and (self.firing_queue[node.id] != False):
             node_inputs.update(self.firing_queue[node.id].copy())
@@ -171,8 +224,8 @@ class ToolchainSession():
                     "node_input_arg": node_input_arg,
                     "state": self.state
                 })
-                assert node_input_arg.key in self.state, f"State argument \'{node_input_arg.key}\' not provided while firing node {node.id} \n{self.state}"
-                node_inputs[node_input_arg.key] = self.state[node_input_arg.key]
+                assert node_input_arg.key in state_copied_reference, f"State argument \'{node_input_arg.key}\' not provided while firing node {node.id} \n{state_copied_reference}"
+                node_inputs[node_input_arg.key] = state_copied_reference[node_input_arg.key]
                 self.log_event("FOUND STATE INPUT ARG", {
                     "value": node_inputs[node_input_arg.key]
                 })
@@ -262,6 +315,22 @@ class ToolchainSession():
         
         return target_object
     
+    async def notify_ws_state_difference(self, previous_state, current_state, ws : WebSocket = None):
+        """
+        Notify the websocket of the difference between the previous and current state.
+        """
+        append_state, update_state = dict_diff_append_and_update(current_state, previous_state)
+        delete_state = dict_diff_deleted(previous_state, current_state)
+        if any([(append_state != {}), (update_state != {}), (delete_state != [])]):
+            await self.send_websocket_msg({
+                "type": "state_diff",
+                **{k: v for k, v in{
+                    "append_state": append_state,
+                    "update_state": update_state,
+                    "delete_state": delete_state
+                }.items() if len(v) > 0}
+            }, ws)
+    
     async def run_node(self,
                        node : toolchainNode, 
                        node_arguments : dict,
@@ -287,18 +356,16 @@ class ToolchainSession():
         
         await self.send_websocket_msg({
             "type": "node_execution_start",
-            "node_id": node.id,
-            "inputs": node_arguments,
-            "system_args": system_args,
-            "user_args": user_provided_arguments,
-            "existing_user_return_args": user_existing_return_arguments,
+            "node_id": node.id
         }, ws)
+        
+        early_state_reference = deepcopy(self.state)
         
         node_outputs, user_return_arguments, firing_targets = {}, {}, []
         node_argument_templates : Dict[str, dict] = {}
         node_follow_up_firing_queue : List[Tuple[str, dict]] = []
         
-        node_inputs = self.construct_node_run_inputs(node, node_arguments, user_provided_arguments, system_args, use_firing_queue)
+        node_inputs = copy(self.construct_node_run_inputs(node, node_arguments, user_provided_arguments, system_args, use_firing_queue))
         
         await self.send_websocket_msg({
             "type": "node_execution_created_inputs",
@@ -306,6 +373,12 @@ class ToolchainSession():
             "inputs": node_inputs,
         }, ws)
         
+        state_kwargs = {
+            "toolchain_state" : early_state_reference,
+            "node_inputs_state" : node_inputs,
+            "node_outputs_state" : {}
+            # "branching_state" : branching_state       # Figure out branches later
+        }
         
         # Fire the node or assert that it is an event node and the mappings are valid.
         
@@ -319,25 +392,15 @@ class ToolchainSession():
             ]), f"Event node \'{node.id}\' has mappings grabbing outside node outputs, which do not exist since it is an event."
             node_outputs = {}
         else:
-            node_firing_id = random_hash()
-            stream_callables = self.create_streaming_callables(node, node_firing_id, ws)
+            self.state, stream_callables = await self.create_streaming_callables(node, state_kwargs, ws)
+            self.notify_ws_state_difference(early_state_reference, self.state, ws)
+            
             get_function = self.function_getter(node.api_function)
             node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
         
-        state_kwargs = {
-            "toolchain_state" : self.state,
-            "node_inputs_state" : node_inputs,
-            "node_outputs_state" : node_outputs
-            # "branching_state" : branching_state       # Figure out branches later
-        }
+        state_kwargs.update({"node_outputs_state" : node_outputs})
         
         # TODO: is shallow copy sufficient?
-        previous_state = self.state.copy()
-        
-        
-        
-        
-        # await self.send_websocket_msg({"type": "1"}, ws)
         
         for feed_map in node.feed_mappings:
             
@@ -366,17 +429,6 @@ class ToolchainSession():
                     "node_id": node.id,
                     "toolchain_state": self.state,
                 })
-                
-                
-                # if any([(delete_state != []), (append_state != {}), (update_state != {})]):
-                #     await self.send_websocket_msg({
-                #         "type": "state_update",
-                #         "delete": delete_state,
-                #         "append": append_state,
-                #         "update": update_state
-                #     }, ws)
-            
-            # Feed to another node case.
             else:
                 # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
                 
@@ -386,14 +438,14 @@ class ToolchainSession():
                     if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
                         self.firing_queue[feed_map.destination] = {}
                     self.firing_queue[feed_map.destination] = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], **feed_map_args)
+                elif feed_map.stream:
+                    continue
                 else:
                     node_argument_templates[feed_map.destination] = await self.run_feed_map_on_object(target_object=node_argument_templates.get(feed_map.destination, {}), **feed_map_args)
                     
                     
                     # TODO: Need to handle split inputs here.
-                    
-                    
-
+        
         for node_target_id, node_target_args in node_argument_templates.items():
             node_follow_up_firing_queue.append((node_target_id, node_target_args))
         

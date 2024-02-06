@@ -211,6 +211,8 @@ class feedMappingAtomic(BaseModel):
     """
     TODO: Add conditional feeding.
     Output mapping from a node to a destination.
+    
+    Note: if using stream, you must initialize the value (list or str) first, usually via createAction.
     """
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
@@ -218,7 +220,9 @@ class feedMappingAtomic(BaseModel):
     # getFrom: valueObj
     # sequenceInDestination: Optional[List[sequenceAction]] = []
     stream: Optional[bool] = False
-    store: Optional[bool] = False
+    stream_initial_value: Optional[Any] = None # Must be provided if stream is True. Pretty much always an empty string or list.
+    
+    store: Optional[bool] = False # If True, then we store the inputs into the mapped node without firing it.
 
     condition: Optional[Union[Condition, conditionBasic]] = None
 

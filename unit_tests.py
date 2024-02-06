@@ -5,7 +5,7 @@ from QueryLake.typing.toolchains import *
 import time
 
 from QueryLake.misc_functions.toolchain_state_management import *
-from QueryLakeBackend.QueryLake.misc_functions.prompt_construction import construct_chat_history
+from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.config import Config, Model
 
 
@@ -415,14 +415,14 @@ if __name__ == "__main__":
     sequence_2 = [
         {
             "type": "appendAction", 
-            "value": {
+            "initialValue": {
                 "type": "staticValue",
                 "value": {
                     "role": "user"           
-                },
-                "insertion_values": [ None ],
-                "insertions": [ [ "content" ] ]
+                }
             },
+            "insertion_values": [ None ],
+            "insertions": [ [ "content" ] ],
             "route" : [ "chat_history" ]
         }
     ]
@@ -437,18 +437,24 @@ if __name__ == "__main__":
     
     
     start_time = time.time()
-    modification_object_2 = run_sequence_action_on_object(
+    modification_object_2, routes_get = run_sequence_action_on_object(
         target_state,
         target_state,
         inputs_2,
         outputs_2,
         sequence_2,
         init_val_2,
+        return_provided_object_routes=True
     )
+    
     end_time = time.time()
     
     print(json.dumps(modification_object_2, indent=4))
+    print("ROUTES")
+    print(json.dumps(routes_get, indent=4))
     print(f"Time taken: {end_time - start_time}")
+    
+    # Routes should contain ["chat_history", 0, "content"]
     
     chat_history = [
         {
@@ -476,18 +482,18 @@ if __name__ == "__main__":
         #     "content": "The Riemann-Roch theorem was named after Bernhard Riemann and Niels Henrik Abel."
         # }
     ]
-        
-    config_get = Config.parse_file('/home/kyle_m/QueryLake_Development/QueryLakeBackend/config.json')
-    # print(config_get.models)
+    
+    # config_get = Config.parse_file('/home/kyle_m/QueryLake_Development/QueryLakeBackend/config.json')
+    # # print(config_get.models)
 
-    model_get : Model = config_get.models[0]
+    # model_get : Model = config_get.models[0]
 
-    def token_counter(string_in):
-        return 1
+    # def token_counter(string_in):
+    #     return 1
 
-    new_prompt = construct_chat_history(model_get, token_counter, chat_history, 1000)
+    # new_prompt = construct_chat_history(model_get, token_counter, chat_history, 1000)
 
-    print(new_prompt)
+    # print(new_prompt)
     
     
     

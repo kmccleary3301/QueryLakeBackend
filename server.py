@@ -159,14 +159,20 @@ class UmbrellaClass:
                              encode_output : bool = False,
                              on_new_token: Awaitable[Callable[[str], None]] = None) -> AsyncGenerator[bytes, None]:
         
+        if not on_new_token is None:
+            print("ON NEW TOKEN PASSED", on_new_token)
+        
         num_returned, tokens_returned = 0, []
         async for request_output in results_generator:
             text_outputs = [output.text for output in request_output.outputs]
             assert len(text_outputs) == 1
             text_output = text_outputs[0][num_returned:]
             ret = {"text": text_output}
+            
+            print(ret)
+            
             if not on_new_token is None:
-                
+                print("CALLING ON_NEW_TOKEN")
                 if inspect.iscoroutinefunction(on_new_token):
                     await on_new_token(text_output)
                 else:
@@ -201,6 +207,7 @@ class UmbrellaClass:
         on_new_token = None
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
+            print("ON NEW TOKEN PULLED", on_new_token)
         
         assert model_choice in self.llm_handles, "Model choice not available"
         

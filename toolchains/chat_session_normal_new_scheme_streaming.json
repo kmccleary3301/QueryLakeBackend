@@ -1,6 +1,6 @@
 {
-	"name": "Chat",
-    "id": "chat_session_normal",
+	"name": "Chat With Streaming",
+    "id": "chat_session_normal_streaming",
     "category": "General",
 	"display_configuration": {
 		"display_mappings": [
@@ -124,7 +124,9 @@
                     ],
                     "getFromOutputs": {
                         "route": [ "output" ]
-                    }
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
                 }
             ]
         }
