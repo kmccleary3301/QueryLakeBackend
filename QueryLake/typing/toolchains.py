@@ -217,12 +217,15 @@ class feedMappingAtomic(BaseModel):
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
     route: Optional[staticRoute] = None # If not None, we simply store the given value at this route, and ignore the sequence.
-    # getFrom: valueObj
-    # sequenceInDestination: Optional[List[sequenceAction]] = []
     stream: Optional[bool] = False
     stream_initial_value: Optional[Any] = None # Must be provided if stream is True. Pretty much always an empty string or list.
     
     store: Optional[bool] = False # If True, then we store the inputs into the mapped node without firing it.
+    
+    # If defined, we take the target arguments and split them at the given route. 
+    # The route in the stored function inputs is already a list or some iterable, but
+    # The actual queue has this copied with the value replaced with an element in each copy.
+    split_route: Optional["staticRoute"] = None 
 
     condition: Optional[Union[Condition, conditionBasic]] = None
 
@@ -325,8 +328,16 @@ class toolchainNode(BaseModel):
     feed_mappings: Optional[List[feedMapping]] = []
     
     
-    
-    
+
+class startScreenSuggestion(BaseModel):
+    """
+    This defines a displayed suggestion in the window when the user starts a new session.
+    It defines display text, an event node id, and a dictionary of event parameters for the event.
+    """
+    display_text: str
+    event_id: str
+    event_parameters: Optional[Dict[str, Any]] = {}
+
     
 class ToolChain(BaseModel):
     """
@@ -336,6 +347,8 @@ class ToolChain(BaseModel):
     id: str
     category: str
     display_configuration: displayConfiguration
+    
+    suggestions: Optional[List[startScreenSuggestion]] = []
     
     initial_state: Dict[str, Any]
     

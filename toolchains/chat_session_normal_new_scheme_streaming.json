@@ -102,6 +102,12 @@
             "feed_mappings": [
                 {
                     "destination": "<<USER>>",
+                    "sequence": [
+                        {
+                            "type": "createAction", 
+                            "route" : [ "output" ]
+                        }
+                    ],
                     "getFromOutputs": {
                         "route" : [ "output" ]
                     }

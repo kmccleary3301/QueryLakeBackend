@@ -147,9 +147,8 @@ class ToolchainSession():
                 #     "value": value
                 # })
                 await self.send_websocket_msg({
-                    "type": "stream_output",
-                    "stream_id": random_streaming_id,
-                    "value": value
+                    "s_id": random_streaming_id,
+                    "v": value
                 }, ws)
                 for route_direct in new_routes:
                     # previous_state_tmp = deepcopy(self.state)
@@ -264,24 +263,10 @@ class ToolchainSession():
         
         return node_inputs
     
-    async def run_feed_map_on_object(self,
+    
+    async def get_initial_feed_map_obj(self,
                                feed_map : feedMapping,
-                               target_object : dict,
-                               node_arguments : dict, 
-                               user_provided_arguments : dict, 
-                               system_args: dict,
-                               node_outputs : dict,
-                               ws : WebSocket = None) -> dict:
-        """
-        Execute a feed mapping on an object.
-        """
-        
-        state_args = {
-            "toolchain_state": self.state, 
-            "node_inputs_state": node_arguments, 
-            "node_outputs_state": node_outputs
-        }
-        
+                               state_args: dict):
         if hasattr(feed_map, "value") or "value" in feed_map:
             initial_value = feed_map.value
             print("\n\n\n\n\n\n\n\n\n\n GOT VALUE \n\n\n\n\n\n\n\n\n\n")
@@ -307,6 +292,22 @@ class ToolchainSession():
                 "value_obj_type": str(type(value_obj_not_run[0])),
                 "value": initial_value,
             })
+    
+    async def run_feed_map_on_object(self,
+                               feed_map : feedMapping,
+                               target_object : dict,
+                               node_arguments : dict,
+                               node_outputs : dict,
+                               initial_value : Any) -> dict:
+        """
+        Execute a feed mapping on an object.
+        """
+        
+        state_args = {
+            "toolchain_state": self.state, 
+            "node_inputs_state": node_arguments, 
+            "node_outputs_state": node_outputs
+        }
         
         if not feed_map.route is None:
             target_object = insert_in_static_route_global(target_object, feed_map.route, initial_value, **state_args)
@@ -383,7 +384,7 @@ class ToolchainSession():
         early_state_reference = deepcopy(self.state)
         
         node_outputs, user_return_arguments, firing_targets = {}, {}, []
-        node_argument_templates : Dict[str, dict] = {}
+        node_argument_templates : Dict[str, Union[dict, Literal[False]]] = {}
         node_follow_up_firing_queue : List[Tuple[str, dict]] = []
         
         node_inputs = copy(self.construct_node_run_inputs(node, node_arguments, user_provided_arguments, system_args, use_firing_queue))
@@ -418,6 +419,8 @@ class ToolchainSession():
             self.log_event("STATE DIFF CALL STARTED", {})
             await self.notify_ws_state_difference(early_state_reference, self.state, ws)
             
+            early_state_reference = deepcopy(self.state)
+            
             get_function = self.function_getter(node.api_function)
             node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
         
@@ -427,14 +430,26 @@ class ToolchainSession():
         
         for feed_map in node.feed_mappings:
             
+            
+            
+            new_state_args = {
+                "toolchain_state" : self.state,
+                "node_inputs_state" : node_inputs,
+                "node_outputs_state" : node_outputs
+            }
+            
+            init_value = await self.get_initial_feed_map_obj(feed_map, new_state_args)
+            
             feed_map_args = {
                 "feed_map": feed_map,
                 "node_arguments": node_inputs, # Changed from node_arguments
-                "user_provided_arguments": user_provided_arguments,
-                "system_args": system_args,
                 "node_outputs": node_outputs,
-                "ws": ws
+                "initial_value": init_value
             }
+            
+            if not feed_map.condition is None:
+                if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
+                    continue
             
             # Feed to user case.
             if feed_map.destination == "<<USER>>":
@@ -445,6 +460,7 @@ class ToolchainSession():
                 
                 if feed_map.stream:
                     continue
+                
                 self.state = await self.run_feed_map_on_object(target_object=self.state, **feed_map_args)
                 
                 # append_state, update_state = dict_diff_append_and_update(self.state.copy(), previous_state.copy())
@@ -466,15 +482,27 @@ class ToolchainSession():
                     self.firing_queue[feed_map.destination] = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], **feed_map_args)
                 else:
                     node_argument_templates[feed_map.destination] = await self.run_feed_map_on_object(target_object=node_argument_templates.get(feed_map.destination, {}), **feed_map_args)
+                
+                # TODO: Handle split outputs here.
+                if not feed_map.split_route is None:
+                    iterable_output = traverse_static_route_global(node_argument_templates[feed_map.destination], feed_map.split_route, **new_state_args)
+                    for element in iterable_output:
+                        new_args_copy = node_argument_templates[feed_map.destination].copy()
+                        new_args_copy = insert_in_static_route_global(new_args_copy, feed_map.split_route, element, **new_state_args)
+                        node_follow_up_firing_queue((feed_map.destination, new_args_copy))
+                        node_argument_templates[feed_map.destination] = False
                     
+                    pass
                     
-                    # TODO: Need to handle split inputs here.
         
         for node_target_id, node_target_args in node_argument_templates.items():
-            node_follow_up_firing_queue.append((node_target_id, node_target_args))
+            if node_target_args != False:
+                node_follow_up_firing_queue.append((node_target_id, node_target_args))
         
         self.firing_queue[node.id] = False
 
+        await self.notify_ws_state_difference(early_state_reference, self.state, ws)
+        
         await self.send_websocket_msg({
             "type": "node_completion",
             "node_id": node.id,
@@ -551,6 +579,10 @@ class ToolchainSession():
                                                                      ws,
                                                                      user_return_arguments=user_return_arguments)
         
+        self.log_event("RUN NODE FINISHED", {
+            "results": user_return_arguments
+        })
+        
         return user_return_arguments
         
         
@@ -567,18 +599,21 @@ class ToolchainSession():
         # print("event_prop")
         target_event = self.nodes_dict[event_id]
         
-        
-        
         result = await self.run_node_then_forward(target_event,
                                                   {}, 
                                                   input_parameters, 
                                                   system_args,
                                                   ws=ws)
+        
         await self.send_websocket_msg({
             "type": "event_completion",
             "event_id": event_id,
             "output": result
         }, ws)
+        
+        self.log_event("EVENT PROP FINISHED", {
+            "results": result
+        })
         
         return result
     
@@ -619,14 +654,13 @@ class ToolchainSession():
             f.write("\n\n".join(self.log))
             f.close()
     
-    def load(self, data, toolchains_available : Dict[str, ToolChain]):
-        
+    def load(self, data, toolchain: ToolChain):
         
         if type(data) is str:
             data = json.loads(data)
         
         self.toolchain_id = data["toolchain_id"]
-        self.toolchain = deepcopy(toolchains_available[data["toolchain_id"]])
+        self.toolchain = deepcopy(toolchain)
         self.nodes_dict : Dict[str, toolchainNode] = { node.id : node for node in self.toolchain.nodes }
         
         self.session_hash = data["session_hash_id"]

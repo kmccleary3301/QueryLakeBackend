@@ -222,7 +222,18 @@ class UmbrellaClass:
             async for result in self.stream_results(gen, on_new_token=on_new_token):
                 results.append(result)
         
+        strings_to_remove = model_parameters["stop"] if "stop" in model_parameters else []
+        
         text_outputs = "".join(results)
+        
+        # if len(strings_to_remove) > 0:
+        #     # Create a regex pattern that matches any of the strings
+        #     pattern = '|'.join(map(re.escape, strings_to_remove))
+        #     pattern = re.compile(f"[{pattern}]+(.*?)$")
+        #     # Text to remove strings from
+        #     # Remove the strings
+        #     text_outputs = re.sub(pattern, '', text_outputs)
+        
         return {"output": text_outputs, "token_count": len(results)}
     
     async def openai_llm_call(self,
@@ -551,16 +562,19 @@ class UmbrellaClass:
                     elif command == "toolchain/entry":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
                         result = await api.toolchain_entry_call(**true_args, session=toolchain_session)
-                    
+
                     elif command == "toolchain/event":
                         # print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
                         # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
                         result = await api.toolchain_event_call(**true_args, session=toolchain_session)
+                        result = {"event_result": result}
+                        
                         # print("RESULT AT EVENT:", result)
                     
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
+                    
                     del result_message
                     generate = {"STOP_GENERATION": False}
                     print("\n\n\n\n\n\n\n\n\n")

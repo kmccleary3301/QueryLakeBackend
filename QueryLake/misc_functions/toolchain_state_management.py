@@ -533,6 +533,7 @@ def dict_diff_append_and_update(d1 : dict, d2 : dict):
                 diff_update[k] = nested_diff_update
         elif isinstance(v, (str, list)) and len(v) > len(d2[k]) and v[:len(d2[k])] == d2[k]:
             diff_append[k] = v[len(d2[k]):]
+            diff_append_routes.append([k])
         elif v != d2[k]:
             diff_update[k] = v
     return diff_append_routes, diff_append, diff_update
