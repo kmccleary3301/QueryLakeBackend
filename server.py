@@ -212,7 +212,7 @@ class LLMDeploymentClass:
         self.default_model_args = self.model_config.default_parameters
         self.minimum_free_token_space = kwargs.pop("minimum_free_token_space", 2000)
         
-        args = AsyncEngineArgs(**kwargs)
+        args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
         
         self.context_size = args.max_model_len
         

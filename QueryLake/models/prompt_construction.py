@@ -62,7 +62,7 @@ def construct_chat_history_old(max_tokens : int,
     
     chat_history_new, token_counts = [], []
     # for i, entry in enumerate(chat_history[1:]):
-    print("CHAT HISTORY", chat_history)
+    # print("CHAT HISTORY", chat_history)
     
     
     print([i for i in range(len(chat_history), 0, -2)])
@@ -70,18 +70,20 @@ def construct_chat_history_old(max_tokens : int,
     
     
     for i in range(1, len(chat_history), 2):
-        print("I:", i)
+        # print("I:", i)
         
         if i == len(chat_history) - 1:
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
+            # print("ADDING SINGLE:", [new_entry])
         else: 
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)+bot_response_pad.replace("{response}", chat_history[i+1].content)
-        print("ADDING:", [new_entry])
+            # print("ADDING DOUBLE:", [new_entry])
+        # print("ADDING:", [new_entry])
         
         
         token_counts.append(token_counter(new_entry))
         chat_history_new.append(new_entry)
-    chat_history_new, token_counts = chat_history_new[::-1], token_counts[::-1]
+    token_counts = token_counts[::-1]
         # print("%40s %d" % (new_entry[:40], token_counts[-1]))
     # print(max_tokens)
     token_count_total = sys_token_count
@@ -98,8 +100,8 @@ def construct_chat_history_old(max_tokens : int,
     
     final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + bot_response_pad.split("{response}")[0]
 
-    print("FINAL PROMPT")
-    print(final_result)
+    # print("FINAL PROMPT")
+    # print(final_result)
     return final_result
 
 def construct_chat_history(model : Model, 

@@ -5,7 +5,11 @@ from QueryLake.typing.toolchains import *
 import time
 
 from QueryLake.misc_functions.toolchain_state_management import *
+from QueryLake.models.prompt_construction import construct_chat_history
+from QueryLake.typing.config import Config, Model
 
+
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 def dict_diff(d1, d2):
     diff = {}
@@ -445,6 +449,45 @@ if __name__ == "__main__":
     
     print(json.dumps(modification_object_2, indent=4))
     print(f"Time taken: {end_time - start_time}")
+    
+    chat_history = [
+        {
+            "role": "user",
+            "content": "What is the Riemann-Roch theorem?"
+        },
+        {
+            "role": "assistant",
+            "content": "The Riemann-Roch Theorem is a fundamental result in number theory which relates the distribution of prime numbers to certain arithmetic properties of elliptic curves over finite fields. It states that for every positive integer $n$, there exists an even integer $k$ such that the number of primes less than or equal to $\\sqrt{2n}$ with residue class $k\\pmod n$ is equal to the number of elliptic curves defined over $\\mathbb{F}_n$ with discriminant divisible by $(n-1)$ and having a point of order $k$. The theorem has many important applications in cryptography, algebraic geometry, and other areas of mathematics."
+        },
+        {
+            "role": "user",
+            "content": "Who are the two people the Riemann-Roch Theorem is named after?"
+        },
+        {
+            "role": "assistant",
+            "content": "The Riemann-Roch Theorem is a fundamental result in number theory which relates the distribution of prime numbers to certain arithmetic properties of elliptic curves over finite fields. It states that for every positive integer $n$, there exists an even integer $k$ such that the number of primes less than or equal to $\\sqrt{2n}$ with residue class $k\\pmod n$ is equal to the number of elliptic curves defined over $\\mathbb{F}_n$ with discriminant divisible by $(n-1)$ and having a point of order $k$. The theorem has many important applications in cryptography, algebraic geometry, and other areas of mathematics."
+        },
+        {
+            "role": "user",
+            "content": "Who are the two people the Riemann-Roch Theorem is named after?"
+        },
+        # {
+        #     "role": "assistant",
+        #     "content": "The Riemann-Roch theorem was named after Bernhard Riemann and Niels Henrik Abel."
+        # }
+    ]
+        
+    config_get = Config.parse_file('/home/kyle_m/QueryLake_Development/QueryLakeBackend/config.json')
+    # print(config_get.models)
+
+    model_get : Model = config_get.models[0]
+
+    def token_counter(string_in):
+        return 1
+
+    new_prompt = construct_chat_history(model_get, token_counter, chat_history, 1000)
+
+    print(new_prompt)
     
     
     
