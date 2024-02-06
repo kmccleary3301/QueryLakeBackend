@@ -6,15 +6,8 @@ from typing import Annotated, Callable, Any
 import json, os
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
-from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
-from fastapi.middleware.cors import CORSMiddleware
-from QueryLake import instruction_templates
 from fastapi.responses import StreamingResponse
-# from QueryLake.sql_db import User, File, 
-# from sqlmodel import Field, Session, SQLModel, create_engine, select
-# from sqlmodel import Field, Session, SQLModel, create_engine, select
-# from typing import Optional
 from sqlmodel import Session, SQLModel, create_engine, select
 import time
 # import py7zr
@@ -26,9 +19,7 @@ import time
 
 from QueryLake.api import api
 from QueryLake.database import database_admin_operations, encryption, sql_db_tables
-# from QueryLake.toolchain_functions import template_functions
 from threading import Timer
-# from QueryLake.api import toolchains
 
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse, FileResponse, Response
@@ -43,85 +34,31 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse, Response
 from starlette.websockets import WebSocketDisconnect
 
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import AsyncLLMEngine
-from vllm.sampling_params import SamplingParams
-from vllm.utils import random_uuid
-from vllm.outputs import RequestOutput
-from vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
-
-from ray.util import ActorPool
-from ray import serve, remote
+from ray import serve
 from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
-from ray import ObjectRef
 
-
-from lmformatenforcer import JsonSchemaParser
-from lmformatenforcer import CharacterLevelParser
-from lmformatenforcer.integrations.vllm import VLLMLogitsProcessor
-from lmformatenforcer.regexparser import RegexParser
-
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoModel
-import torch
-
-from grammar_sampling_functions import get_token_id, get_logits_processor_from_grammar_options
-from math import exp
-# from QueryLake.api.toolchains import ToolchainSession
-from QueryLake.operation_classes.toolchain_session import ToolchainSession
-from QueryLake.api.hashing import random_hash
 import openai
 
-import pgvector
-from pydantic import BaseModel
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
-from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.toolchains import *
 
-from FlagEmbedding import FlagReranker
-import math
 
-from sqlalchemy import util
-
-
-
-
-# from sqlmodel.sql.expression import Select
-# from sqlalchemy.engine.result import TupleResult
+from QueryLake.operation_classes.toolchain_session import ToolchainSession
+from QueryLake.operation_classes.ray_llm_class import LLMDeploymentClass
+from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
+from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 
 
 fastapi_app = FastAPI(
     # lifespan=lifespan
 )
 
-# origins = ["*"]
-
-# fastapi_app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=origins,
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 ACTIVE_SESSIONS = {}
 
-# GlobalLLMEnsemble = LLMEnsemble(database, GLOBAL_SETTINGS["default_model"], GLOBAL_SETTINGS)
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
 
-
-# print("Model Loaded")
-
-# TEMPLATE_FUNCTIONS = [pair[0] for pair in inspect.getmembers(template_functions, inspect.isfunction)]
-
-
-
 API_FUNCTIONS = [pair[0] for pair in inspect.getmembers(api, inspect.isfunction)]
-# API_FUNCTIONS_ALL = [func for func in API_FUNCTIONS if not re.match(r"__.*?__", func)]
-# print("ALL API_FUNCTIONS")
-# print(json.dumps(sorted(API_FUNCTIONS_ALL), indent=4))
 API_FUNCTIONS = [func for func in API_FUNCTIONS if (not re.match(r"__.*?__", func) and func not in api.excluded_member_function_descriptions)]
-# print("API FUNCTIONS INCLUSIVE")
-# print(json.dumps(sorted(API_FUNCTIONS), indent=4))
-
 API_FUNCTION_DOCSTRINGS = [getattr(api, func).__doc__ for func in API_FUNCTIONS]
 API_FUNCTION_PARAMETERS = [inspect.signature(getattr(api, func)) for func in API_FUNCTIONS]
 API_FUNCTION_HELP_DICTIONARY = {}
@@ -135,7 +72,6 @@ for func in API_FUNCTIONS:
         "description": function_docstring
     }
     API_FUNCTION_HELP_GUIDE += "%s %s\n\n\tDESCRIPTION: %s\n\n\n\n" % (func, function_argument_string, function_docstring)
-
 
 def clean_function_arguments_for_api(system_args : dict, 
                                      user_args : dict, 
@@ -160,256 +96,6 @@ def clean_function_arguments_for_api(system_args : dict,
         if function_args is None or key in function_args:
             synth_args[key] = system_args[key]
     return synth_args
-
-# def toolchain_function_caller(function_name):
-#     assert function_name in API_FUNCTIONS or function_name in TEMPLATE_FUNCTIONS, "Function not available"
-#     if function_name in API_FUNCTIONS:
-#         return getattr(api, function_name)
-#     return getattr(template_functions, function_name)
-
-@serve.deployment(ray_actor_options={"num_gpus": 0.6}, max_replicas_per_node=1)
-class LLMDeploymentClass:
-    def __init__(self,
-                 model_config : Model,
-                 **kwargs):
-        """
-        Construct a VLLM deployment.
-
-        Refer to https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py
-        for the full list of arguments.
-
-        Args:
-            model: name or path of the huggingface model to use
-            download_dir: directory to download and load the weights,
-                default to the default cache dir of huggingface.
-            use_np_weights: save a numpy copy of model weights for
-                faster loading. This can increase the disk usage by up to 2x.
-            use_dummy_weights: use dummy values for model weights.
-            dtype: data type for model weights and activations.
-                The "auto" option will use FP16 precision
-                for FP32 and FP16 models, and BF16 precision.
-                for BF16 models.
-            seed: random seed.
-            worker_use_ray: use Ray for distributed serving, will be
-                automatically set when using more than 1 GPU
-            pipeline_parallel_size: number of pipeline stages.
-            tensor_parallel_size: number of tensor parallel replicas.
-            block_size: token block size.
-            swap_space: CPU swap space size (GiB) per GPU.
-            gpu_memory_utilization: the percentage of GPU memory to be used for
-                the model executor
-            max_num_batched_tokens: maximum number of batched tokens per iteration
-            max_num_seqs: maximum number of sequences per iteration.
-            disable_log_stats: disable logging statistics.
-            engine_use_ray: use Ray to start the LLM engine in a separate
-                process as the server process.
-            disable_log_requests: disable logging requests.
-        """
-        self.model_config = model_config
-        self.padding : Padding = model_config.padding
-        self.default_model_args = self.model_config.default_parameters
-        self.minimum_free_token_space = kwargs.pop("minimum_free_token_space", 2000)
-        
-        args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
-        
-        self.context_size = args.max_model_len
-        
-        self.engine = AsyncLLMEngine.from_engine_args(args)
-        
-        tokenizer_tmp = self.engine.engine.tokenizer
-        
-        self.special_token_ids = tokenizer_tmp.all_special_ids
-        
-        self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
-
-        self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine.tokenizer)
-        
-        print("Test count tokens ->", self.count_tokens("Hello, world!"))
-    
-    def count_tokens(self, input_string : str):
-        return len(self.engine.engine.tokenizer(input_string)["input_ids"])
-    
-    def generator(self, request_dict : dict):
-        
-        if "prompt" in request_dict:
-            prompt = request_dict.pop("prompt")
-        else:
-            chat_history = request_dict.pop("chat_history")
-            prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, self.minimum_free_token_space)
-        
-        print("Prompt:", prompt)
-            
-        request_id = random_uuid()
-        # stream = request_dict.pop("stream", False)
-        
-        grammar_options = request_dict.pop("grammar", None)
-        
-        logits_processor_local = get_logits_processor_from_grammar_options(
-            grammar_options,
-            self.tokenizer_data, 
-            space_tokens=self.space_tokens, 
-            special_ids=self.special_token_ids,
-        )
-        
-        sampling_params = SamplingParams(**request_dict)
-        
-        if not logits_processor_local is None:
-            sampling_params.logits_processors = [logits_processor_local]
-        
-        results_generator = self.engine.generate(prompt, sampling_params, request_id)
-        
-        return results_generator
-
-@serve.deployment
-class EmbeddingDeployment:
-    def __init__(self, model_key: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = AutoModel.from_pretrained(model_key).to(self.device)
-
-    @serve.batch()
-    async def handle_batch(self, inputs: List[List[str]]) -> List[List[List[float]]]:
-        print("Running Embedding 3.1")
-        # print("Our input array has length:", len(inputs))
-
-        # print("Input array:", inputs)
-        
-        batch_size = len(inputs)
-        # We need to flatten the inputs into a single list of string, then recombine the outputs according to the original structure.
-        flat_inputs = [(item, i_1, i_2) for i_1, sublist in enumerate(inputs) for i_2, item in enumerate(sublist)]
-        
-        flat_inputs_indices = [item[1:] for item in flat_inputs]
-        flat_inputs_text = [item[0] for item in flat_inputs]
-        encoded_input = self.tokenizer(flat_inputs_text, padding=True, truncation=True, return_tensors='pt').to(self.device)
-
-        with torch.no_grad():
-            model_output = self.model(**encoded_input)
-            sentence_embeddings = model_output[0][:, 0]
-        
-        sentence_embeddings = torch.nn.functional.normalize(sentence_embeddings, p=2, dim=1)
-        
-        outputs = [[] for _ in range(batch_size)]
-        
-        for i, output in enumerate(sentence_embeddings.tolist()):
-            request_index, input_index = flat_inputs_indices[i]
-            outputs[request_index].append(output)
-            # outputs[item[1]][item[2]] = sentence_embeddings[i].tolist()
-        
-        return outputs
-        # results = self.model(inputs)
-        # return [result[0]["generated_text"] for result in results]
-
-    async def __call__(self, request : Request) -> Response:
-        print("Running Embedding 2.1")
-        request_dict = await request.json()
-        print("Running Embedding 2.2")
-        # return await self.handle_batch(request_dict["text"])
-        return_tmp = await self.handle_batch(request_dict["text"])
-        print("Running Embedding 2.3")
-        return Response(content=json.dumps({"output": return_tmp}))
-    
-    async def run(self, request_dict : dict) -> List[List[float]]:
-        return await self.handle_batch(request_dict["text"])
-        # __doc_define_servable_end__
-
-def modified_sigmoid(x : Union[torch.Tensor, float]):
-    if type(x) == float or type(x) == int:
-        return 100 / (1 + exp(-8 * ((x / 100) - 0.5)))
-    if type(x) == list:
-        x = torch.tensor(x)
-    return 100 * torch.sigmoid(-8 * ((x / 100) - 0.5))
-
-def S(x):
-    # return 1/(1 + torch.exp(-4 * (x - 0.5))) if isinstance(x, torch.Tensor) else 1 / (1 + math.exp(-4 * (x - 0.5)))
-    return torch.sigmoid(4*(x - 0.5)) if isinstance(x, torch.Tensor) else 1 / (1 + math.exp(-4 * (x - 0.5)))
-
-def H(x):
-    return 100 * S(x / 100) if isinstance(x, torch.Tensor) else 100 * S(x / 100)
-
-def F(x):
-    if not isinstance(x, torch.Tensor):
-        x = torch.tensor([x], dtype=torch.float32)
-
-    h_zero = H(0)
-    # h_one = H(100)
-    delta_h = H(x) - h_zero
-    result = delta_h * (100 / (100 - h_zero))
-
-    # If input was a single value, convert back to scalar output
-    result = torch.minimum(result, torch.full(result.shape, 100.0))
-    
-    if len(result.shape) == 0:
-        result = float(result)
-
-    return result
-
-@serve.deployment(ray_actor_options={"num_gpus": 0.4}, max_replicas_per_node=1)
-class RerankerDeployment:
-    def __init__(self, model_key: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_key).to(self.device)
-        
-        # self.model = FlagReranker(model_key, use_fp16=True)
-    
-    @serve.batch()
-    async def handle_batch(self, inputs: List[List[Tuple[str, str]]]) -> List[List[float]]:
-        batch_size = len(inputs)
-        flat_inputs = [(item, i_1, i_2) for i_1, sublist in enumerate(inputs) for i_2, item in enumerate(sublist)]
-        
-        flat_inputs_indices = [item[1:] for item in flat_inputs]
-        flat_inputs_text = [item[0] for item in flat_inputs]
-        
-        with torch.no_grad():
-            
-            print("Reranker Inputs:", len(flat_inputs_text), batch_size)
-            # with open("reranker_inputs.txt", "w") as f:
-            #     f.write(json.dumps(flat_inputs_text, indent=4))
-            #     f.close()
-            
-            
-            start_time = time.time()
-            tokenized_inputs = self.tokenizer(flat_inputs_text, padding=True, truncation=True, return_tensors='pt', max_length=512).to(self.device)
-            mid_time = time.time()
-            scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
-            
-            
-            # print("Reranker Inputs:", flat_inputs_text)
-            # scores = self.model.compute_score(flat_inputs_text)
-            end_time = time.time()
-            print("RERANKER TIME INTERNAL 2 %7.3fs %7.3fs %7.3fs" % (end_time - start_time, mid_time - start_time, end_time - mid_time))
-            
-            # start_time = time.time()
-            # tokenized_inputs = self.tokenizer(flat_inputs_text, padding=True, truncation=True, return_tensors='pt', max_length=512)
-            # mid_time = time.time()
-            # scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float() # This takes 8 seconds!!! WTF?!?!
-            # end_time = time.time()
-            # print("RERANKER TIME INTERNAL 2 %7.3fs %7.3fs %7.3fs" % (end_time - start_time, mid_time - start_time, end_time - mid_time))
-            
-            
-        scores = torch.exp(torch.tensor(scores))
-        scores = F(scores)
-        
-        outputs = [[] for _ in range(batch_size)]
-        
-        for i, output in enumerate(scores.tolist()):
-            request_index, input_index = flat_inputs_indices[i]
-            outputs[request_index].append(output)
-        
-        return outputs
-
-    async def __call__(self, request : Request) -> Response:
-        request_dict = await request.json()
-        # print("Got request:", request_dict)
-        return_tmp = await self.handle_batch(request_dict["text"])
-        return Response(content=json.dumps({"output": return_tmp}))
-
-    async def run(self, request_dict : dict) -> List[List[float]]:
-        start_time = time.time()
-        values = await self.handle_batch(request_dict["text"])
-        end_time = time.time()
-        print("RERANKER INTERNAL TIME %7.3fs" % (end_time - start_time))
-        return values
 
 @serve.deployment
 @serve.ingress(fastapi_app)

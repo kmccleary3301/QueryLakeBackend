@@ -10,7 +10,7 @@ from lmformatenforcer import JsonSchemaParser
 
 # from lmformatenforcer import CharacterLevelParser
 # from lmformatenforcer.integrations.vllm import build_vllm_logits_processor, build_vllm_token_enforcer_tokenizer_data
-from vllm_lmformating_modifed_banned_tokens import build_vllm_logits_processor, build_vllm_token_enforcer_tokenizer_data
+from .vllm_lmformating_modifed_banned_tokens import build_vllm_logits_processor, build_vllm_token_enforcer_tokenizer_data
 
 from lmformatenforcer.regexparser import RegexParser
 # from ray.serve.handle import DeploymentHandle
@@ -19,7 +19,7 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
     """
     Create a pydantic class from a typescript string.
     Potential security risk given that `exec` is used.
-    Revisit this at a later date.
+    TODO: Revisit this at a later date.
     """
     def parse_literal(literal: str):
         
