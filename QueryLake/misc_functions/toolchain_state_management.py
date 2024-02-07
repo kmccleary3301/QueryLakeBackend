@@ -305,8 +305,14 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 if action.insertion_values[s_list_i] is None:
                     routes_for_provided_object.append(current_indices + insertion_routes_tmp + insertion_routes_tmp)
             
+            
+            # TODO: Find workaround for this redundancy.
+            object_in_focus, insertion_routes_tmp = insert_in_static_route_global(object_in_focus, action.route, initial_created_obj, **state_kwargs, return_indices=True)
+            
             if use_provided:
                 routes_for_provided_object.append(current_indices + insertion_routes_tmp + insertion_routes_tmp)
+                
+            # assert False, "Create action not implemented"
             object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
         
         elif isinstance(action, appendAction): # Same as createAction, but appends to a list at the route.
@@ -318,20 +324,22 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             else:
                 initial_created_obj, use_provided = provided_object, True
             
-            print("CALLING APPEND", action.dict())
+            # print("CALLING APPEND", action.dict())
             
             object_in_focus_tmp, tmp_indices = traverse_static_route_global(object_in_focus, action.route, **state_kwargs)
             
             for s_list_i, insertion_route in enumerate(action.insertions):
-                print("APPEND INSERTION ROUTE", insertion_route)
+                # print("APPEND INSERTION ROUTE", insertion_route)
                 
                 passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
                 initial_created_obj, insertion_routes_tmp = insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs, return_indices=True)
                 
-                print("GOT TMP ROUTES IN APPEND FROM INSERTION", insertion_routes_tmp)
+                # print("GOT TMP ROUTES IN APPEND FROM INSERTION", insertion_routes_tmp)
                 
                 if action.insertion_values[s_list_i] is None:
                     routes_for_provided_object.append(current_indices + tmp_indices + [len(object_in_focus_tmp)] + insertion_routes_tmp)
+            
+            
             
             assert isinstance(object_in_focus_tmp, list), "appendAction used, but the object in focus was not a list"
             object_in_focus_tmp.append(initial_created_obj)

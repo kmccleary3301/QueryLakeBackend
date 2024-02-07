@@ -201,8 +201,8 @@ class ToolchainSession():
         
         for node_input_arg in node.input_arguments:
             
-            if not node_input_arg.initalValue is None:
-                node_inputs[node_input_arg.key] = node_input_arg.initalValue
+            if not node_input_arg.initialValue is None:
+                node_inputs[node_input_arg.key] = node_input_arg.initialValue
                 self.log_event("SET INITIAL VALUE", {
                     "value": node_inputs[node_input_arg.key]
                 })
@@ -292,13 +292,14 @@ class ToolchainSession():
                 "value_obj_type": str(type(value_obj_not_run[0])),
                 "value": initial_value,
             })
+        return initial_value
     
     async def run_feed_map_on_object(self,
-                               feed_map : feedMapping,
-                               target_object : dict,
-                               node_arguments : dict,
-                               node_outputs : dict,
-                               initial_value : Any) -> dict:
+                                     feed_map : feedMapping,
+                                     target_object : dict,
+                                     node_arguments : dict,
+                                     node_outputs : dict,
+                                     initial_value : Any) -> dict:
         """
         Execute a feed mapping on an object.
         """
@@ -310,21 +311,25 @@ class ToolchainSession():
         }
         
         if not feed_map.route is None:
-            target_object = insert_in_static_route_global(target_object, feed_map.route, initial_value, **state_args)
+            target_object, insertion_routes = insert_in_static_route_global(target_object, feed_map.route, initial_value, **state_args, return_indices=True)
             
             self.log_event("INSERT IN ROUTE PERFORMED", {
                 "target_result": target_object,
             })
             
         else:
-            target_object = run_sequence_action_on_object(target_object, sequence=feed_map.sequence, provided_object=initial_value, **state_args)
+            self.log_event("SEQUENCE ACTIONS STARTED", {
+                "args": [target_object, feed_map.sequence, initial_value, state_args]
+            })
+            
+            target_object, insertion_routes = run_sequence_action_on_object(target_object, sequence=feed_map.sequence, provided_object=initial_value, **state_args, return_provided_object_routes=True)
 
             self.log_event("SEQUENCE ACTIONS PERFORMED", {
                 "target_result": target_object,
             })
         
         
-        return target_object
+        return target_object, insertion_routes
     
     async def notify_ws_state_difference(self, previous_state, current_state, ws : WebSocket = None):
         """
@@ -352,6 +357,71 @@ class ToolchainSession():
                 **{k: v for k, v in update_state_values.items() if len(v) > 0}
             }, ws)
             
+    
+    async def run_feed_map_on_toolchain(self,
+                                        feed_map : feedMapping,
+                                        node : toolchainNode,
+                                        init_value : Any,
+                                        new_state_args : dict,
+                                        feed_map_args : dict,
+                                        node_argument_template : dict) -> dict:
+        """
+        Run a generic feed map on the toolchain states with the top level.
+        """
+        
+        if not feed_map.condition is None:
+            if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
+                return None, None
+        
+        node_argument_template = copy(node_argument_template)
+        
+        # Feed to user case.
+        if feed_map.destination == "<<USER>>":
+            user_return_arguments, _ = await self.run_feed_map_on_object(target_object=node_argument_template, initial_value=init_value, **feed_map_args)
+
+            return user_return_arguments
+        # Feed to state case.
+        elif feed_map.destination == "<<STATE>>":
+            
+            if feed_map.stream:
+                return None, None
+            
+            self.state, _ = await self.run_feed_map_on_object(target_object=self.state, initial_value=init_value, **feed_map_args)
+            
+            # append_state, update_state = dict_diff_append_and_update(self.state.copy(), previous_state.copy())
+            # delete_state = dict_diff_deleted(previous_state.copy(), self.state.copy())
+            
+            
+            self.log_event("UPDATED STATE WITH FEED MAP", {
+                "node_id": node.id,
+                "toolchain_state": self.state,
+            })
+            
+            return None
+        else:
+            # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
+            
+            
+            if feed_map.store:
+                # Initialize firing queue args if they're not already used.
+                if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
+                    self.firing_queue[feed_map.destination] = {}
+                self.firing_queue[feed_map.destination], _ = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], initial_value=init_value, **feed_map_args)
+            else:
+                
+                self.log_event("CONSTRUCT FEED MAP ON NODE OUTPUT", {
+                    "target": node_argument_template,
+                    "init_val": init_value,
+                    "feed_map_args": feed_map_args
+                })
+                node_argument_template, _ = await self.run_feed_map_on_object(target_object=node_argument_template, initial_value=init_value, **feed_map_args)
+                
+                self.log_event("CONSTRUCT FEED MAP ON NODE OUTPUT RESULT", {
+                    "result": node_argument_template,
+                })
+            
+            return node_argument_template
+        
     
     async def run_node(self,
                        node : toolchainNode, 
@@ -384,7 +454,7 @@ class ToolchainSession():
         early_state_reference = deepcopy(self.state)
         
         node_outputs, user_return_arguments, firing_targets = {}, {}, []
-        node_argument_templates : Dict[str, Union[dict, Literal[False]]] = {}
+        node_argument_templates : Dict[str, dict] = {}
         node_follow_up_firing_queue : List[Tuple[str, dict]] = []
         
         node_inputs = copy(self.construct_node_run_inputs(node, node_arguments, user_provided_arguments, system_args, use_firing_queue))
@@ -394,6 +464,8 @@ class ToolchainSession():
             "node_id": node.id,
             "inputs": node_inputs,
         }, ws)
+        
+        
         
         state_kwargs = {
             "toolchain_state" : early_state_reference,
@@ -416,13 +488,12 @@ class ToolchainSession():
         else:
             self.state, stream_callables = await self.create_streaming_callables(node, state_kwargs, ws)
             
-            self.log_event("STATE DIFF CALL STARTED", {})
             await self.notify_ws_state_difference(early_state_reference, self.state, ws)
             
             early_state_reference = deepcopy(self.state)
             
             get_function = self.function_getter(node.api_function)
-            node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
+            node_outputs = await run_function_safe(get_function, {**copy(node_inputs), "stream_callables": stream_callables})
         
         state_kwargs.update({"node_outputs_state" : node_outputs})
         
@@ -433,7 +504,7 @@ class ToolchainSession():
             
             
             new_state_args = {
-                "toolchain_state" : self.state,
+                "toolchain_state" : deepcopy(self.state),
                 "node_inputs_state" : node_inputs,
                 "node_outputs_state" : node_outputs
             }
@@ -444,60 +515,36 @@ class ToolchainSession():
                 "feed_map": feed_map,
                 "node_arguments": node_inputs, # Changed from node_arguments
                 "node_outputs": node_outputs,
-                "initial_value": init_value
+                # "initial_value": init_value
             }
             
-            if not feed_map.condition is None:
-                if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
-                    continue
+            assert not (feed_map.store and feed_map.iterate), "Cannot iterate and store in the same feed map."
+            assert not (feed_map.iterate and feed_map.destination in ["<<STATE>>", "<<USER>>"]), "Cannot iterate on state or user outputs."
             
-            # Feed to user case.
-            if feed_map.destination == "<<USER>>":
-                user_return_arguments = await self.run_feed_map_on_object(target_object=user_return_arguments, **feed_map_args)
-            
-            # Feed to state case.
-            elif feed_map.destination == "<<STATE>>":
-                
-                if feed_map.stream:
-                    continue
-                
-                self.state = await self.run_feed_map_on_object(target_object=self.state, **feed_map_args)
-                
-                # append_state, update_state = dict_diff_append_and_update(self.state.copy(), previous_state.copy())
-                # delete_state = dict_diff_deleted(previous_state.copy(), self.state.copy())
-                
-                
-                self.log_event("UPDATED STATE WITH FEED MAP", {
-                    "node_id": node.id,
-                    "toolchain_state": self.state,
-                })
+            if feed_map.iterate:
+                for e in init_value:
+                    new_node_arguments_instance = await self.run_feed_map_on_toolchain(feed_map, node, e, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
+                    self.log_event("CREATED INPUTS FROM ITERABLE", {
+                        "value_pulled": e,
+                        "inputs": new_node_arguments_instance,
+                    })
+                    node_follow_up_firing_queue.append((feed_map.destination, new_node_arguments_instance))
+                    
+                # del node_argument_templates[feed_map.destination]
+                # pass
             else:
-                # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
-                
-                
-                if feed_map.store:
-                    # Initialize firing queue args if they're not already used.
-                    if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
-                        self.firing_queue[feed_map.destination] = {}
-                    self.firing_queue[feed_map.destination] = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], **feed_map_args)
+                if feed_map.destination == "<<USER>>":
+                    user_return_arguments = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
+                elif feed_map.destination == "<<STATE>>":
+                    await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.state)
                 else:
-                    node_argument_templates[feed_map.destination] = await self.run_feed_map_on_object(target_object=node_argument_templates.get(feed_map.destination, {}), **feed_map_args)
-                
-                # TODO: Handle split outputs here.
-                if not feed_map.split_route is None:
-                    iterable_output = traverse_static_route_global(node_argument_templates[feed_map.destination], feed_map.split_route, **new_state_args)
-                    for element in iterable_output:
-                        new_args_copy = node_argument_templates[feed_map.destination].copy()
-                        new_args_copy = insert_in_static_route_global(new_args_copy, feed_map.split_route, element, **new_state_args)
-                        node_follow_up_firing_queue((feed_map.destination, new_args_copy))
-                        node_argument_templates[feed_map.destination] = False
-                    
-                    pass
-                    
+                    node_argument_templates[feed_map.destination] = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
+                    self.log_event("CREATED INPUT SINGLE", {
+                        "inputs": node_argument_templates[feed_map.destination],
+                    })
         
         for node_target_id, node_target_args in node_argument_templates.items():
-            if node_target_args != False:
-                node_follow_up_firing_queue.append((node_target_id, node_target_args))
+            node_follow_up_firing_queue.append((node_target_id, node_target_args))
         
         self.firing_queue[node.id] = False
 

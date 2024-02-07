@@ -67,7 +67,6 @@ def run_state_diff(state_input : dict, state_diff_specs):
     update_state: dict = state_diff_specs["update_state"] if "update_state" in state_diff_specs else {}
     delete_states: List[Union[str, int, dict]] = state_diff_specs["delete_states"] if "delete_states" in state_diff_specs else []
     
-    
     for route in append_routes:
         val_get = retrieve_value_from_obj(append_state, route)
         # print("APPENDING", val_get, "TO", route)
@@ -105,18 +104,25 @@ async def wait_for_command_finish(websocket : Connection, toolchain_state : dict
         
         if "trace" in response:
             print(response["trace"])
+            
         elif "state" in response:
             toolchain_state = response["state"]
+            
         elif "type" in response:
+            
             if response["type"] == "streaming_output_mapping":
                 stream_mappings[response["stream_id"]] = response["routes"]
+            
             elif response["type"] == "state_diff":
                 toolchain_state = run_state_diff(deepcopy(toolchain_state), response)
                 
         elif check_keys(["s_id", "v"], list(response.keys())):
+            
             routes_get : List[List[Union[str, int]]] = stream_mappings[response["s_id"]]
+            
             for route_get in routes_get:
                 toolchain_state = append_in_route(toolchain_state, route_get, response["v"])
+            
         elif check_keys(["event_result"], list(response.keys())):
             final_output = response["event_result"]
     return final_output, toolchain_state

@@ -204,7 +204,7 @@ class UmbrellaClass:
         on_new_token = None
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
-            print("ON NEW TOKEN PULLED", on_new_token)
+            # print("ON NEW TOKEN PULLED", on_new_token)
         
         assert model_choice in self.llm_handles, "Model choice not available"
         
@@ -222,7 +222,7 @@ class UmbrellaClass:
             async for result in self.stream_results(gen, on_new_token=on_new_token):
                 results.append(result)
         
-        strings_to_remove = model_parameters["stop"] if "stop" in model_parameters else []
+        # strings_to_remove = model_parameters["stop"] if "stop" in model_parameters else []
         
         text_outputs = "".join(results)
         
@@ -567,6 +567,7 @@ class UmbrellaClass:
                         # print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
                         # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
+                        print("TRUE ARGS:", true_args)
                         result = await api.toolchain_event_call(**true_args, session=toolchain_session)
                         result = {"event_result": result}
                         

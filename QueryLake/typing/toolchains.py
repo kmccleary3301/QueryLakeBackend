@@ -225,7 +225,7 @@ class feedMappingAtomic(BaseModel):
     # If defined, we take the target arguments and split them at the given route. 
     # The route in the stored function inputs is already a list or some iterable, but
     # The actual queue has this copied with the value replaced with an element in each copy.
-    split_route: Optional["staticRoute"] = None 
+    iterate: Optional[bool] = False 
 
     condition: Optional[Union[Condition, conditionBasic]] = None
 
@@ -273,7 +273,7 @@ class nodeInputArgument(BaseModel):
     """
     key: str
     
-    initalValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
+    initialValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None

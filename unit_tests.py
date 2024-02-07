@@ -414,26 +414,26 @@ if __name__ == "__main__":
     
     sequence_2 = [
         {
-            "type": "appendAction", 
+            "type": "createAction", 
             "initialValue": {
                 "type": "staticValue",
-                "value": {
+                "value": [{
                     "role": "user"           
-                }
+                }]
             },
             "insertion_values": [ None ],
-            "insertions": [ [ "content" ] ],
+            "insertions": [ [ 0, "content" ] ],
             "route" : [ "chat_history" ]
         }
     ]
     
-    sequence_2 = [appendAction(**elements) for elements in sequence_2]
+    sequence_2 = [createAction(**elements) for elements in sequence_2]
     
     init_val_2 = inputs_2["question"]
     
     outputs_2 = {}
     
-    target_state = {"chat_history": []}
+    target_state = {}
     
     
     start_time = time.time()

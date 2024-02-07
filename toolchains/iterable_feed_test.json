@@ -1,6 +1,6 @@
 {
-	"name": "Streaming Chat Test",
-    "id": "test_chat_session_normal_streaming",
+	"name": "Iteration Test",
+    "id": "iterable_test",
     "category": "Test",
 	"display_configuration": {
 		"display_mappings": [
@@ -14,7 +14,9 @@
 	},
     "initial_state": {
         "title": "Chat",
-        "chat_history": []
+        "chat_history": [],
+        "question_list_iterated": [],
+        "iterable_output": []
     },
     "nodes": [
         {
@@ -31,36 +33,24 @@
                     "from_user": true
                 },
                 {
-                    "key": "question",
-                    "from_user": true
-                },
-                {
                     "key": "collection_hash_ids",
                     "from_user": true,
                     "optional": true
+                },
+                {
+                    "key": "question_list",
+                    "initialValue": [
+                        "Who is Magic Johnson?",
+                        "Who is Michael Jordan?",
+                        "Who is Kobe Bryant?",
+                        "Who is Shaquille O'neal?",
+                        "Who is Lebron James?",
+                        "Who is Steph Curry?",
+                        "Who is Kevin Durant?"
+                    ]
                 }
             ],
             "feed_mappings": [
-                {
-                    "destination": "<<STATE>>",
-                    "sequence": [
-                        {
-                            "type": "appendAction", 
-                            "initialValue": {
-                                "type": "staticValue",
-                                "value": {
-                                    "role": "user"           
-                                }
-                            },
-                            "insertion_values": [ null ],
-                            "insertions": [ [ "content" ] ],
-                            "route" : [ "chat_history" ]
-                        }
-                    ],
-                    "getFromInputs": {
-                        "route": [ "question" ]
-                    }
-                },
                 {
                     "destination": "third_step",
                     "sequence": [
@@ -80,6 +70,27 @@
                         }
                     ],
                     "getFromInputs": { "route": [ "auth" ] }
+                },
+                {
+                    "destination": "third_step",
+                    "sequence": [
+                        {
+                            "type": "createAction", 
+                            "initialValue": {
+                                "type": "staticValue",
+                                "value": [{
+                                    "role": "user"           
+                                }]
+                            },
+                            "insertion_values": [ null ],
+                            "insertions": [ [ 0, "content" ] ],
+                            "route" : [ "chat_history" ]
+                        }
+                    ],
+                    "getFromInputs": {
+                        "route": [ "question_list" ]
+                    },
+                    "iterate": true
                 }
             ]
         },
@@ -88,8 +99,7 @@
             "api_function": "llm",
             "input_arguments": [
                 {
-                    "key": "chat_history",
-                    "from_state": { "route": [ "chat_history" ] }
+                    "key": "chat_history"
                 },
                 {
                     "key": "auth"
@@ -102,12 +112,6 @@
             "feed_mappings": [
                 {
                     "destination": "<<USER>>",
-                    "sequence": [
-                        {
-                            "type": "createAction", 
-                            "route" : [ "output" ]
-                        }
-                    ],
                     "getFromOutputs": {
                         "route" : [ "output" ]
                     }
@@ -125,14 +129,12 @@
                             },
                             "insertion_values": [ null ],
                             "insertions": [ [ "content" ] ],
-                            "route" : [ "chat_history" ]
+                            "route" : [ "iterable_output" ]
                         }
                     ],
                     "getFromOutputs": {
                         "route": [ "output" ]
-                    },
-                    "stream": true,
-                    "stream_initial_value": ""
+                    }
                 }
             ]
         }
