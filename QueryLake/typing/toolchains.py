@@ -69,21 +69,29 @@ class indexRouteRetrieved(BaseModel):
     type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
     getFrom: "valueObj"
 
-indexRouteRetrievedNew = Union[indexRouteRetrieved, staticValue, indexRouteRetrievedStateValue, indexRouteRetrievedInputArgValue, indexRouteRetrievedOutputArgValue]
+indexRouteRetrievedNew = Union[
+    indexRouteRetrieved, 
+    staticValue, 
+    indexRouteRetrievedStateValue, 
+    indexRouteRetrievedInputArgValue, 
+    indexRouteRetrievedOutputArgValue
+]
 
 
 
-class valueFromBranchingState(BaseModel):
-    """
-    In toolchains, there is a concept of a "branching state", where you have 
-    a node that outputs a list or iterable of some kind. There is a subgraph
-    of the toolchain that this is fed to which is then executed for each item.
-    The branching state is used as a temporary state during this execution to
-    specify the route and index of the current item in the list.
-    """
-    type : Optional[Literal["valueFromBranchingState"]] = "valueFromBranchingState"
-    route: "staticRoute"
-    # dimension: int
+
+# Branching states are deprecated (Actually, they were never implemented)
+# class valueFromBranchingState(BaseModel):
+#     """
+#     In toolchains, there is a concept of a "branching state", where you have 
+#     a node that outputs a list or iterable of some kind. There is a subgraph
+#     of the toolchain that this is fed to which is then executed for each item.
+#     The branching state is used as a temporary state during this execution to
+#     specify the route and index of the current item in the list.
+#     """
+#     type : Optional[Literal["valueFromBranchingState"]] = "valueFromBranchingState"
+#     route: "staticRoute"
+#     # dimension: int
 
 
 
@@ -178,12 +186,12 @@ class insertAction(rootActionType):
     route : "staticRoute"
     replace: Optional[bool] = True
 
-valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput, valueFromBranchingState]
+valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput]
 staticRouteBasicElementType = Union[int, str]
 staticRouteBasic = List[staticRouteBasicElementType]
 
 # It actually seems to matter that int be before string, because otherwise it converts the int to a string.
-staticRouteElementType = Union[int, str, indexRouteRetrievedNew, valueFromBranchingState]
+staticRouteElementType = Union[int, str, indexRouteRetrievedNew]
 staticRoute = List[staticRouteElementType]
 sequenceAction = Union[staticRouteElementType, createAction, updateAction, appendAction, deleteAction, operatorAction, backOut]
 
@@ -362,7 +370,7 @@ stateValue.update_forward_refs()
 getNodeInput.update_forward_refs()
 getNodeOutput.update_forward_refs()
 indexRouteRetrieved.update_forward_refs()
-valueFromBranchingState.update_forward_refs()
+# valueFromBranchingState.update_forward_refs()
 
 # valueObj.update_forward_refs()
 
