@@ -367,11 +367,8 @@ class ToolchainSession():
                                         node_argument_template : dict) -> dict:
         """
         Run a generic feed map on the toolchain states with the top level.
+        Assume the condition is either none, or was already evaluated as True.
         """
-        
-        if not feed_map.condition is None:
-            if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
-                return None, None
         
         node_argument_template = copy(node_argument_template)
         
@@ -501,7 +498,9 @@ class ToolchainSession():
         
         for feed_map in node.feed_mappings:
             
-            
+            if not feed_map.condition is None:
+                if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
+                    continue
             
             new_state_args = {
                 "toolchain_state" : deepcopy(self.state),
