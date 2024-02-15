@@ -15,10 +15,10 @@ def data_dict(db_entry : SQLModel):
 
 class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
-    collection_type: str = Field(index=True)
+    collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
     document_integrity: Optional[str] = Field(default=None)
-    parent_collection_hash_id: str = Field(index=True)
+    parent_collection_hash_id: Optional[str] = Field(index=True, default=None)
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None)
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))

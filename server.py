@@ -296,7 +296,7 @@ class UmbrellaClass:
             # arguments = json.loads(data) if data else {}
             true_arguments = clean_function_arguments_for_api({
                 "database": self.database,
-                "text_models_callback": self.text_models_callback,
+                "toolchain_function_caller": self.api_function_getter,
                 "file": file,
             }, arguments, "upload_document")
 

@@ -63,13 +63,13 @@ class RerankerDeployment:
             mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
             
-        scores = torch.exp(torch.tensor(scores))
+        scores = torch.exp(torch.tensor(scores.clone()))
         scores = F(scores)
         
         outputs = [[] for _ in range(batch_size)]
         
         for i, output in enumerate(scores.tolist()):
-            request_index, input_index = flat_inputs_indices[i]
+            request_index, _ = flat_inputs_indices[i]
             outputs[request_index].append(output)
         
         return outputs

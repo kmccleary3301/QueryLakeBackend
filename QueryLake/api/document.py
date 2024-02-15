@@ -1,5 +1,5 @@
 from hashlib import sha256
-from typing import List, Callable, Awaitable, Dict
+from typing import List, Callable, Awaitable, Dict, Any, Union
 import os
 from fastapi import UploadFile
 from ..database import sql_db_tables
@@ -13,7 +13,7 @@ from .api import user_db_path
 from threading import Thread
 from ..vector_database.embeddings import query_database, create_embeddings_in_database
 from ..vector_database.document_parsing import parse_PDFs
-from chromadb.api import ClientAPI
+# from chromadb.api import ClientAPI
 import time
 import json
 import py7zr
@@ -34,7 +34,7 @@ user_db_path = server_dir+"/user_db/files/"
 #     database.commit()
 
 async def upload_document(database : Session,
-                          text_models_callback : Callable,
+                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                           auth : AuthType, 
                           file : UploadFile, 
                           collection_hash_id : str, 
@@ -143,7 +143,12 @@ async def upload_document(database : Session,
     if (file.filename.split(".")[-1].lower() == "pdf" and add_to_vector_db):
         # thread = Thread(target=create_embeddings_in_database, args=(database, text_models_callback, file_data_bytes, new_db_file, file.filename))
         # thread.start()
-        await create_embeddings_in_database(database, text_models_callback, file_data_bytes, new_db_file, file.filename)
+        await create_embeddings_in_database(database, 
+                                            toolchain_function_caller,
+                                            auth, 
+                                            file_data_bytes, 
+                                            new_db_file, 
+                                            file.filename)
     time_taken = time.time() - time_start
 
     print("Took %.2fs to upload" % (time_taken))
@@ -240,17 +245,25 @@ def get_document_secure(database : Session,
     return {"password": document_password, "database_path": document.server_zip_archive_path}
 
 async def query_vector_db(database : Session,
-                          text_models_callback : Callable[[Dict, str], Awaitable[List[List[float]]]],
+                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                           auth : AuthType,
                           query: str,
                           collection_hash_ids: List[str],
                           k : int = 10,
-                          use_rerank : bool = False):
+                          use_rerank : bool = False,
+                          minimum_relevance : float = 0.0):
     """
     Query from the vector database.
     """
-    (user, user_auth) = get_user(database, auth)
-    results = await query_database(database, text_models_callback, query, collection_hash_ids, k=k, use_rerank=use_rerank)
+    (_, _) = get_user(database, auth)
+    results = await query_database(database, 
+                                   auth,
+                                   toolchain_function_caller, 
+                                   query, 
+                                   collection_hash_ids, 
+                                   k=k, 
+                                   use_rerank=use_rerank,
+                                   minimum_relevance=minimum_relevance)
     return {"result": results}
 
 def craft_document_access_token(database : Session, 
