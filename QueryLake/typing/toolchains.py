@@ -42,6 +42,15 @@ class getNodeInput(BaseModel):
 class getNodeOutput(BaseModel):
     type : Optional[Literal["getNodeOutput"]] = "getNodeOutput"
     route: "staticRoute"
+    
+class getFiles(BaseModel):
+    """
+    There is another equivalent to state in the toolchain, which is set of files uploaded to the session.
+    """
+    type : Optional[Literal["getFiles"]] = "getFiles"
+    route: Optional["staticRoute"] = None
+    routes: Optional[List["staticRoute"]] = None
+    getText: Optional[bool] = False # If True, then we get the text of the file instead of the file object.
 
 
 
@@ -145,18 +154,6 @@ class operatorAction(rootActionType):
     value: Optional["valueObj"] = None # If None, then we use the given value.
     route: "staticRoute" 
 
-# Completely unnecessary as deleteAction supports multiple routes.
-# class deleteListElementsAction(BaseModel):
-#     type : Optional[Literal["deleteListElementsAction"]] = "deleteListElementsAction"
-#     route : Optional["staticRoute"] = []
-#     indices: List["staticRouteElementType"]
-
-# class insertListElementAction(rootActionType):
-#     type : Optional[Literal["insertListElementsAction"]] = "insertListElementsAction"
-#     route : Optional["staticRoute"] = []
-#     index: "staticRouteElementType"
-#     value: Optional["valueObj"] = None # If None, then we use the given value.
-
 class backOut(rootActionType):
     """
     Within sequenceActions, this is equivalent to a "cd ../" command in bash.
@@ -186,14 +183,6 @@ staticRouteBasic = List[staticRouteBasicElementType]
 staticRouteElementType = Union[int, str, indexRouteRetrievedNew, valueFromBranchingState]
 staticRoute = List[staticRouteElementType]
 sequenceAction = Union[staticRouteElementType, createAction, updateAction, appendAction, deleteAction, operatorAction, backOut]
-
-
-
-
-
-
-
-
 
 class conditionBasic(BaseModel):
     """
@@ -277,7 +266,7 @@ class nodeInputArgument(BaseModel):
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None
-    
+    from_files: Optional[getFiles] = None
     
     sequence: Optional[List[sequenceAction]] = []
     
@@ -354,9 +343,12 @@ class ToolChain(BaseModel):
     
     nodes: List[toolchainNode]
 
-
-
-
+class ToolChainSessionFile(BaseModel):
+    """
+    This is effectively a pointer to a file in the database so that it can be retrieved.
+    """
+    name: str
+    document_hash_id: str
 
 stateValue.update_forward_refs()
 getNodeInput.update_forward_refs()

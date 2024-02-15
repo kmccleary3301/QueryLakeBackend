@@ -273,37 +273,37 @@ async def toolchain_file_upload_event_call(database : Session,
     await save_toolchain_session(database, session)
     return result
 
-async def toolchain_entry_call(database : Session,
-                               session : ToolchainSession,
-                               auth : AuthType,
-                               session_id : str,
-                               entry_parameters : dict):
-    """
-    TODO: Revisit this. May deprecate.
+# async def toolchain_entry_call(database : Session,
+#                                session : ToolchainSession,
+#                                auth : AuthType,
+#                                session_id : str,
+#                                entry_parameters : dict):
+#     """
+#     TODO: Revisit this. May deprecate.
     
-    Call entry point in toolchain and propagate forward.
-    entry parameters can be provided, however there must be special cases for
-    things like files.
-    """
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
-    assert session.author == user.name, "User not authorized"
+#     Call entry point in toolchain and propagate forward.
+#     entry parameters can be provided, however there must be special cases for
+#     things like files.
+#     """
+#     user_retrieved : getUserType  = get_user(database, auth)
+#     (user, user_auth) = user_retrieved
+#     assert session.author == user.name, "User not authorized"
     
 
-    system_args = {
-        "database": database,
-    }
-    system_args.update(auth)
-    # return {"success": True, "result": await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_prop(entry_parameters)}
-    # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
-    save_to_db_flag = False
-    if not session.entry_called:
-        save_to_db_flag = True
-    result = await session.entry_prop(entry_parameters, system_args)
-    # if save_to_db_flag:
-    await save_toolchain_session(database, session)
+#     system_args = {
+#         "database": database,
+#     }
+#     system_args.update(auth)
+#     # return {"success": True, "result": await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_prop(entry_parameters)}
+#     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
+#     save_to_db_flag = False
+#     if not session.entry_called:
+#         save_to_db_flag = True
+#     result = await session.entry_prop(entry_parameters, system_args)
+#     # if save_to_db_flag:
+#     await save_toolchain_session(database, session)
 
-    return result
+#     return result
 
 async def toolchain_event_call(database : Session,
                                session : ToolchainSession,
@@ -344,7 +344,8 @@ async def toolchain_event_call(database : Session,
     
     event_parameters.update({"auth": auth})
 
-    result = await session.event_prop(event_node_id, 
+    result = await session.event_prop(database,
+                                      event_node_id, 
                                       event_parameters, 
                                       system_args,
                                       ws)

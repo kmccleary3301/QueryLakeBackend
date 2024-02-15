@@ -1,0 +1,93 @@
+{
+	"name": "Static Chat Test",
+    "id": "test_chat_session_normal",
+    "category": "Test",
+	"display_configuration": {
+		"display_mappings": [
+            {
+                "route" : [ "chat_history" ],
+                "display_as": "chat"
+            }
+        ],
+        "max_files": 1,
+        "enable_rag": true
+	},
+    "initial_state": {
+        "title": "Chat",
+        "chat_history": []
+    },
+    "nodes": [
+        {
+            "id": "user_file_upload_event",
+            "is_event": true,
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "file",
+                    "from_user": true
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "ocr",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "auth" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "auth" ] }
+                },
+                {
+                    "destination": "ocr",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "file" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "file" ] }
+                }
+            ]
+        },
+        {
+            "id": "ocr",
+            "api_function": "ocr_pdf_file",
+            "input_arguments": [
+                {
+                    "key": "database",
+                    "from_server": true
+                },
+                {
+                    "key": "auth"
+                },
+                {
+                    "key": "file"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<USER>>",
+                    "getFromOutputs": {
+                        "route" : [ "pdf_text" ]
+                    }
+                },
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "output" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "pdf_text" ]
+                    }
+                }
+            ]
+        }
+    ]
+}

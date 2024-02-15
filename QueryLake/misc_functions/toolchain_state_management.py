@@ -545,3 +545,23 @@ def dict_diff_append_and_update(d1 : dict, d2 : dict):
         elif v != d2[k]:
             diff_update[k] = v
     return diff_append_routes, diff_append, diff_update
+
+def recursive_shallow_copy(input_dict : dict):
+    """
+    Recursive shallow copy, effectively the same as shallow
+    copy but it works for nested dictionaries.
+    """
+    def value_copy(value_in : Any):
+        if isinstance(value_in, dict):
+            return recursive_shallow_copy(value_in)
+        elif isinstance(value_in, list):
+            return [value_copy(e) for e in value_in]
+        else:
+            return value_in
+    
+    new_dict = {}
+    
+    for key, value in input_dict.items():
+        new_dict[key] = value_copy(value)
+        
+    return new_dict

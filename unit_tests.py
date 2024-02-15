@@ -8,183 +8,6 @@ from QueryLake.misc_functions.toolchain_state_management import *
 from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.config import Config, Model
 
-
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-
-def dict_diff(d1, d2):
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            diff[k] = v
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-    return diff
-
-def dict_diff_v2(d1, d2):
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            diff[k] = v
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v2(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-        elif v != d2[k]:
-            diff[k] = v
-    return diff
-
-def dict_diff_v3_string(d1, d2):
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            diff[k] = v
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v3_string(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-        elif (isinstance(v, (list, str)) and v != d2[k]):
-            diff[k] = v
-    return diff
-
-def dict_diff_v4_strings_lists(d1, d2):
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            diff[k] = v
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v4_strings_lists(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-        elif isinstance(v, (list, str)) and v != d2.get(k):
-            diff[k] = v
-    return diff
-
-def dict_diff_v5_append(d1, d2):
-    """
-    This works at finding elements differences in lists and strings that can just be appended.
-    
-    Ideally, we would have this, and another difference dictionary for new values not including the ones that can be appended returned here.
-    """
-    
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            if isinstance(v, (list, str)):
-                diff[k] = v
-            elif isinstance(v, dict):
-                nested_diff = dict_diff_v5_append(v, {})
-                if nested_diff:
-                    diff[k] = nested_diff
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v5_append(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-        elif isinstance(v, str) and v != d2[k]:
-            diff[k] = v.replace(d2[k], '')
-        elif isinstance(v, list) and v != d2[k]:
-            diff[k] = [item for item in v if item not in d2[k]]
-    return diff
-
-def dict_diff_v5_append(d1, d2):
-    """
-    This works at finding elements differences in lists and strings that can just be appended.
-    
-    Ideally, we would have this, and another difference dictionary for new values not including the ones that can be appended returned here.
-    """
-    
-    diff = {}
-    for k, v in d1.items():
-        if k not in d2:
-            if isinstance(v, (list, str)):
-                diff[k] = v
-            elif isinstance(v, dict):
-                nested_diff = dict_diff_v5_append(v, {})
-                if nested_diff:
-                    diff[k] = nested_diff
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v5_append(v, d2[k])
-            if nested_diff:
-                diff[k] = nested_diff
-        elif isinstance(v, str) and v != d2[k]:
-            diff[k] = v.replace(d2[k], '')
-        elif isinstance(v, list) and v != d2[k]:
-            diff[k] = [item for item in v if item not in d2[k]]
-    return diff
-
-
-def dict_diff_v6_delete(d1, d2, path=''):
-    diff = {}
-    for k, v in d1.items():
-        new_path = f'{path}.{k}' if path else k
-        if k not in d2:
-            if isinstance(v, (list, str)):
-                diff[new_path] = v
-            elif isinstance(v, dict):
-                nested_diff = dict_diff_v6_delete(v, {}, new_path)
-                diff.update(nested_diff)
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff = dict_diff_v6_delete(v, d2[k], new_path)
-            diff.update(nested_diff)
-        elif isinstance(v, str) and v != d2[k]:
-            diff[new_path] = v.replace(d2[k], '')
-        elif isinstance(v, list) and v != d2[k]:
-            diff[new_path] = [item for item in v if item not in d2[k]]
-    return diff
-
-def dict_diff_deleted(d1, d2):
-    """
-    This function returns a list containing strings and/or dicts. 
-    The strings are top-level keys that have been fully deleted, 
-    while the dicts specify new routes. Any value in the dict should 
-    follow this same structure of strings and new dicts.
-    """
-    diff = []
-    for k in d1.keys():
-        if k not in d2:
-            diff.append(k)
-        elif isinstance(d1[k], dict):
-            nested_diff = dict_diff_deleted(d1[k], d2.get(k, {}))
-            if nested_diff:
-                diff.append({k: nested_diff})
-    return diff
-
-def dict_diff_v7_append_and_create(d1 : dict, d2 : dict):
-    """
-    This works at finding elements differences in lists and strings that can just be appended.
-    
-    Ideally, we would have this, and another difference dictionary for new values not including the ones that can be appended returned here.
-    """
-    
-    diff_append, diff_update = {}, {}
-    for k, v in d1.items():
-        if k not in d2:
-            # if isinstance(v, (list, str)):
-            #     diff_update[k] = v
-            if isinstance(v, dict):
-                nested_diff_append, nested_diff_update = dict_diff_v7_append_and_create(v, {})
-                if nested_diff_append:
-                    diff_append[k] = nested_diff_append
-                if nested_diff_update:
-                    diff_update[k] = nested_diff_update
-            else:
-                diff_update[k] = v
-        elif isinstance(v, dict) and isinstance(d2[k], dict):
-            nested_diff_append, nested_diff_update = dict_diff_v7_append_and_create(v, d2[k])
-            
-            if nested_diff_append:
-                diff_append[k] = nested_diff_append
-            if nested_diff_update:
-                diff_update[k] = nested_diff_update
-        elif isinstance(v, (str, list)) and len(v) > len(d2[k]) and v[:len(d2[k])] == d2[k]:
-            diff_append[k] = v[len(d2[k]):]
-        elif v != d2[k]:
-            diff_update[k] = v
-    return diff_append, diff_update
-
-
-
 if __name__ == "__main__":
     test_toolchain_state = {
         "dir_1": {
@@ -337,62 +160,6 @@ if __name__ == "__main__":
     
     print(json.dumps(modification_object, indent=4))
     print(f"Time taken: {end_time - start_time}")
-
-    # dict1 = {'a': 1, 'b': {'x': 2, 'y': 3}, 'c': 3, 'e': {'x': 2, 'y': 3}, 'z': 6}
-    # dict2 = {'b': {'x': 2}, 'c': 3, 'd': 4, 'e': {'x': 2, 'y': 3}, 'z': 5}
-
-    # difference = dict_diff(dict1, dict2)
-
-    # print(difference)  # Output: {'a': 1, 'b': {'y': 3}}
-    
-    # dict1 = {'a': 1, 'b': {'x': 2, 'y': 3}, 'c': 3}
-    # dict2 = {'b': {'x': 2}, 'c': 4, 'd': 4}
-
-    # difference = dict_diff_v2(dict1, dict2)
-
-    # print(difference)  # Output: {'a': 1, 'b': {'y': 3}, 'c': 3}
-    
-    # dict1 = {'a': 1, 'b': {'x': 'hello!!', 'y': [1, 2, 3]}, 'c': 'world_2'}
-    # dict2 = {'b': {'x': 'hello'}, 'c': 'world', 'd': 4}
-
-    # difference = dict_diff_v3_string(dict1, dict2)
-
-    # print(difference)  # Output: {'a': 1, 'b': {'y': [1, 2, 3]}}
-    
-    # dict1 = {'a': 1, 'b': {'x': 'hello!!', 'y': [1, 2, 3]}, 'c': 'world_2'}
-    # dict2 = {'b': {'x': 'hello'}, 'c': 'world', 'd': 4}
-
-    # difference = dict_diff_v5_append(dict1, dict2)
-
-    # print(difference)  # Output: {'a': 1, 'b': {'x': '!!', 'y': [1, 2, 3]}, 'c': '_2'}
-    
-    
-    # dict1 = {'a': 1, 'b': {'x': 'hello!!', 'y': [1, 2, 3]}, 'c': 'world_2'}
-    # dict2 = {'b': {'x': 'hello'}, 'c': 'world', 'd': 4}
-
-    # difference = dict_diff_v6_delete(dict1, dict2)
-
-    # print(difference)  # Output: {'a': 1, 'b.x': '!!', 'b.y': [1, 2, 3], 'c': '_2'}
-    
-    
-    # print("\n\nAppend and update")
-    # dict1 = {'a': 1, 'b': {'x': 'hello!!', 'y': [1, 2, 3]}, 'c': 'world_2', 'e': {'x': 2, 'y': 3}, 'z': 6}
-    # dict2 = {'b': {'x': 'hello'}, 'c': 'world', 'd': 4}
-
-    # difference, update = dict_diff_v7_append_and_create(dict1, dict2)
-
-    # print(difference)  # Output: ['d']
-    # print(update)
-    
-    # test_dict_1 = {"a": 1, "b": 2, "c": 3}
-    # test_dict_2 = {"d": 4, "e": 5, "f": 6}
-    
-    # test_dict_3 = test_dict_1.copy()
-    # test_dict_3.update(test_dict_2)
-    # print(test_dict_1)
-    # print(test_dict_3)
-    
-    
     
     inputs_2 = {
         "model_parameters": {
@@ -414,26 +181,26 @@ if __name__ == "__main__":
     
     sequence_2 = [
         {
-            "type": "createAction", 
+            "type": "appendAction", 
             "initialValue": {
                 "type": "staticValue",
-                "value": [{
+                "value": {
                     "role": "user"           
-                }]
+                }
             },
             "insertion_values": [ None ],
-            "insertions": [ [ 0, "content" ] ],
+            "insertions": [ [ "content" ] ],
             "route" : [ "chat_history" ]
         }
     ]
     
-    sequence_2 = [createAction(**elements) for elements in sequence_2]
+    sequence_2 = [appendAction(**elements) for elements in sequence_2]
     
     init_val_2 = inputs_2["question"]
     
     outputs_2 = {}
     
-    target_state = {}
+    target_state = {"chat_history": []}
     
     
     start_time = time.time()

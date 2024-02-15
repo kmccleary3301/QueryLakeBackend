@@ -278,7 +278,7 @@ class UmbrellaClass:
         elif function_name == "rerank":
             return self.rerank_call
         
-        assert function_name in API_FUNCTIONS, "Invalid API Function Called"
+        assert function_name in API_FUNCTIONS, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
     
     @fastapi_app.post("/upload_document")

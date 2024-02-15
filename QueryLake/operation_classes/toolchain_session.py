@@ -7,6 +7,7 @@ from ..api.single_user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 
+
 from copy import deepcopy, copy
 from time import sleep, time
 from ..api.hashing import random_hash
@@ -24,7 +25,7 @@ from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
 
 class ToolchainSession():
-    SPECIAL_NODE_FUNCTIONS = ["<<ENTRY>>", "<<EVENT>>"]
+    # SPECIAL_NODE_FUNCTIONS = ["<<ENTRY>>", "<<EVENT>>"]
     SPECIAL_ARGUMENT_ORIGINS = ["<<SERVER_ARGS>>", "<<USER>>", "<<STATE>>"]
 
     def __init__(self,
@@ -51,6 +52,7 @@ class ToolchainSession():
         self.function_getter : Callable[[str], Union[Awaitable[Callable], Callable]] = function_getter
         self.reset_everything()
         self.log : List[str] = []
+        self.toolchain_session_files : List[ToolChainSessionFile] = []
 
     def reset_everything(self):
         """
@@ -176,7 +178,8 @@ class ToolchainSession():
         
         return self.state, streaming_callables
     
-    def construct_node_run_inputs(self, 
+    def construct_node_run_inputs(self,
+                                  database : Session,
                                   node : toolchainNode, 
                                   node_arguments : dict, 
                                   user_provided_arguments : dict, 
@@ -238,11 +241,18 @@ class ToolchainSession():
                 self.log_event("FOUND STATE INPUT ARG", {
                     "value": node_inputs[node_input_arg.key]
                 })
+            
+            # TODO: Implement file retrieval.
+            # elif node_input_arg.from_server:
+            #     assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+            #     # node_inputs[node_input_arg.key] = get_value_obj_global(stateValue())
+            
+            elif not node_input_arg.from_files is None:
+                assert node_input_arg.key in system_args, f"File argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
                 
+                file_pointer : ToolChainSessionFile = traverse_static_route_global
                 
-            elif node_input_arg.from_server:
-                assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
-                node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
+                # node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
             
             else:
                 self.log_event("SEARCHING FOR NODE INPUT ARG", {
@@ -262,7 +272,6 @@ class ToolchainSession():
         })
         
         return node_inputs
-    
     
     async def get_initial_feed_map_obj(self,
                                feed_map : feedMapping,
@@ -356,7 +365,6 @@ class ToolchainSession():
                 "type": "state_diff",
                 **{k: v for k, v in update_state_values.items() if len(v) > 0}
             }, ws)
-            
     
     async def run_feed_map_on_toolchain(self,
                                         feed_map : feedMapping,
@@ -421,9 +429,9 @@ class ToolchainSession():
                 })
             
             return node_argument_template
-        
     
     async def run_node(self,
+                       database: Session,
                        node : toolchainNode, 
                        node_arguments : dict,
                        system_args : dict,
@@ -457,7 +465,12 @@ class ToolchainSession():
         node_argument_templates : Dict[str, dict] = {}
         node_follow_up_firing_queue : List[Tuple[str, dict]] = []
         
-        node_inputs = copy(self.construct_node_run_inputs(node, node_arguments, user_provided_arguments, system_args, use_firing_queue))
+        node_inputs = self.construct_node_run_inputs(database, 
+                                                     node, 
+                                                     node_arguments, 
+                                                     user_provided_arguments, 
+                                                     system_args, 
+                                                     use_firing_queue)
         
         await self.send_websocket_msg({
             "type": "node_execution_created_inputs",
@@ -476,7 +489,7 @@ class ToolchainSession():
         
         # Fire the node or assert that it is an event node and the mappings are valid.
         
-        if node.is_event:
+        if node.is_event or node.api_function is None:
             assert all([
                 not any([
                     hasattr(feed_map, "getFromOutputs"),
@@ -492,8 +505,19 @@ class ToolchainSession():
             
             early_state_reference = deepcopy(self.state)
             
+            
             get_function = self.function_getter(node.api_function)
-            node_outputs = await run_function_safe(get_function, {**copy(node_inputs), "stream_callables": stream_callables})
+            
+            self.log_event("NODE INPUTS BEFORE API FUNCTION CALL", {
+                "inputs": node_inputs,
+            })
+            
+            node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
+            
+            self.log_event("NODE INPUTS AFTER API FUNCTION CALL", {
+                "inputs": node_inputs,
+                "outputs": node_outputs
+            })
         
         state_kwargs.update({"node_outputs_state" : node_outputs})
         
@@ -523,15 +547,25 @@ class ToolchainSession():
             
             if feed_map.iterate:
                 for e in init_value:
-                    new_node_arguments_instance = await self.run_feed_map_on_toolchain(feed_map, node, e, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
+                    new_node_arguments_instance = await self.run_feed_map_on_toolchain(feed_map, 
+                                                                                       node, 
+                                                                                       e, 
+                                                                                       new_state_args, 
+                                                                                       feed_map_args, 
+                                                                                       recursive_shallow_copy(node_argument_templates.get(feed_map.destination, {})))
                     self.log_event("CREATED INPUTS FROM ITERABLE", {
                         "value_pulled": e,
                         "inputs": new_node_arguments_instance,
                     })
                     node_follow_up_firing_queue.append((feed_map.destination, new_node_arguments_instance))
                     
-                # del node_argument_templates[feed_map.destination]
-                # pass
+                # We remove the template, which we manipulate by default.
+                # This creates an effective rule:
+                
+                # Create the input args normally with non iterable feed maps.
+                # Then put your iterable feed map at the end.
+                # Then the normal template is removed, and the iterable copies are added to the queue.
+                _ = node_argument_templates.pop(feed_map.destination, None)
             else:
                 if feed_map.destination == "<<USER>>":
                     user_return_arguments = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
@@ -544,7 +578,7 @@ class ToolchainSession():
                     })
         
         for node_target_id, node_target_args in node_argument_templates.items():
-            node_follow_up_firing_queue.append((node_target_id, node_target_args))
+            node_follow_up_firing_queue.append((node_target_id, node_target_args.copy()))
         
         self.firing_queue[node.id] = False
 
@@ -560,7 +594,8 @@ class ToolchainSession():
         
         return user_existing_return_arguments, node_follow_up_firing_queue #, split_targets
 
-    async def run_node_then_forward(self, 
+    async def run_node_then_forward(self,
+                                    database : Session, 
                                     node : Union[str, toolchainNode], 
                                     node_arguments : dict,
                                     user_provided_arguments : dict,
@@ -589,6 +624,7 @@ class ToolchainSession():
         }, ws)
         
         user_return_arguments, firing_targets = await self.run_node(
+            database=database,
             node=node, 
             node_arguments=node_arguments,
             system_args=system_args,
@@ -608,7 +644,14 @@ class ToolchainSession():
             "type": "node_execution_start_firing_targets",
             "targets": firing_targets
         }, ws)
-        for (node_id_target, node_target_arguments) in firing_targets:
+        for firing_target_i, (node_id_target, node_target_arguments) in enumerate(firing_targets):
+            self.log_event("FIRING TARGETS WITH ITERATION", {
+                "firing_target_i": firing_target_i,
+                "all_firing_targets": firing_targets,
+                "node_id_target": node_id_target,
+                "node_target_arguments": node_target_arguments
+            })
+            
             
             # firing_target_input_arguments = self.firing_queue[node_id_target]
             firing_target_input_arguments = node_target_arguments
@@ -619,7 +662,8 @@ class ToolchainSession():
                 "firing_target_input_arguments": firing_target_input_arguments
             })
             
-            user_return_arguments = await self.run_node_then_forward(self.nodes_dict[node_id_target], 
+            user_return_arguments = await self.run_node_then_forward(database,
+                                                                     self.nodes_dict[node_id_target], 
                                                                      firing_target_input_arguments, 
                                                                      user_provided_arguments,
                                                                      system_args,
@@ -636,6 +680,7 @@ class ToolchainSession():
         # for entry in node["feed_to"]:
 
     async def event_prop(self, 
+                         database : Session,
                          event_id : str,
                          input_parameters : dict, 
                          system_args : dict,
@@ -646,7 +691,8 @@ class ToolchainSession():
         # print("event_prop")
         target_event = self.nodes_dict[event_id]
         
-        result = await self.run_node_then_forward(target_event,
+        result = await self.run_node_then_forward(database,
+                                                  target_event,
                                                   {}, 
                                                   input_parameters, 
                                                   system_args,
