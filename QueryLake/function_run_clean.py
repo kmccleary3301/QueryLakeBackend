@@ -1,5 +1,6 @@
 import inspect
 from copy import deepcopy
+import json
 
 async def run_function_safe(function_actual, kwargs):
     """
@@ -11,7 +12,9 @@ async def run_function_safe(function_actual, kwargs):
     for key in function_args:
         if key in kwargs:
             new_args[key] = kwargs[key]
-            
+    
+    # print("CREATED CLEAN ARGS", json.dumps(new_args, indent=4))
+    
     if inspect.iscoroutinefunction(function_actual):
         return await function_actual(**new_args)
     else:

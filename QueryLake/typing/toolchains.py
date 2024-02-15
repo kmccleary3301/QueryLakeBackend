@@ -42,6 +42,15 @@ class getNodeInput(BaseModel):
 class getNodeOutput(BaseModel):
     type : Optional[Literal["getNodeOutput"]] = "getNodeOutput"
     route: "staticRoute"
+    
+class getFiles(BaseModel):
+    """
+    There is another equivalent to state in the toolchain, which is set of files uploaded to the session.
+    """
+    type : Optional[Literal["getFiles"]] = "getFiles"
+    route: Optional["staticRoute"] = None
+    routes: Optional[List["staticRoute"]] = None
+    getText: Optional[bool] = False # If True, then we get the text of the file instead of the file object.
 
 
 
@@ -153,18 +162,6 @@ class operatorAction(rootActionType):
     value: Optional["valueObj"] = None # If None, then we use the given value.
     route: "staticRoute" 
 
-# Completely unnecessary as deleteAction supports multiple routes.
-# class deleteListElementsAction(BaseModel):
-#     type : Optional[Literal["deleteListElementsAction"]] = "deleteListElementsAction"
-#     route : Optional["staticRoute"] = []
-#     indices: List["staticRouteElementType"]
-
-# class insertListElementAction(rootActionType):
-#     type : Optional[Literal["insertListElementsAction"]] = "insertListElementsAction"
-#     route : Optional["staticRoute"] = []
-#     index: "staticRouteElementType"
-#     value: Optional["valueObj"] = None # If None, then we use the given value.
-
 class backOut(rootActionType):
     """
     Within sequenceActions, this is equivalent to a "cd ../" command in bash.
@@ -195,14 +192,6 @@ staticRouteElementType = Union[int, str, indexRouteRetrievedNew]
 staticRoute = List[staticRouteElementType]
 sequenceAction = Union[staticRouteElementType, createAction, updateAction, appendAction, deleteAction, operatorAction, backOut]
 
-
-
-
-
-
-
-
-
 class conditionBasic(BaseModel):
     """
     Detail a condition on which a feedMapping should be executed.
@@ -225,12 +214,15 @@ class feedMappingAtomic(BaseModel):
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
     route: Optional[staticRoute] = None # If not None, we simply store the given value at this route, and ignore the sequence.
-    # getFrom: valueObj
-    # sequenceInDestination: Optional[List[sequenceAction]] = []
     stream: Optional[bool] = False
     stream_initial_value: Optional[Any] = None # Must be provided if stream is True. Pretty much always an empty string or list.
     
     store: Optional[bool] = False # If True, then we store the inputs into the mapped node without firing it.
+    
+    # If defined, we take the target arguments and split them at the given route. 
+    # The route in the stored function inputs is already a list or some iterable, but
+    # The actual queue has this copied with the value replaced with an element in each copy.
+    iterate: Optional[bool] = False 
 
     condition: Optional[Union[Condition, conditionBasic]] = None
 
@@ -278,11 +270,11 @@ class nodeInputArgument(BaseModel):
     """
     key: str
     
-    initalValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
+    initialValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None
-    
+    from_files: Optional[getFiles] = None
     
     sequence: Optional[List[sequenceAction]] = []
     
@@ -333,8 +325,16 @@ class toolchainNode(BaseModel):
     feed_mappings: Optional[List[feedMapping]] = []
     
     
-    
-    
+
+class startScreenSuggestion(BaseModel):
+    """
+    This defines a displayed suggestion in the window when the user starts a new session.
+    It defines display text, an event node id, and a dictionary of event parameters for the event.
+    """
+    display_text: str
+    event_id: str
+    event_parameters: Optional[Dict[str, Any]] = {}
+
     
 class ToolChain(BaseModel):
     """
@@ -345,13 +345,18 @@ class ToolChain(BaseModel):
     category: str
     display_configuration: displayConfiguration
     
+    suggestions: Optional[List[startScreenSuggestion]] = []
+    
     initial_state: Dict[str, Any]
     
     nodes: List[toolchainNode]
 
-
-
-
+class ToolChainSessionFile(BaseModel):
+    """
+    This is effectively a pointer to a file in the database so that it can be retrieved.
+    """
+    name: str
+    document_hash_id: str
 
 stateValue.update_forward_refs()
 getNodeInput.update_forward_refs()

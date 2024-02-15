@@ -367,7 +367,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             else:
                 initial_created_obj, use_provided = provided_object, True
             
-            print("CALLING APPEND", action.dict())
+            # print("CALLING APPEND", action.dict())
             
             insertion_routes_of_action = evaluate_static_route(action.route, **state_kwargs)
             
@@ -380,7 +380,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 assert (isinstance(object_to_append_to, list)), "appendAction used with insertions, but the object in focus wasn't a list"
             
             for s_list_i, insertion_route in enumerate(action.insertions):
-                print("APPEND INSERTION ROUTE", insertion_route)
+                # print("APPEND INSERTION ROUTE", insertion_route)
                 
                 passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
                 initial_created_obj, insertion_routes_in_created_obj= insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs, return_indices=True)
@@ -596,6 +596,27 @@ def dict_diff_append_and_update(d1 : dict, d2 : dict) -> Tuple[List[List[Union[s
                 diff_update[k] = nested_diff_update
         elif isinstance(v, (str, list)) and len(v) > len(d2[k]) and v[:len(d2[k])] == d2[k]:
             diff_append[k] = v[len(d2[k]):]
+            diff_append_routes.append([k])
         elif v != d2[k]:
             diff_update[k] = v
     return diff_append_routes, diff_append, diff_update
+
+def recursive_shallow_copy(input_dict : dict):
+    """
+    Recursive shallow copy, effectively the same as shallow
+    copy but it works for nested dictionaries.
+    """
+    def value_copy(value_in : Any):
+        if isinstance(value_in, dict):
+            return recursive_shallow_copy(value_in)
+        elif isinstance(value_in, list):
+            return [value_copy(e) for e in value_in]
+        else:
+            return value_in
+    
+    new_dict = {}
+    
+    for key, value in input_dict.items():
+        new_dict[key] = value_copy(value)
+        
+    return new_dict
