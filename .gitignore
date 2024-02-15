@@ -1,6 +1,5 @@
 __pycache__/
 user_data.db
 user_db
-vector_database/
 db_data
 toolchain_sessions_logs
