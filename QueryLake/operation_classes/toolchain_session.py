@@ -689,6 +689,9 @@ class ToolchainSession():
         Activate an event node with parameters by id, then propagate forward.
         """
         # print("event_prop")
+        
+        # print("NODES DICT", self.nodes_dict)
+        
         target_event = self.nodes_dict[event_id]
         
         result = await self.run_node_then_forward(database,

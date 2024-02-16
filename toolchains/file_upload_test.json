@@ -1,6 +1,6 @@
 {
 	"name": "Static Chat Test",
-    "id": "test_chat_session_normal",
+    "id": "test_file_upload",
     "category": "Test",
 	"display_configuration": {
 		"display_mappings": [

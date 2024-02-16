@@ -398,7 +398,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
             
             
             
-            object_in_focus, insertion_routes_in_current_dir = insert_in_static_route_global(object_in_focus, tmp_indices, object_to_append_to, **state_kwargs, return_indices=True)
+            object_in_focus, insertion_routes_in_current_dir = insert_in_static_route_global(object_in_focus, insertion_routes_of_action, object_to_append_to, **state_kwargs, return_indices=True)
             
             if use_provided:
                 

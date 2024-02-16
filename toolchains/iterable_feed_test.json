@@ -134,7 +134,9 @@
                     ],
                     "getFromOutputs": {
                         "route": [ "output" ]
-                    }
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
                 }
             ]
         }

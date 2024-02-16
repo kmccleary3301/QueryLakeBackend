@@ -344,7 +344,7 @@ async def query_database(database : Session ,
         new_docs_dict[content_hash] = {
             k : v for k, v in doc.__dict__.items() if k not in ["_sa_instance_state", "embedding"]
         }
-        print("LOOKUP DOC", new_docs_dict[content_hash])
+        # print("LOOKUP DOC", new_docs_dict[content_hash])
     
     new_documents = list(new_docs_dict.values())
     
@@ -360,7 +360,7 @@ async def query_database(database : Session ,
     rerank_scores = await rerank_call(auth,
                                       [(query, doc["text"]) for doc in new_documents if len(doc["text"]) > 0])
     
-    print("Rerank Scores", rerank_scores)
+    # print("Rerank Scores", rerank_scores)
     
     
     for i in range(len(new_documents)):

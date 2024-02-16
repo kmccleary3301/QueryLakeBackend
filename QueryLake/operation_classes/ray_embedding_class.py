@@ -16,11 +16,6 @@ class EmbeddingDeployment:
 
     @serve.batch()
     async def handle_batch(self, inputs: List[List[str]]) -> List[List[List[float]]]:
-        print("Running Embedding 3.1")
-        # print("Our input array has length:", len(inputs))
-
-        # print("Input array:", inputs)
-        
         batch_size = len(inputs)
         # We need to flatten the inputs into a single list of string, then recombine the outputs according to the original structure.
         flat_inputs = [(item, i_1, i_2) for i_1, sublist in enumerate(inputs) for i_2, item in enumerate(sublist)]
@@ -45,12 +40,8 @@ class EmbeddingDeployment:
         return outputs
 
     async def __call__(self, request : Request) -> Response:
-        print("Running Embedding 2.1")
         request_dict = await request.json()
-        print("Running Embedding 2.2")
-        # return await self.handle_batch(request_dict["text"])
         return_tmp = await self.handle_batch(request_dict["text"])
-        print("Running Embedding 2.3")
         return Response(content=json.dumps({"output": return_tmp}))
     
     async def run(self, request_dict : dict) -> List[List[float]]:
