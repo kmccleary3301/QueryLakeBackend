@@ -166,7 +166,6 @@ class document_raw(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     hash_id: str = Field(index=True, unique=True)
     file_name: str
-    server_zip_archive_path: str = Field(unique=True)
     creation_timestamp: float
     integrity_sha256: str = Field(index=True)
     size_bytes: int

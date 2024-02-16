@@ -14,14 +14,12 @@ from .single_user_auth import get_user
 # from .toolchains import get_available_toolchains
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
-user_db_path = server_dir+"/user_db/files/"
-
-server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
-user_db_path = server_dir+"/user_db/files/"
+# user_db_path = server_dir+"/user_db/files/"
 with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
     file_read = f.read()
     f.close()
+
 GLOBAL_SETTINGS = json.loads(file_read)
 
 def add_user(database : Session,

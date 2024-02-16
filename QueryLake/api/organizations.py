@@ -11,7 +11,7 @@ from ray.actor import ActorHandle
 from ..typing.config import Config, AuthType, getUserType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
-user_db_path = server_dir+"/user_db/files/"
+# user_db_path = server_dir+"/user_db/files/"
 
 membership_value_map = {
     "owner": 4,

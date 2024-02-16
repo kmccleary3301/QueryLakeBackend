@@ -38,6 +38,8 @@ class ToolchainSession():
         This should initialize the toolchain session with the toolchain id and the toolchain object itself.
         """
         
+        self.instance_hash = random_hash()
+        
         self.author = author
         self.session_hash = session_hash
         self.toolchain_id = toolchain_id
@@ -603,8 +605,9 @@ class ToolchainSession():
                                     ws : WebSocket = None, 
                                     # no_split_inputs : bool = False,
                                     clear_firing_queue : bool = True,
-                                    user_return_arguments : dict = {}):
-        
+                                    user_return_arguments : dict = None):
+        if user_return_arguments is None:
+            user_return_arguments = {}
         
         self.log_event("RUN NODE & FORWARD", {
             "node_id": node.id,
@@ -706,10 +709,6 @@ class ToolchainSession():
             "event_id": event_id,
             "output": result
         }, ws)
-        
-        self.log_event("EVENT PROP FINISHED", {
-            "results": result
-        })
         
         return result
     

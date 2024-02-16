@@ -385,7 +385,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 passed_value = get_value_obj_global(action.insertion_values[s_list_i], **state_kwargs) if not action.insertion_values[s_list_i] is None else provided_object
                 initial_created_obj, insertion_routes_in_created_obj= insert_in_static_route_global(initial_created_obj, insertion_route, passed_value, **state_kwargs, return_indices=True)
                 
-                print("GOT TMP ROUTES IN APPEND FROM INSERTION", insertion_routes_in_created_obj)
+                # print("GOT TMP ROUTES IN APPEND FROM INSERTION", insertion_routes_in_created_obj)
                 
                 if action.insertion_values[s_list_i] is None:
                     

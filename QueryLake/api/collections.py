@@ -7,7 +7,7 @@ from .hashing import random_hash
 from ..typing.config import AuthType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-user_db_path = server_dir+"/user_db/files/"
+# user_db_path = server_dir+"/user_db/files/"
 
 def fetch_document_collections_belonging_to(database : Session, 
                                             auth : AuthType, 

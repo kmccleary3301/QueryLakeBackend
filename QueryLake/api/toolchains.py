@@ -32,7 +32,6 @@ default_toolchain = "chat_session_normal"
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
-user_db_path = server_dir+"/user_db/files/"
 
 async def save_toolchain_session(database : Session, 
                                  session : ToolchainSession,
@@ -361,7 +360,6 @@ async def toolchain_event_call(database : Session,
         file_name_hash, encryption_key = random_hash(), random_hash()
         save_dir = {}
         save_dir[result["file_name"]] = result["file_bytes"]
-        file_zip_save_path = user_db_path+file_name_hash+".7z"
         aes_encrypt_zip_file(
             encryption_key,
             result["file_bytes"]
@@ -392,29 +390,29 @@ async def get_toolchain_output_file_response(database,
     This is basically a middleman function to actually get the file response.
     """
     
-    file_zip_save_path = user_db_path+server_zip_hash+".7z"
-    file = aes_decrypt_zip_file(
-        database,
-        document_password, 
-        file_zip_save_path
-    )
-    keys = list(file.keys())
-    file_name = keys[0]
-    file_get = file[file_name]
-    temp_raw_path = user_db_path+file_name
-    temp_ref = {}
-    temp_ref[file_name] = file_get
-    new_file_zip_save_path = user_db_path+server_zip_hash+".zip"
-    # aes_encrypt_zip_file(None, temp_ref, new_file_zip_save_path)
+    # file = aes_decrypt_zip_file(
+    #     database,
+    #     document_password, 
+        
+    # )
+    # keys = list(file.keys())
+    # file_name = keys[0]
+    # file_get = file[file_name]
+    # temp_raw_path = user_db_path+file_name
+    # temp_ref = {}
+    # temp_ref[file_name] = file_get
+    # new_file_zip_save_path = user_db_path+server_zip_hash+".zip"
+    # # aes_encrypt_zip_file(None, temp_ref, new_file_zip_save_path)
 
-    with zipfile.ZipFile(new_file_zip_save_path, mode="w") as myzip:
-        with myzip.open(file_name, mode="w") as myfile:
-            myfile.write(file_get.read())
-            myfile.close()
-        myzip.close()
+    # with zipfile.ZipFile(new_file_zip_save_path, mode="w") as myzip:
+    #     with myzip.open(file_name, mode="w") as myfile:
+    #         myfile.write(file_get.read())
+    #         myfile.close()
+    #     myzip.close()
     
-    Thread(target=delete_file_on_delay, kwargs={"file_path": new_file_zip_save_path}).start()
-    return FileResponse(new_file_zip_save_path)
+    # Thread(target=delete_file_on_delay, kwargs={"file_path": new_file_zip_save_path}).start()
+    # return FileResponse(new_file_zip_save_path)
+    pass
 
 def delete_file_on_delay(file_path : str):
     time.sleep(20)

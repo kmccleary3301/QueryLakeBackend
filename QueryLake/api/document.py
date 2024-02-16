@@ -9,7 +9,6 @@ from ..database import encryption
 from io import BytesIO
 from .user_auth import *
 from .hashing import *
-from .api import user_db_path
 from threading import Thread
 from ..vector_database.embeddings import query_database, create_embeddings_in_database
 from ..vector_database.document_parsing import parse_PDFs
@@ -23,7 +22,6 @@ import ocrmypdf
 from ..typing.config import AuthType
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-user_db_path = server_dir+"/user_db/files/"
 
 # def create_document_collection(database : Session, username : str, collection_name : str, public : bool = False):
 #     new_collection = sql_db.user_document_collection(
@@ -74,7 +72,7 @@ async def upload_document(database : Session,
         return {"file_upload_success": False, "note": "Incorrect Key"}
     # file_id = hash_function(file.filename+" "+str(time.time()))
 
-    file_zip_save_path = user_db_path+random_hash()+".7z"
+    # file_zip_save_path = user_db_path+random_hash()+".7z"
     file.file.seek(0)
     file_data_bytes = file.file.read()
     file_integrity = sha256(file_data_bytes).hexdigest()
@@ -130,7 +128,7 @@ async def upload_document(database : Session,
     
     new_db_file = sql_db_tables.document_raw(
         hash_id=random_hash(),
-        server_zip_archive_path=file_zip_save_path,
+        # server_zip_archive_path=file_zip_save_path,
         file_name=file.filename,
         integrity_sha256=file_integrity,
         size_bytes=len(file_data_bytes),

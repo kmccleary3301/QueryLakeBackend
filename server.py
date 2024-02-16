@@ -159,9 +159,6 @@ class UmbrellaClass:
                              encode_output : bool = False,
                              on_new_token: Awaitable[Callable[[str], None]] = None) -> AsyncGenerator[bytes, None]:
         
-        if not on_new_token is None:
-            print("ON NEW TOKEN PASSED", on_new_token)
-        
         num_returned, tokens_returned = 0, []
         async for request_output in results_generator:
             text_outputs = [output.text for output in request_output.outputs]
@@ -204,7 +201,6 @@ class UmbrellaClass:
         on_new_token = None
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
-            # print("ON NEW TOKEN PULLED", on_new_token)
         
         assert model_choice in self.llm_handles, "Model choice not available"
         
@@ -559,29 +555,22 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
                         result = await api.toolchain_file_upload_event_call(**true_args, session=toolchain_session)
                     
-                    elif command == "toolchain/entry":
-                        true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
-                        result = await api.toolchain_entry_call(**true_args, session=toolchain_session)
+                    # Entries are deprecated.
+                    # elif command == "toolchain/entry":
+                    #     true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
+                    #     result = await api.toolchain_entry_call(**true_args, session=toolchain_session)
 
                     elif command == "toolchain/event":
-                        # print("SYSTEM ARGS KEYS AT EVENT:", list(system_args.keys()))
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
-                        # print("PASSED KEYS AT EVENT:", list(true_args.keys()))
-                        print("TRUE ARGS:", true_args)
-                        result = await api.toolchain_event_call(**true_args, session=toolchain_session)
-                        result = {"event_result": result}
-                        print("RESULT AT EVENT:", result)
-                        
-                        
-                        # print("RESULT AT EVENT:", result)
+                        event_result = await api.toolchain_event_call(**true_args, session=toolchain_session)
+                        result = {"event_result": event_result}
                     
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
                     
                     del result_message
-                    generate = {"STOP_GENERATION": False}
-                    print("\n\n\n\n\n\n\n\n\n")
-                    # await self.llm_call(request_dict, ws)
+                    del result
+                    
                     await api.save_toolchain_session(self.database, toolchain_session)
                 
                 except WebSocketDisconnect:
