@@ -362,7 +362,10 @@ async def toolchain_event_call(database : Session,
         save_dir = {}
         save_dir[result["file_name"]] = result["file_bytes"]
         file_zip_save_path = user_db_path+file_name_hash+".7z"
-        aes_encrypt_zip_file(encryption_key, save_dir, file_zip_save_path)
+        aes_encrypt_zip_file(
+            encryption_key,
+            result["file_bytes"]
+        )
         return {"flag": "file_response", "server_zip_hash": file_name_hash, "password": encryption_key, "file_name": result["file_name"]}
     
     return result
@@ -379,10 +382,22 @@ async def toolchain_session_notification(database : Session,
     assert session.author == user.name, "User not authorized"
     await session.send_websocket_msg(message, ws)
 
-async def get_toolchain_output_file_response(server_zip_hash : str, 
+async def get_toolchain_output_file_response(database,
+                                             server_zip_hash : str, 
                                              document_password : str) -> FileResponse:
+    """
+    TODO: create a new database table for these temporary files.
+    
+    Retrieve file response from a toolchain result.
+    This is basically a middleman function to actually get the file response.
+    """
+    
     file_zip_save_path = user_db_path+server_zip_hash+".7z"
-    file = aes_decrypt_zip_file(document_password, file_zip_save_path)
+    file = aes_decrypt_zip_file(
+        database,
+        document_password, 
+        file_zip_save_path
+    )
     keys = list(file.keys())
     file_name = keys[0]
     file_get = file[file_name]

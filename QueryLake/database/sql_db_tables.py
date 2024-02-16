@@ -1,5 +1,6 @@
 from typing import Optional, List, Literal
-from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON
+from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON, LargeBinary
+
 from sqlalchemy.sql.schema import Column
 from sqlmodel import Session, create_engine
 from pgvector.sqlalchemy import Vector
@@ -174,6 +175,8 @@ class document_raw(SQLModel, table=True):
     user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
     global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
     toolchain_session_hash_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.hash_id", index=True)
+    
+    file_data: bytes = Field(sa_column=Column(LargeBinary))
 
 
 class organization_document_collection(SQLModel, table=True):

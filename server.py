@@ -570,6 +570,8 @@ class UmbrellaClass:
                         print("TRUE ARGS:", true_args)
                         result = await api.toolchain_event_call(**true_args, session=toolchain_session)
                         result = {"event_result": result}
+                        print("RESULT AT EVENT:", result)
+                        
                         
                         # print("RESULT AT EVENT:", result)
                     

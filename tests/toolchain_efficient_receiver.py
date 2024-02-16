@@ -125,4 +125,5 @@ async def wait_for_command_finish(websocket : Connection, toolchain_state : dict
             
         elif check_keys(["event_result"], list(response.keys())):
             final_output = response["event_result"]
+    
     return final_output, toolchain_state

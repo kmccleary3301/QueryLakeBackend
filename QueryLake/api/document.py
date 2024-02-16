@@ -13,6 +13,7 @@ from .api import user_db_path
 from threading import Thread
 from ..vector_database.embeddings import query_database, create_embeddings_in_database
 from ..vector_database.document_parsing import parse_PDFs
+from ..database.encryption import aes_decrypt_zip_file
 # from chromadb.api import ClientAPI
 import time
 import json
@@ -104,6 +105,29 @@ async def upload_document(database : Session,
 
     encryption_key = random_hash()
 
+    zip_start_time = time.time()
+    if public:
+        encrypted_bytes = encryption.aes_encrypt_zip_file(
+            key=None, 
+            file_data=BytesIO(file_data_bytes)
+        )
+        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
+        #     "key": None, 
+        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
+        #     "save_path": file_zip_save_path
+        # })
+    else:
+        encrypted_bytes = encryption.aes_encrypt_zip_file(
+            key=encryption_key,
+            file_data=BytesIO(file_data_bytes)
+        )
+        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
+        #     "key": encryption_key, 
+        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
+        #     "save_path": file_zip_save_path
+        # })
+    # zip_thread.start()
+    
     new_db_file = sql_db_tables.document_raw(
         hash_id=random_hash(),
         server_zip_archive_path=file_zip_save_path,
@@ -113,27 +137,12 @@ async def upload_document(database : Session,
         creation_timestamp=time.time(),
         public=public,
         encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
+        file_data=encrypted_bytes,
         **collection_author_kwargs
     )
     
     assert not collection is None or collection_type, "Collection not found"
-
-    zip_start_time = time.time()
-    if public:
-        encryption.aes_encrypt_zip_file(key=None, file_data={file.filename: BytesIO(file_data_bytes)}, save_path=file_zip_save_path)
-        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-        #     "key": None, 
-        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-        #     "save_path": file_zip_save_path
-        # })
-    else:
-        encryption.aes_encrypt_zip_file(key=encryption_key, file_data={file.filename: BytesIO(file_data_bytes)}, save_path=file_zip_save_path)
-        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-        #     "key": encryption_key, 
-        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-        #     "save_path": file_zip_save_path
-        # })
-    # zip_thread.start()
+    
     print("Saved file in %.2fs" % (time.time()-zip_start_time))
     print("Collection type:", collection_type)
     if not collection_type == "toolchain_session":
@@ -177,8 +186,6 @@ def delete_document(database : Session,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
-    
-    os.remove(document.server_zip_archive_path)
 
     document_embeddings = database.exec(select(sql_db_tables.DocumentEmbedding).where(sql_db_tables.DocumentEmbedding.document_id == hash_id)).all()
     for e in document_embeddings:
@@ -206,7 +213,7 @@ def get_document_secure(database : Session,
     (user, user_auth) = get_user(database, auth)
 
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
-
+    
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == user_auth.username, "User not authorized"
@@ -242,7 +249,7 @@ def get_document_secure(database : Session,
     
     if return_document:
         return document
-    return {"password": document_password, "database_path": document.server_zip_archive_path}
+    return {"password": document_password, "hash_id": document.hash_id}
 
 async def query_vector_db(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -306,7 +313,11 @@ def get_file_bytes(database : Session,
     print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
 
-    file = encryption.aes_decrypt_zip_file(encryption_key, document.server_zip_archive_path)
+    file = encryption.aes_decrypt_zip_file(
+        database,
+        encryption_key, 
+        document.hash_id
+    )
     keys = list(file.keys())
     file_name = keys[0]
     file_get = file[file_name]
@@ -325,6 +336,7 @@ async def fetch_document(database : Session,
                          server_private_key : str):
     """
     Decrypt document in memory for the user's viewing.
+    Return as a streaming response of bytes.
     """
     # print("Fetching document with auth:", document_auth_access)
     
@@ -342,19 +354,23 @@ async def fetch_document(database : Session,
         "auth" : document_auth_access["auth"],
         "hash_id": document_auth_access["hash_id"],
     })
-    path=fetch_parameters["database_path"]
+    
     password = fetch_parameters["password"]
 
-    def yield_single_file():
-        with py7zr.SevenZipFile(path, mode='r', password=password) as z:
-            file = z.read()
-            keys = list(file.keys())
-            print(keys)
-            file_name = keys[0]
-            file = file[file_name]
-            yield file.getbuffer().tobytes()
-    return StreamingResponse(yield_single_file())
-        # raise ValueError(str(e))
+    # def yield_single_file():
+    #     with py7zr.SevenZipFile(path, mode='r', password=password) as z:
+    #         file = z.read()
+    #         keys = list(file.keys())
+    #         print(keys)
+    #         file_name = keys[0]
+    #         file = file[file_name]
+    #         yield file.getbuffer().tobytes()
+    # return StreamingResponse(yield_single_file())
+    return StreamingResponse(aes_decrypt_zip_file(
+        database, 
+        password,
+        fetch_parameters["hash_id"]
+    ))
 
 def ocr_pdf_file(database : Session,
                  auth : AuthType,

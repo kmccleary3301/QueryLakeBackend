@@ -9,6 +9,8 @@ import py7zr
 import os
 from io import BytesIO
 from typing import Dict, Union
+from sqlmodel import Session, select, and_
+from ..database.sql_db_tables import document_raw
 
 
 def get_random_hash():
@@ -99,35 +101,51 @@ def zip_test(key : str):
     with py7zr.SevenZipFile('target.7z', 'w', password=key, header_encryption=True) as z:
         z.write(server_dir+"QueryLake")
 
-def aes_encrypt_zip_file(key : str, file_data : Dict[str, Union[str, bytes]], save_path : str):
-    print("Encrypting file with key:", [key])
+def aes_encrypt_zip_file(key : str, 
+                         file_data : Union[str, bytes]) -> bytes:
+    """
+    Encrypts a dictionary of file data, with the key as the password using 7zip.
+    Returns the encrypted file as bytes.
+    """
+    new_bytes = BytesIO()
     
-    header_encryption = False
-    if not key is None and save_path.split(".")[-1] == "7z":
-        header_encryption = True
     
-    with py7zr.SevenZipFile(save_path, 'w', password=key, header_encryption=True) as z:
-        z.writed(file_data)
+    
+    with py7zr.SevenZipFile(new_bytes, 'w', password=key, header_encryption=True) as z:
+        z.writed({"file": file_data})
+    
+    return new_bytes.getvalue()
+    
 
-def aes_decrypt_zip_file(key : str, file_path : str):
+def aes_decrypt_zip_file(database: Session,
+                         key : str, 
+                         document_id : str):
     """
     Returns dictionary with structure of archive.
     Each file value is a BytesIO object.
     """
 
-    with py7zr.SevenZipFile(file_path, mode='r', password=key) as z:
-        return z.read()
+    statement = select(document_raw).where(document_raw.hash_id == document_id)
+    file_model = database.exec(statement).first()
+    if file_model is None:
+        raise FileNotFoundError("Document id not found in database.")
+    
+    file_bytes = file_model.file_data
+    
+    with py7zr.SevenZipFile(BytesIO(file_bytes), mode='r', password=key) as z:
+        return z.read()["file"]
 
 # def save_file_aes(file_path : str, encryption_key : str) -> None:
 
 
 
 if __name__ == "__main__":
-    test_key = "dkljafsldkjflasjhfie8rwher82u4982u39"
-    test_msg = "get_randomakljdlfkasjkdjfhLorem ipsum马云Lorem ipsum马云Lorem ipsum马云Lorem ipsum马云Lorem ipsum马云"
+    # test_key = "dkljafsldkjflasjhfie8rwher82u4982u39"
+    # test_msg = "get_randomakljdlfkasjkdjfhLorem ipsum马云Lorem ipsum马云Lorem ipsum马云Lorem ipsum马云Lorem ipsum马云"
     # encrypted_string = aes_encrypt_string(test_key, test_msg)
     # decrypted_string = aes_decrypt_string(test_key, encrypted_string)
     # print(decrypted_string)
-    aes_encrypt_zip_file(test_key, {"Test.txt": BytesIO(bytes(test_msg, encoding="utf-8"))}, "test_create_encrypted_file.7z")
-    print(aes_decrypt_zip_file(test_key, "test_create_encrypted_file.7z"))
+    # aes_encrypt_zip_file(test_key, {"Test.txt": BytesIO(bytes(test_msg, encoding="utf-8"))}, "test_create_encrypted_file.7z")
+    # print(aes_decrypt_zip_file(test_key, "test_create_encrypted_file.7z"))
     # zip_test(test_key)
+    pass
