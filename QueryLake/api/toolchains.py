@@ -27,6 +27,7 @@ from typing import Callable, Any, List, Dict, Union
 from ..typing.toolchains import *
 from ..operation_classes.toolchain_session import ToolchainSession
 from ..misc_functions.toolchain_state_management import safe_serialize
+from io import BytesIO
 
 default_toolchain = "chat_session_normal"
 
@@ -70,7 +71,12 @@ def retrieve_toolchain_from_db(database : Session,
     
     toolchain_get = get_toolchain_from_db(database, session_db_entry.toolchain_id, auth)
     
-    session = ToolchainSession(session_db_entry.toolchain_id, toolchain_get, toolchain_function_caller, session_db_entry.hash_id, user_auth.username)
+    session = ToolchainSession(database,
+                               session_db_entry.toolchain_id, 
+                               toolchain_get, 
+                               toolchain_function_caller, 
+                               session_db_entry.hash_id, 
+                               user_auth.username)
     session.load({
         "title": session_db_entry.title,
         "toolchain_id": session_db_entry.toolchain_id,
@@ -139,14 +145,17 @@ def create_toolchain_session(database : Session,
     database accordingly.
     """
     user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
+    (_, user_auth) = user_retrieved
     session_hash = random_hash()
-    # toolchain_get = TOOLCHAINS[toolchain_id]
     
     toolchain_get = get_toolchain_from_db(database, toolchain_id, auth)
-    created_session = ToolchainSession(toolchain_id, toolchain_get, toolchain_function_caller, session_hash, user_auth.username)
-    # return {"success": True, "session_id": session_hash}
-
+    created_session = ToolchainSession(database,
+                                       toolchain_id, 
+                                       toolchain_get, 
+                                       toolchain_function_caller, 
+                                       session_hash, 
+                                       user_auth.username)
+    
     new_session_in_database = sql_db_tables.toolchain_session(
         title=created_session.state["title"],
         hash_id=session_hash,
@@ -272,38 +281,6 @@ async def toolchain_file_upload_event_call(database : Session,
     await save_toolchain_session(database, session)
     return result
 
-# async def toolchain_entry_call(database : Session,
-#                                session : ToolchainSession,
-#                                auth : AuthType,
-#                                session_id : str,
-#                                entry_parameters : dict):
-#     """
-#     TODO: Revisit this. May deprecate.
-    
-#     Call entry point in toolchain and propagate forward.
-#     entry parameters can be provided, however there must be special cases for
-#     things like files.
-#     """
-#     user_retrieved : getUserType  = get_user(database, auth)
-#     (user, user_auth) = user_retrieved
-#     assert session.author == user.name, "User not authorized"
-    
-
-#     system_args = {
-#         "database": database,
-#     }
-#     system_args.update(auth)
-#     # return {"success": True, "result": await TOOLCHAIN_SESSION_CAROUSEL[session_id]["session"].entry_prop(entry_parameters)}
-#     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
-#     save_to_db_flag = False
-#     if not session.entry_called:
-#         save_to_db_flag = True
-#     result = await session.entry_prop(entry_parameters, system_args)
-#     # if save_to_db_flag:
-#     await save_toolchain_session(database, session)
-
-#     return result
-
 async def toolchain_event_call(database : Session,
                                session : ToolchainSession,
                                auth: AuthType,
@@ -350,70 +327,95 @@ async def toolchain_event_call(database : Session,
                                       ws)
     
     await save_toolchain_session(database, session)
-    await session.send_websocket_msg({
-        "type": "finished_event_prop",
-        "node_id": event_node_id
-    }, ws)
     
     if return_file_response:
         assert "file_bytes" in result and "file_name" in result, "Output doesn't contain file bytes"
         file_name_hash, encryption_key = random_hash(), random_hash()
         save_dir = {}
-        save_dir[result["file_name"]] = result["file_bytes"]
-        aes_encrypt_zip_file(
+        
+        # save_dir[result["file_name"]] = result["file_bytes"]
+        encrypted_file_bytes = aes_encrypt_zip_file(
             encryption_key,
             result["file_bytes"]
         )
-        return {"flag": "file_response", "server_zip_hash": file_name_hash, "password": encryption_key, "file_name": result["file_name"]}
+        
+        file_db_entry = sql_db_tables.ToolchainSessionFileOutput(
+            file_name=result["file_name"],
+            file_data=encrypted_file_bytes,
+            creation_timestamp=time.time(),
+        )
+        database.add(file_db_entry)
+        database.commit()
+        
+        result = {
+            "server_zip_hash": file_name_hash, 
+            "password": encryption_key, 
+            "output_id": file_db_entry.id
+        }
+    
+    await session.send_websocket_msg({
+        "type": "finished_event_prop",
+        "node_id": event_node_id,
+    }, ws)
     
     return result
 
-async def toolchain_session_notification(database : Session,
-                                         toolchain_function_caller,
-                                         session : ToolchainSession,
-                                         auth : AuthType,
-                                         session_id : str,
-                                         message : dict,
-                                         ws : WebSocket = None):
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
-    assert session.author == user.name, "User not authorized"
-    await session.send_websocket_msg(message, ws)
+# async def toolchain_session_notification(database : Session,
+#                                          toolchain_function_caller,
+#                                          session : ToolchainSession,
+#                                          auth : AuthType,
+#                                          session_id : str,
+#                                          message : dict,
+#                                          ws : WebSocket = None):
+#     """
+#     Sends a notification message to a toolchain session.
 
-async def get_toolchain_output_file_response(database,
-                                             server_zip_hash : str, 
+#     Parameters:
+#     - database (Session): The database session.
+#     - toolchain_function_caller: The caller function for the toolchain.
+#     - session (ToolchainSession): The toolchain session.
+#     - auth (AuthType): The authentication type.
+#     - session_id (str): The ID of the session.
+#     - message (dict): The message to be sent.
+#     - ws (WebSocket, optional): The WebSocket connection (default: None).
+
+#     Returns:
+#     - None
+
+#     Raises:
+#     - AssertionError: If the session author is not authorized.
+#     """
+    
+#     user_retrieved : getUserType  = get_user(database, auth)
+#     (user, user_auth) = user_retrieved
+#     assert session.author == user.name, "User not authorized"
+#     await session.send_websocket_msg(message, ws)
+
+
+
+async def get_toolchain_output_file_response(database : Session,
+                                             document_id : str, 
                                              document_password : str) -> FileResponse:
     """
-    TODO: create a new database table for these temporary files.
-    
     Retrieve file response from a toolchain result.
     This is basically a middleman function to actually get the file response.
     """
     
-    # file = aes_decrypt_zip_file(
-    #     database,
-    #     document_password, 
-        
-    # )
-    # keys = list(file.keys())
-    # file_name = keys[0]
-    # file_get = file[file_name]
-    # temp_raw_path = user_db_path+file_name
-    # temp_ref = {}
-    # temp_ref[file_name] = file_get
-    # new_file_zip_save_path = user_db_path+server_zip_hash+".zip"
-    # # aes_encrypt_zip_file(None, temp_ref, new_file_zip_save_path)
-
-    # with zipfile.ZipFile(new_file_zip_save_path, mode="w") as myzip:
-    #     with myzip.open(file_name, mode="w") as myfile:
-    #         myfile.write(file_get.read())
-    #         myfile.close()
-    #     myzip.close()
+    file_bytes = aes_decrypt_zip_file(
+        database,
+        document_password, 
+        document_id,
+        toolchain_file=True
+    )
+    # return FileResponse(aes_encrypt_zip_file(None, file_bytes))
+    file_db_entry = database.exec(select(sql_db_tables.ToolchainSessionFileOutput).where(sql_db_tables.ToolchainSessionFileOutput.id == document_id)).first()
     
-    # Thread(target=delete_file_on_delay, kwargs={"file_path": new_file_zip_save_path}).start()
-    # return FileResponse(new_file_zip_save_path)
-    pass
-
-def delete_file_on_delay(file_path : str):
-    time.sleep(20)
-    os.remove(file_path)
+    headers = {
+        "Content-Disposition": f"attachment; filename={file_db_entry.file_name}",
+    }
+    
+    database.delete(file_db_entry)
+    database.commit()
+    
+    
+    return StreamingResponse(BytesIO(file_bytes), media_type="application/octet-stream", headers=headers)

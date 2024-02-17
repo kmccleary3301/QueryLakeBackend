@@ -23,12 +23,14 @@ from typing import Callable, Any, List, Dict, Union, Awaitable
 
 from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
+from ..database.sql_db_tables import document_raw
 
 class ToolchainSession():
     # SPECIAL_NODE_FUNCTIONS = ["<<ENTRY>>", "<<EVENT>>"]
     SPECIAL_ARGUMENT_ORIGINS = ["<<SERVER_ARGS>>", "<<USER>>", "<<STATE>>"]
 
     def __init__(self,
+                 database : Session,
                  toolchain_id,
                  toolchain_pulled : Union[dict, ToolChain], 
                  function_getter : Callable[[str], Union[Awaitable[Callable], Callable]],
@@ -54,7 +56,8 @@ class ToolchainSession():
         self.function_getter : Callable[[str], Union[Awaitable[Callable], Callable]] = function_getter
         self.reset_everything()
         self.log : List[str] = []
-        self.toolchain_session_files : List[ToolChainSessionFile] = []
+        self.toolchain_session_files : Dict[str, ToolChainSessionFile] = {}
+        self.database = database
 
     def reset_everything(self):
         """
@@ -63,7 +66,7 @@ class ToolchainSession():
         """
         self.entry_called = False
         self.node_carousel = {}
-        # self.state_arguments = {"session_hash": self.session_hash}
+        
         self.state : dict = deepcopy(self.toolchain.initial_state)
         
         if not "title" in self.state:
@@ -90,24 +93,13 @@ class ToolchainSession():
             key : False for key, node in self.nodes_dict.items() if not (node.is_event)
         }
     
-    def assert_split_inputs(self):
-        for node_id in self.node_carousel.keys():
-            self.node_carousel[node_id]["requires_split_inputs"] = False
-            for arg_entry in self.node_carousel[node_id]["arguments"]:
-                if "merge_parallel_outputs" in arg_entry and arg_entry["merge_parallel_outputs"]:
-                    self.node_carousel[node_id]["requires_split_inputs"] = True
-                    break
-
-    def assert_event_path(self, node):
-        self.node_carousel[node["id"]]["requires_event"] = True
-        for entry in node["feed_to"]:
-            if entry["destination"] in ToolchainSession.SPECIAL_ARGUMENT_ORIGINS:
-                continue
-            else:
-                target_node = self.node_carousel[entry["destination"]]
-                if self.node_carousel[target_node["id"]]["requires_event"]:
-                    continue
-                self.assert_event_path(target_node)
+    def get_file_bytes(self, file_pointer : ToolChainSessionFile) -> Union[bytes, BytesIO, str]:
+        """
+        Get the bytes of a file from the toolchain session.
+        """
+        database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.hash_id == file_pointer.document_hash_id)).first()
+        assert database_obj.toolchain_session_hash_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
+        return database_obj.file_data
     
     async def create_streaming_callables(self, 
                                          node : toolchainNode,
@@ -189,6 +181,7 @@ class ToolchainSession():
                                   use_firing_queue : bool = True) -> dict:
         """
         Construct the inputs for running a node.
+        This does not feature route traversal.
         """
         node_inputs = {}
         self.log_event("CONSTRUCTING NODE INPUTS WITH", {
@@ -225,12 +218,17 @@ class ToolchainSession():
                 
                 assert (node_input_arg.key in user_provided_arguments) or node_input_arg.optional, f"Required input argument \'{node_input_arg.key}\' in node \'{node.id}\' not found in function parameters"
                 
+                
+                
                 if node_input_arg.key in user_provided_arguments:
-                    node_inputs[node_input_arg.key] = user_provided_arguments[node_input_arg.key]
-                    self.log_event("FOUND USER INPUT ARG", {
-                        "value": node_inputs[node_input_arg.key]
-                    })
-            
+                    
+                    # Special case for file uploads. Should only be used for `file_upload_event`, although this isn't enforced.
+                    if node_input_arg.key == "<<FILE>>":
+                        db_file = self.database.exec(select(document_raw).where(document_raw.hash_id == user_provided_arguments[node_input_arg.key])).first()
+                        node_inputs[node_input_arg.key] = ToolChainSessionFile(name=db_file.file_name, document_hash_id=db_file.hash_id)
+                    else:
+                        node_inputs[node_input_arg.key] = user_provided_arguments[node_input_arg.key]
+                    
             elif not node_input_arg.from_state is None:
                 # For now, optionality will not be supported for state arguments. May change in the future.
                 self.log_event("SEARCHING FOR STATE INPUT ARG", {
@@ -244,15 +242,15 @@ class ToolchainSession():
                     "value": node_inputs[node_input_arg.key]
                 })
             
-            # TODO: Implement file retrieval.
-            # elif node_input_arg.from_server:
-            #     assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
-            #     # node_inputs[node_input_arg.key] = get_value_obj_global(stateValue())
+            elif node_input_arg.from_server:
+                assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
             
+            # TODO: Implement file retrieval.
             elif not node_input_arg.from_files is None:
                 assert node_input_arg.key in system_args, f"File argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
                 
-                file_pointer : ToolChainSessionFile = traverse_static_route_global
+                # file_pointer : ToolChainSessionFile = traverse_static_route_global
                 
                 # node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
             
@@ -408,6 +406,10 @@ class ToolchainSession():
             })
             
             return None
+        
+        elif feed_map.destination == "<<FILES>>":
+            self.state, _ = await self.run_feed_map_on_object(target_object=self.toolchain_session_files, initial_value=init_value, **feed_map_args)
+        
         else:
             # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
             
@@ -485,7 +487,8 @@ class ToolchainSession():
         state_kwargs = {
             "toolchain_state" : early_state_reference,
             "node_inputs_state" : node_inputs,
-            "node_outputs_state" : {}
+            "node_outputs_state" : {},
+            "get_files_callable" : self.get_file_bytes
             # "branching_state" : branching_state       # Figure out branches later
         }
         
@@ -523,16 +526,13 @@ class ToolchainSession():
         
         state_kwargs.update({"node_outputs_state" : node_outputs})
         
-        # TODO: is shallow copy sufficient?
-        
         for feed_map in node.feed_mappings:
-            
-            
             
             new_state_args = {
                 "toolchain_state" : deepcopy(self.state),
                 "node_inputs_state" : node_inputs,
-                "node_outputs_state" : node_outputs
+                "node_outputs_state" : node_outputs,
+                "get_files_callable" : self.get_file_bytes
             }
             
             init_value = await self.get_initial_feed_map_obj(feed_map, new_state_args)

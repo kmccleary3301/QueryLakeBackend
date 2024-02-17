@@ -1,14 +1,6 @@
 from typing import List, Dict, Optional, Union, Tuple, Literal, Any
 from pydantic import BaseModel
 
-# class staticRouteBasic(BaseModel):
-#     type : Optional[Literal["staticRouteBasic"]] = "staticRouteBasic"
-#     route : str
-#     value : Any
-
-
-
-
 """
 Below is the typing scheme for object traversal and manipulation within ToolChains.
 It allows for full control over objects and their values, which is necessary for the
@@ -42,7 +34,7 @@ class getNodeInput(BaseModel):
 class getNodeOutput(BaseModel):
     type : Optional[Literal["getNodeOutput"]] = "getNodeOutput"
     route: "staticRoute"
-    
+
 class getFiles(BaseModel):
     """
     There is another equivalent to state in the toolchain, which is set of files uploaded to the session.
@@ -51,8 +43,6 @@ class getFiles(BaseModel):
     route: Optional["staticRoute"] = None
     routes: Optional[List["staticRoute"]] = None
     getText: Optional[bool] = False # If True, then we get the text of the file instead of the file object.
-
-
 
 # Add alternatives for direct referencing of valueObjs in getFrom
 
@@ -69,7 +59,10 @@ class indexRouteRetrievedInputArgValue(BaseModel):
 class indexRouteRetrievedOutputArgValue(BaseModel):
     # type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
     getFromOutputs: getNodeOutput
-
+    
+class indexRouteRetrievedFile(BaseModel):
+    # type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
+    getFiles: getFiles
 
 class indexRouteRetrieved(BaseModel):
     """
@@ -78,12 +71,25 @@ class indexRouteRetrieved(BaseModel):
     type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
     getFrom: "valueObj"
 
-indexRouteRetrievedNew = Union[
+indexRouteRetrievedBasic = Union[
     indexRouteRetrieved, 
     staticValue, 
     indexRouteRetrievedStateValue, 
     indexRouteRetrievedInputArgValue, 
-    indexRouteRetrievedOutputArgValue
+    indexRouteRetrievedOutputArgValue,
+    indexRouteRetrievedFile
+]
+
+class getLengthValue(BaseModel):
+    """
+    This is specifically for pulling a `valueObj` and using it as a route element as if it was statically coded.
+    """
+    type : Optional[Literal["getLengthValue"]] = "getLengthValue"
+    getLength: indexRouteRetrievedBasic
+
+indexRouteRetrievedNew = Union[
+    indexRouteRetrievedBasic,
+    getLengthValue
 ]
 
 
@@ -183,7 +189,7 @@ class insertAction(rootActionType):
     route : "staticRoute"
     replace: Optional[bool] = True
 
-valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput]
+valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput, getFiles]
 staticRouteBasicElementType = Union[int, str]
 staticRouteBasic = List[staticRouteBasicElementType]
 

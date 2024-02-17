@@ -10,7 +10,7 @@ import os
 from io import BytesIO
 from typing import Dict, Union
 from sqlmodel import Session, select, and_
-from ..database.sql_db_tables import document_raw
+from ..database.sql_db_tables import document_raw, ToolchainSessionFileOutput
 
 
 def get_random_hash():
@@ -119,13 +119,17 @@ def aes_encrypt_zip_file(key : str,
 
 def aes_decrypt_zip_file(database: Session,
                          key : str, 
-                         document_id : str):
+                         document_id : str,
+                         toolchain_file : bool = False):
     """
     Returns dictionary with structure of archive.
     Each file value is a BytesIO object.
     """
 
-    statement = select(document_raw).where(document_raw.hash_id == document_id)
+    if toolchain_file:
+        statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
+    else:
+        statement = select(document_raw).where(document_raw.hash_id == document_id)
     file_model = database.exec(statement).first()
     if file_model is None:
         raise FileNotFoundError("Document id not found in database.")

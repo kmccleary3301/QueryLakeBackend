@@ -15,7 +15,7 @@ def data_dict(db_entry : SQLModel):
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
 class DocumentEmbedding(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True)
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
     document_integrity: Optional[str] = Field(default=None)
@@ -25,6 +25,13 @@ class DocumentEmbedding(SQLModel, table=True):
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
     text: str = Field()
     private: bool = Field(default=False)
+
+
+class ToolchainSessionFileOutput(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    creation_timestamp: float
+    file_name: Optional[str] = Field(default=None)
+    file_data: bytes = Field(sa_column=Column(LargeBinary))
 
 class toolchain_session(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -2,40 +2,9 @@ import os, json
 from copy import deepcopy, copy
 from typing import Callable, Any, List, Dict, Union, Awaitable
 from ..typing.toolchains import *
+from io import BytesIO
 
-
-def evaluate_static_route(route : staticRoute,
-                          toolchain_state : Union[list, dict],
-                          node_inputs_state : Union[list, dict],
-                          node_outputs_state : Union[list, dict]):
-    """
-    Convert a staticRoute type into a list of strings and ints.
-    """
-    state_kwargs = {
-        "toolchain_state" : toolchain_state,
-        "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
-    }
-    def check_element(element : staticRouteElementType) -> Union[str, int]:
-        if isinstance(element, int) or isinstance(element, str):
-            return element
-        elif isinstance(element, indexRouteRetrievedNew):
-            if isinstance(element, staticValue):
-                assert isinstance(element.value, (int, str)), "staticValue used in staticRoute, but value was not int or str"
-                return element.value
-            elif isinstance(element, indexRouteRetrieved):
-                return get_value_obj_global(element.getFrom, **state_kwargs)
-            elif isinstance(element, indexRouteRetrievedStateValue):
-                return traverse_static_route_global(toolchain_state, element.getFromState.route, **state_kwargs)[0]
-            elif isinstance(element, indexRouteRetrievedInputArgValue):
-                return traverse_static_route_global(node_inputs_state, element.getFromInputs.route, **state_kwargs)[0]
-            elif isinstance(element, indexRouteRetrievedOutputArgValue):
-                return traverse_static_route_global(node_outputs_state, element.getFromOutputs.route, **state_kwargs)[0]
-            
-    # Convert the route to a list of strings and ints using `check_element` via map.
-    return list(map(check_element, route))
-    
-
+getFilesCallableType = Callable[[ToolChainSessionFile], Union[bytes, BytesIO, str]]
 
 def append_in_route(object_for_static_route : Union[list, dict], route : List[Union[str, int]], value : Any) -> Union[list, dict]:
     """
@@ -93,11 +62,48 @@ def safe_serialize(obj, **kwargs) -> str:
     default = lambda o: default_callable(o)
     return json.dumps(obj, default=default, **kwargs)
 
+def evaluate_static_route(route : staticRoute,
+                          toolchain_state : Union[list, dict],
+                          node_inputs_state : Union[list, dict],
+                          node_outputs_state : Union[list, dict],
+                          get_files_callable : getFilesCallableType = None) -> List[Union[str, int]]:
+    """
+    Convert a staticRoute type into a list of strings and ints.
+    """
+    
+    state_kwargs = {
+        "toolchain_state" : toolchain_state,
+        "node_inputs_state" : node_inputs_state,
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
+    }
+    
+    def check_element(element : staticRouteElementType) -> Union[str, int]:
+        if isinstance(element, int) or isinstance(element, str):
+            return element
+        elif isinstance(element, indexRouteRetrievedNew):
+            if isinstance(element, staticValue):
+                assert isinstance(element.value, (int, str)), "staticValue used in staticRoute, but value was not int or str"
+                return element.value
+            elif isinstance(element, indexRouteRetrieved):
+                return get_value_obj_global(element.getFrom, **state_kwargs)
+            elif isinstance(element, indexRouteRetrievedStateValue):
+                return traverse_static_route_global(toolchain_state, element.getFromState.route, **state_kwargs)[0]
+            elif isinstance(element, indexRouteRetrievedInputArgValue):
+                return traverse_static_route_global(node_inputs_state, element.getFromInputs.route, **state_kwargs)[0]
+            elif isinstance(element, indexRouteRetrievedOutputArgValue):
+                return traverse_static_route_global(node_outputs_state, element.getFromOutputs.route, **state_kwargs)[0]
+            
+    # Convert the route to a list of strings and ints using `check_element` via map.
+    return list(map(check_element, route))
+
 def traverse_static_route_global(object_for_static_route : Union[list, dict], 
                                  route : staticRoute,
                                  toolchain_state : Union[list, dict],
                                  node_inputs_state : Union[list, dict],
-                                 node_outputs_state : Union[list, dict]) -> Tuple[Union[list, dict], List[Union[str, int]]]:
+                                 node_outputs_state : Union[list, dict],
+                                 get_files_callable : getFilesCallableType = None
+                                 ) -> Tuple[Union[list, dict], List[Union[str, int]]]:
     """
     Traverse an object using a static route.
     The condition tree here reflects the branches of the element types.
@@ -105,7 +111,8 @@ def traverse_static_route_global(object_for_static_route : Union[list, dict],
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
     
     object_static_in_focus = object_for_static_route
@@ -145,44 +152,48 @@ def traverse_static_route_global(object_for_static_route : Union[list, dict],
                 object_static_in_focus = object_static_in_focus[get_value]
                 indices.append(get_value)
         
-        
-        # elif isinstance(action, valueFromBranchingState): # Finished
-        #     assert not branching_state is None, "valueFromBranchingState used, but branching state was not provided"
-            
-        #     get_value, _ = traverse_static_route_global(branching_state, action.route, **state_kwargs)
-        #     object_static_in_focus = object_static_in_focus[get_value]
-        #     indices.append(get_value)
-        
-        # elif isinstance(action, backOut):
-        #     indices = indices[:-action.count]
-        #     object_static_in_focus = retrieve_value_from_obj(object_for_static_route, indices)
     return object_static_in_focus, indices
 
-def get_value_obj_global(value_obj : valueObj,
+def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
                          toolchain_state : Union[list, dict],
                          node_inputs_state : Union[list, dict],
-                         node_outputs_state : Union[list, dict]) -> Any:
+                         node_outputs_state : Union[list, dict],
+                         get_files_callable : getFilesCallableType = None) -> Any:
     """
-    For traversing value objs.
+    For traversing value Objects and static Route elements.
     """
     
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
     
+    
     if isinstance(value_obj, staticValue):
-        get_value = value_obj.value
+        return value_obj.value
+    elif isinstance(value_obj, getLengthValue):
+        get_value = get_value_obj_global(value_obj.getLength, **state_kwargs)
+        assert isinstance(get_value, list, str), "getLengthValue used, but the value retrieved was not a list or string"
+        return len(get_value)     
     elif isinstance(value_obj, stateValue):
-        get_value, _ = traverse_static_route_global(toolchain_state, value_obj.route, **state_kwargs)
+        target_object, target_route = toolchain_state, value_obj.route
+    elif isinstance(value_obj, indexRouteRetrievedStateValue):
+        target_object, target_route = toolchain_state, value_obj.getFromState.route
     elif isinstance(value_obj, getNodeInput):
-        get_value, _ = traverse_static_route_global(node_inputs_state, value_obj.route, **state_kwargs)
+        target_object, target_route = node_inputs_state, value_obj.route
+    elif isinstance(value_obj, indexRouteRetrievedInputArgValue):
+        target_object, target_route = node_inputs_state, value_obj.getFromInputs.route
     elif isinstance(value_obj, getNodeOutput):
-        get_value, _ = traverse_static_route_global(node_outputs_state, value_obj.route, **state_kwargs)
-    # elif isinstance(value_obj, valueFromBranchingState):
-    #     assert not branching_state is None, "valueFromBranchingState used, but branching state was not provided"
-    #     get_value, _ = traverse_static_route_global(branching_state, value_obj.route, **state_kwargs)
+        target_object, target_route = node_outputs_state, value_obj.route
+    elif isinstance(value_obj, indexRouteRetrievedOutputArgValue):
+        target_object, target_route = node_outputs_state, value_obj.getFromOutputs.route
+    elif isinstance(value_obj, getFiles):
+        pass
+    
+    get_value, _ = traverse_static_route_global(target_object, target_route, **state_kwargs)
+    
     return get_value
 
 def insert_in_static_route_global(object_for_static_route : Union[list, dict], 
@@ -191,6 +202,7 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
                                   toolchain_state : Union[list, dict],
                                   node_inputs_state : Union[list, dict],
                                   node_outputs_state : Union[list, dict],
+                                  get_files_callable : getFilesCallableType = None,
                                   return_indices : bool = False,
                                   append : bool = False,
                                   route_need_conversion : bool = True) -> Union[list, dict]:
@@ -203,14 +215,12 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
         assert isinstance(object_for_static_route, dict), "insert_in_static_route called with an empty route and a non-dict object"
         object_for_static_route.update(value)
         return object_for_static_route
-    # assert len(route) > 0, "insert_in_static_route called with an empty route"
-    
-    
     
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
     
     if route_need_conversion:
@@ -218,16 +228,6 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
     else:
         route_evaluated = route
     
-    # if append:
-    #     obj_in_focus, routes_evaluated_tmp = traverse_static_route_global(object_for_static_route, route, **state_kwargs)
-    #     if isinstance(obj_in_focus, list):
-    #         obj_in_focus.append(value)
-    #         route_evaluated = routes_evaluated_tmp + [len(obj_in_focus)] 
-    #     else:
-    #         obj_in_focus += value
-    #         route_evaluated = routes_evaluated_tmp
-        
-        
     
     if len(route) > 1:
         # Recursively call insert_in_static_route_global.
@@ -241,7 +241,6 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
                                                                                    **state_kwargs, 
                                                                                    append=append, 
                                                                                    route_need_conversion=False)
-        # route_evaluated = routes_evaluated_tmp + routes_recurrent_evaluated_tmp
     else:
         # Single route case.
         
@@ -284,6 +283,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                                   node_outputs_state : Union[list, dict],
                                   sequence : List[sequenceAction],
                                   provided_object : Any = None,
+                                  get_files_callable : getFilesCallableType = None,
                                   deepcopy_object : bool = False,
                                   return_provided_object_routes : bool = False) -> Union[Union[list, dict], Tuple[Union[list, dict], List[Union[int, str]]]]:
     """
@@ -299,7 +299,8 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
     
     routes_for_provided_object = []
@@ -462,13 +463,13 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
         return object, routes_for_provided_object
     
     return object
-    
 
 def evaluate_condition_basic(toolchain_state : Union[list, dict],
                              node_inputs_state : Union[list, dict],
                              node_outputs_state : Union[list, dict],
                              condition : conditionBasic,
-                             provided_object : Any) -> bool:
+                             provided_object : Any,
+                             get_files_callable : getFilesCallableType = None) -> bool:
     """
     Evaluate a singular feed mapping condition.
     """
@@ -476,7 +477,8 @@ def evaluate_condition_basic(toolchain_state : Union[list, dict],
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
         
     if condition.variableOne is None:
@@ -513,13 +515,13 @@ def evaluate_condition_basic(toolchain_state : Union[list, dict],
     #     return isinstance(variable_one, variable_two)
     else:
         raise ValueError(f"Unknown operator: {condition.operator}")
-        
-    
+ 
 def evaluate_condition(toolchain_state : Union[list, dict],
                        node_inputs_state : Union[list, dict],
                        node_outputs_state : Union[list, dict],
                        condition : Union[Condition, conditionBasic],
-                       provided_object : Any) -> bool:
+                       provided_object : Any,
+                       get_files_callable : getFilesCallableType = None) -> bool:
     """
     Evaluate a singular feed mapping condition.
     """
@@ -527,7 +529,8 @@ def evaluate_condition(toolchain_state : Union[list, dict],
     state_kwargs = {
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
-        "node_outputs_state" : node_outputs_state
+        "node_outputs_state" : node_outputs_state,
+        "get_files_callable" : get_files_callable
     }
     
     # Check if condition has attribute `type` to determine if it is a condition or conditionBasic.

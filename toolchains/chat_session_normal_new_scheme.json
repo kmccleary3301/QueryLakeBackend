@@ -88,6 +88,10 @@
             "api_function": "llm",
             "input_arguments": [
                 {
+                    "key": "database",
+                    "from_server": true
+                },
+                {
                     "key": "chat_history",
                     "from_state": { "route": [ "chat_history" ] }
                 },
