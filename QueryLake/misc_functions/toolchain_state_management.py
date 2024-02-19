@@ -66,6 +66,7 @@ def evaluate_static_route(route : staticRoute,
                           toolchain_state : Union[list, dict],
                           node_inputs_state : Union[list, dict],
                           node_outputs_state : Union[list, dict],
+                          toolchain_files : Union[list, dict],
                           get_files_callable : getFilesCallableType = None) -> List[Union[str, int]]:
     """
     Convert a staticRoute type into a list of strings and ints.
@@ -75,6 +76,7 @@ def evaluate_static_route(route : staticRoute,
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     
@@ -102,6 +104,7 @@ def traverse_static_route_global(object_for_static_route : Union[list, dict],
                                  toolchain_state : Union[list, dict],
                                  node_inputs_state : Union[list, dict],
                                  node_outputs_state : Union[list, dict],
+                                 toolchain_files : Union[list, dict],
                                  get_files_callable : getFilesCallableType = None
                                  ) -> Tuple[Union[list, dict], List[Union[str, int]]]:
     """
@@ -158,6 +161,7 @@ def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
                          toolchain_state : Union[list, dict],
                          node_inputs_state : Union[list, dict],
                          node_outputs_state : Union[list, dict],
+                         toolchain_files : Union[list, dict],
                          get_files_callable : getFilesCallableType = None) -> Any:
     """
     For traversing value Objects and static Route elements.
@@ -167,6 +171,7 @@ def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     
@@ -202,6 +207,7 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
                                   toolchain_state : Union[list, dict],
                                   node_inputs_state : Union[list, dict],
                                   node_outputs_state : Union[list, dict],
+                                  toolchain_files : Union[list, dict],
                                   get_files_callable : getFilesCallableType = None,
                                   return_indices : bool = False,
                                   append : bool = False,
@@ -220,6 +226,7 @@ def insert_in_static_route_global(object_for_static_route : Union[list, dict],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     
@@ -281,6 +288,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                                   toolchain_state : Union[list, dict],
                                   node_inputs_state : Union[list, dict],
                                   node_outputs_state : Union[list, dict],
+                                  toolchain_files : Union[list, dict],
                                   sequence : List[sequenceAction],
                                   provided_object : Any = None,
                                   get_files_callable : getFilesCallableType = None,
@@ -300,6 +308,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     
@@ -467,6 +476,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
 def evaluate_condition_basic(toolchain_state : Union[list, dict],
                              node_inputs_state : Union[list, dict],
                              node_outputs_state : Union[list, dict],
+                             toolchain_files : Union[list, dict],
                              condition : conditionBasic,
                              provided_object : Any,
                              get_files_callable : getFilesCallableType = None) -> bool:
@@ -478,6 +488,7 @@ def evaluate_condition_basic(toolchain_state : Union[list, dict],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
         
@@ -519,6 +530,7 @@ def evaluate_condition_basic(toolchain_state : Union[list, dict],
 def evaluate_condition(toolchain_state : Union[list, dict],
                        node_inputs_state : Union[list, dict],
                        node_outputs_state : Union[list, dict],
+                       toolchain_files : Union[list, dict],
                        condition : Union[Condition, conditionBasic],
                        provided_object : Any,
                        get_files_callable : getFilesCallableType = None) -> bool:
@@ -530,6 +542,7 @@ def evaluate_condition(toolchain_state : Union[list, dict],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     

@@ -316,7 +316,8 @@ class ToolchainSession():
         state_args = {
             "toolchain_state": self.state, 
             "node_inputs_state": node_arguments, 
-            "node_outputs_state": node_outputs
+            "node_outputs_state": node_outputs,
+            "toolchain_files": self.toolchain_session_files
         }
         
         if not feed_map.route is None:
@@ -488,6 +489,7 @@ class ToolchainSession():
             "toolchain_state" : early_state_reference,
             "node_inputs_state" : node_inputs,
             "node_outputs_state" : {},
+            "toolchain_files": self.toolchain_session_files,
             "get_files_callable" : self.get_file_bytes
             # "branching_state" : branching_state       # Figure out branches later
         }
@@ -532,6 +534,7 @@ class ToolchainSession():
                 "toolchain_state" : deepcopy(self.state),
                 "node_inputs_state" : node_inputs,
                 "node_outputs_state" : node_outputs,
+                "toolchain_files": self.toolchain_session_files,
                 "get_files_callable" : self.get_file_bytes
             }
             
