@@ -47,10 +47,31 @@ from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.operation_classes.ray_llm_class import LLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware import Middleware
+
+origins = [
+    "http://localhost:5173",
+    "http://localhost:5173/",
+    "localhost:5173",
+    "localhost:5173/",
+    "0.0.0.0:5173"
+]
+
+middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*']
+    )
+]
 
 
 fastapi_app = FastAPI(
     # lifespan=lifespan
+    middleware=middleware
 )
 
 ACTIVE_SESSIONS = {}
@@ -304,46 +325,6 @@ class UmbrellaClass:
             print(return_msg)
             return return_msg
 
-    @fastapi_app.post("/api/async/upload_document_to_session")
-    async def upload_document_to_session(self, req: Request, file : UploadFile):
-        # try:
-        # arguments = req.query_params._dict
-        
-        def create_embeddings(text : str) -> List[List[float]]:
-            pass
-        
-        route = req.scope['path']
-        route_split = route.split("/")
-        print("/".join(route_split[:4]), req.query_params._dict)
-        arguments = await req.json()
-        # arguments = json.loads(req.query_params._dict["parameters"]) 
-        true_arguments = clean_function_arguments_for_api({
-            "database": self.database,
-            "file": file,
-            "create_embeddings": create_embeddings,
-            "return_file_hash": True,
-            "add_to_vector_db": False
-        }, arguments, "upload_document")
-
-        upload_result = api.upload_document(**true_arguments)
-
-        true_args_2 = clean_function_arguments_for_api({
-            "database": self.database,
-            "public_key": global_public_key,
-            "server_private_key": global_private_key,
-            "toolchain_function_caller": self.api_function_getter,
-            "message": {
-                "type": "file_uploaded",
-                "hash_id": upload_result["hash_id"],
-                "file_name": upload_result["file_name"]
-            }
-        }, arguments, "toolchain_session_notification", bypass_disabled=True)
-        function_actual = getattr(api, "toolchain_session_notification")
-        args_get = await function_actual(**true_args_2)
-        if args_get is True:
-            return {"success": True}
-        return {"success": True, "result": args_get}
-
     @fastapi_app.get("/fetch_document")
     async def get_document_2(self, req: Request):
         try:
@@ -378,7 +359,13 @@ class UmbrellaClass:
             print(json.dumps(return_dict, indent=4))
             return return_dict
     
-    @fastapi_app.post("/api/{rest_of_path:path}")
+    @fastapi_app.get("/ping")
+    @fastapi_app.post("/ping")
+    async def ping_function(self, req: Request):
+        print("GOT PING!!!")
+        return {"success": True, "note": "Pong"}
+    
+    @fastapi_app.get("/api/{rest_of_path:path}")
     async def api_general_call(self, req: Request, rest_of_path: str):
         """
         This is a wrapper around every api function that is allowed. 
@@ -435,7 +422,7 @@ class UmbrellaClass:
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_dict = {"success": False, "note": error_message, "trace": stack_trace}
-            print(json.dumps(return_dict, indent=4))
+            print("RETURNING:", json.dumps(return_dict, indent=4))
             return return_dict
             # return {"success": False, "note": str(e)}
     
@@ -480,7 +467,6 @@ class UmbrellaClass:
         the new id to the websocket via `toolchain/file_upload_event_call`.
         """
         
-        
         system_args = {
             "database": self.database,
             "toolchains_available": self.toolchain_configs,
@@ -495,6 +481,8 @@ class UmbrellaClass:
         await ws.accept()
         
         toolchain_session : ToolchainSession = None
+        
+        await ws.send_text((json.dumps({"success": True})).encode("utf-8"))
         
         try:
             while True:
@@ -529,7 +517,6 @@ class UmbrellaClass:
                     # elif toolchain_session is None and "session" in system_args:
                     #     del system_args["session"]
                     
-                    
                     if command == "toolchain/load":
                         if not toolchain_session is None:
                             await api.save_toolchain_session(self.database, toolchain_session)
@@ -537,7 +524,6 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
                         toolchain_session : ToolchainSession = api.fetch_toolchain_session(**true_args)
                         # system_args["session"] = toolchain_session
-                    
                     
                     elif command == "toolchain/create":
                         if not toolchain_session is None:

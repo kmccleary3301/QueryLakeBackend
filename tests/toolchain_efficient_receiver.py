@@ -85,7 +85,6 @@ def run_state_diff(state_input : dict, state_diff_specs):
     
     return state_input
 
-
 def check_keys(keys_1 : List[str], keys_2 : List[str]):
     return (sorted(keys_1) == sorted(keys_2))
 

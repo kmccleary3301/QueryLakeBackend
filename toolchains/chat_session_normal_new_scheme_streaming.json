@@ -9,8 +9,35 @@
                 "display_as": "chat"
             }
         ],
-        "max_files": 10,
-        "enable_rag": true
+        "input_config": [
+            {
+                "type": "chat_bar",
+                "properties": {
+                    "text" : {
+                        "event": "user_question_event",
+                        "event_parameter": "question"
+                    }
+                },
+                "display_text" : "Ask Anything"
+            },
+            {
+                "type": "llm_model_choice",
+                "event": "user_question_event",
+                "event_parameter": "model_choice"
+            },
+            {
+                "type": "toggle",
+                "display_text": "Search Web",
+                "event": "user_question_event",
+                "event_parameter": "search_web"
+            },
+            {
+                "type" : "native_application_parameter",
+                "origin": "selected_collections",
+                "event": "user_question_event",
+                "event_parameter": "search_web"
+            }
+        ]
 	},
     "initial_state": {
         "title": "Chat",
@@ -38,6 +65,11 @@
                     "key": "collection_hash_ids",
                     "from_user": true,
                     "optional": true
+                },
+                {
+                    "key": "search_web",
+                    "from_user": true,
+                    "optional": true
                 }
             ],
             "feed_mappings": [
@@ -49,7 +81,7 @@
                             "initialValue": {
                                 "type": "staticValue",
                                 "value": {
-                                    "role": "user"           
+                                    "role": "user"         
                                 }
                             },
                             "insertion_values": [ null ],

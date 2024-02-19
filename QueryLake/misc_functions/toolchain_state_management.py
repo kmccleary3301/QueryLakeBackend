@@ -556,11 +556,11 @@ def dict_diff_deleted(d1 : dict, d2 : dict) -> dict:
     assert isinstance(d1, dict) and isinstance(d2, dict), "dict_diff_deleted called with non-dict type"
     
     diff = []
-    for k in d1.keys():
-        if k not in d2:
+    for k in d2.keys():
+        if k not in d1:
             diff.append(k)
-        elif isinstance(d1[k], dict):
-            nested_diff = dict_diff_deleted(d1[k], d2.get(k, {}))
+        elif isinstance(d2[k], dict):
+            nested_diff = dict_diff_deleted(d1.get(k, {}), d2[k])
             if nested_diff:
                 diff.append({k: nested_diff})
     return diff

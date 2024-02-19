@@ -9,8 +9,7 @@
                 "display_as": "chat"
             }
         ],
-        "max_files": 1,
-        "enable_rag": true
+        "max_files": 1
 	},
     "initial_state": {
         "title": "Chat",

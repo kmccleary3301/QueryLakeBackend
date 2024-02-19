@@ -299,11 +299,43 @@ class eventButton(BaseModel):
     """
     A button that can be clicked in the chat window.
     """
-    type: Literal["eventButton"]
+    type: Optional[Literal["eventButton"]] = "eventButton"
     event_node_id: str
     return_file_response: Optional[bool] = False
     feather_icon: str
     display_text: Optional[str] = None
+
+
+
+class inputPointer(BaseModel):
+    event : str
+    event_parameter : str
+    
+class chatBarProperties(BaseModel):
+    text: Optional[inputPointer] = None
+    file: Optional[inputPointer] = None
+
+class chatBar(BaseModel):
+    type: Optional[Literal["chat_bar"]] = "chat_bar"
+    properties: chatBarProperties
+    display_text: Optional[str] = ""
+
+
+
+class toggleInput(inputPointer):
+    type: Optional[Literal["toggle"]] = "toggle"
+    display_text: Optional[str] = ""
+
+class nativeApplicationParameter(inputPointer):
+    type: Optional[Literal["native_application_parameter"]] = "native_application_parameter"
+    origin : str
+
+
+inputConfigType = Union[
+    chatBar,
+    toggleInput,
+    nativeApplicationParameter
+]
 
 
 class displayConfiguration(BaseModel):
@@ -312,7 +344,9 @@ class displayConfiguration(BaseModel):
     """
     display_mappings: List[Union[chatWindowMapping, eventButton]]
     max_files: Optional[int] = 0
-    enable_rag: Optional[bool] = False 
+    # enable_rag: Optional[bool] = False,
+    input_config : Optional[List[inputConfigType]] = []
+    
 
 class toolchainNode(BaseModel):
     """
