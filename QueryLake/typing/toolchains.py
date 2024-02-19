@@ -330,11 +330,14 @@ class nativeApplicationParameter(inputPointer):
     type: Optional[Literal["native_application_parameter"]] = "native_application_parameter"
     origin : str
 
+class llmModelChoice(inputPointer):
+    type: Optional[Literal["llm_model_choice"]] = "llm_model_choice"
 
 inputConfigType = Union[
     chatBar,
     toggleInput,
-    nativeApplicationParameter
+    nativeApplicationParameter,
+    llmModelChoice
 ]
 
 
