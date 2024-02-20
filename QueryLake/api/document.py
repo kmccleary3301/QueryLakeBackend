@@ -1,6 +1,7 @@
 from hashlib import sha256
 from typing import List, Callable, Awaitable, Dict, Any, Union
 import os
+import re
 from fastapi import UploadFile
 from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
@@ -102,7 +103,7 @@ async def upload_document(database : Session,
             public_key = user.public_key
 
     encryption_key = random_hash()
-
+    
     zip_start_time = time.time()
     if public:
         encrypted_bytes = encryption.aes_encrypt_zip_file(
@@ -147,7 +148,7 @@ async def upload_document(database : Session,
         collection.document_count += 1
     database.add(new_db_file)
     database.commit()
-    if (file.filename.split(".")[-1].lower() == "pdf" and add_to_vector_db):
+    if add_to_vector_db:
         # thread = Thread(target=create_embeddings_in_database, args=(database, text_models_callback, file_data_bytes, new_db_file, file.filename))
         # thread.start()
         await create_embeddings_in_database(database, 

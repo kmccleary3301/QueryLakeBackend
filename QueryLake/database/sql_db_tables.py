@@ -14,6 +14,18 @@ def data_dict(db_entry : SQLModel):
 
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
+class ApiKey(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    key_hash: str = Field(index=True, unique=True)
+    creation_timestamp: float
+    author: str = Field(foreign_key="user.name", index=True)
+    
+    title: Optional[str] = Field(default="API Key")
+    key_preview: str # This will be of the form `sk-****abcd`
+    
+    # This will be the password prehash encrypted with the api key.
+    user_password_prehash_encrypted: str
+
 class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     collection_type: Optional[str] = Field(index=True, default=None)

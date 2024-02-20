@@ -8,6 +8,9 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import torch
 from math import exp
 from ray import serve
+import itertools
+from asyncio import gather
+
 
 def modified_sigmoid(x : Union[torch.Tensor, float]):
     if type(x) == float or type(x) == int:
@@ -40,7 +43,7 @@ def F(x):
 
     return result
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.4}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.2}, max_replicas_per_node=1)
 class RerankerDeployment:
     def __init__(self, model_key: str):
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
@@ -49,40 +52,28 @@ class RerankerDeployment:
         
         # self.model = FlagReranker(model_key, use_fp16=True)
     
-    @serve.batch()
-    async def handle_batch(self, inputs: List[List[Tuple[str, str]]]) -> List[List[float]]:
-        batch_size = len(inputs)
-        flat_inputs = [(item, i_1, i_2) for i_1, sublist in enumerate(inputs) for i_2, item in enumerate(sublist)]
-        
-        flat_inputs_indices = [item[1:] for item in flat_inputs]
-        flat_inputs_text = [item[0] for item in flat_inputs]
+    @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
+    async def handle_batch(self, inputs: List[Tuple[str, str]]) -> List[float]:
         
         with torch.no_grad():
             start_time = time.time()
-            tokenized_inputs = self.tokenizer(flat_inputs_text, padding=True, truncation=True, return_tensors='pt', max_length=512).to(self.device)
-            mid_time = time.time()
+            tokenized_inputs = self.tokenizer(inputs, padding=True, truncation=True, return_tensors='pt', max_length=512).to(self.device)
+            # mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
-            
+            time_taken = time.time() - start_time
+            print("Time taken for rerank inference:", time_taken)
+        
         scores = torch.exp(torch.tensor(scores.clone()))
         scores = F(scores)
         
-        outputs = [[] for _ in range(batch_size)]
-        
-        for i, output in enumerate(scores.tolist()):
-            request_index, _ = flat_inputs_indices[i]
-            outputs[request_index].append(output)
-        
-        return outputs
+        return scores.tolist()
 
-    async def __call__(self, request : Request) -> Response:
-        request_dict = await request.json()
-        # print("Got request:", request_dict)
-        return_tmp = await self.handle_batch(request_dict["text"])
-        return Response(content=json.dumps({"output": return_tmp}))
-
-    async def run(self, request_dict : dict) -> List[List[float]]:
-        start_time = time.time()
-        values = await self.handle_batch(request_dict["text"])
-        end_time = time.time()
-        print("RERANKER INTERNAL TIME %7.3fs" % (end_time - start_time))
-        return values
+    async def run(self, request : Union[dict, List[Tuple[str, str]]]) -> List[List[float]]:
+        
+        if isinstance(request, dict):
+            inputs = request["text"]
+        else:
+            inputs = request
+        
+        # Fire them all off at once and get the coroutines, but await them as a list.
+        return await gather(*[self.handle_batch(e) for e in inputs])

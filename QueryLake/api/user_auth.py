@@ -7,9 +7,10 @@ from ..database import encryption
 from .hashing import *
 import os, json
 from .organizations import fetch_memberships
-from ..typing.config import Config, AuthType, getUserType
+from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2
 from typing import Tuple
 from .single_user_auth import get_user
+from ..database.encryption import aes_decrypt_string, aes_encrypt_string
 # from ..config import Config
 # from .toolchains import get_available_toolchains
 
@@ -147,26 +148,6 @@ def get_user_id(database : Session, username : str, password_prehash : str) -> i
     else:
         return -1
 
-# def get_user(database : Session, 
-#              auth: AuthType) -> getUserType:
-#     """
-#     Returns the a user by lookup after verifying, raises an error otherwise.
-#     """
-#     statement = select(sql_db_tables.user).where(sql_db_tables.user.name == auth.username)
-#     retrieved = database.exec(statement).all()
-#     if len(retrieved) > 0:
-#         password_salt = retrieved[0].password_salt
-#         password_hash_truth = retrieved[0].password_hash
-#         password_hash = hash_function(auth.password_prehash, password_salt, only_salt=True)
-#         if password_hash == password_hash_truth:
-#             return (retrieved[0], auth)
-#         else:
-#             raise ValueError("User Verification Failed")
-#     else:
-#         raise IndexError("User Not Found")
-    # except:
-    #     raise ValueError("Error Validating User")
-
 def get_user_private_key(database : Session, 
                          auth : AuthType) -> str:
     """
@@ -294,4 +275,83 @@ def get_openai_api_key(database : Session,
     # return {"success": True, "result": user_openai_api_key}
     return {"api_key": user_openai_api_key}
 
+def create_api_key(database : Session, 
+                   auth : AuthType1,
+                   title : str = None):
+    """
+    Create a new API key for the user.
+    """
     
+    if isinstance(auth, dict):
+        auth = AuthType1(**auth)
+    
+    assert isinstance(auth, AuthType1), "API Keys must be authorized with username and password object."
+    
+    (user, _) = get_user(database, auth)
+    
+    random_key_hash = random_hash()
+    
+    api_key_actual = f"sk-{random_key_hash}"
+    api_key_preview = f"sk-...{random_key_hash[-4:]}"
+    
+    api_key_hash = hash_function(api_key_actual)
+    
+    new_api_key = sql_db_tables.ApiKey(
+        key_hash=api_key_hash,
+        creation_timestamp=time.time(),
+        author=user.name,
+        **{"title": title} if not title is None else {},
+        key_preview=api_key_preview,
+        user_password_prehash_encrypted=aes_encrypt_string(api_key_actual, auth.password_prehash)
+    )
+    
+    database.add(new_api_key)
+    database.commit()
+    return {"api_key": api_key_actual, "api_key_id": new_api_key.id}
+
+def delete_api_key(database : Session, 
+                   auth : AuthType1,
+                   api_key_id : str):
+    """
+    Delete an API key by its id.
+    """
+    print("Auth:", auth)
+    
+    if isinstance(auth, dict):
+        auth = AuthType1(**auth)
+    
+    assert isinstance(auth, AuthType1), "API key deletion must be authorized with username and password object."
+    
+    (user, user_auth) = get_user(database, auth)
+    
+    api_key = database.exec(select(sql_db_tables.ApiKey).where(sql_db_tables.ApiKey.id == api_key_id)).first()
+    assert not api_key is None, "API Key not found"
+    
+    assert api_key.author == user.name, "API Key does not belong to user"
+    
+    database.delete(api_key)
+    database.commit()
+    
+    return True
+
+def fetch_api_keys(database : Session, 
+                   auth : AuthType1):
+    """
+    Fetch all API keys belonging to the user.
+    """
+    if isinstance(auth, dict):
+        auth = AuthType1(**auth)
+    
+    assert isinstance(auth, AuthType1), "API key deletion must be authorized with username and password object."
+    
+    (user, _) = get_user(database, auth)
+    
+    api_keys = database.exec(select(sql_db_tables.ApiKey).where(sql_db_tables.ApiKey.author == user.name)).all()
+    
+    api_keys = [{
+        "id": e.id, 
+        "title": e.title, 
+        "key_preview": e.key_preview
+    } for e in api_keys]
+    
+    return {"api_keys": api_keys}

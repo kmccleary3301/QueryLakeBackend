@@ -4,6 +4,7 @@ import traceback
 
 from typing import Annotated, Callable, Any
 import json, os
+import ujson
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
 from starlette.requests import Request
@@ -49,6 +50,7 @@ from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware import Middleware
+import asyncio
 
 origins = [
     "http://localhost:5173",
@@ -164,6 +166,7 @@ class UmbrellaClass:
                           auth : AuthType,
                           inputs : List[Tuple[str, str]]):
         (user, user_auth) = api.get_user(self.database, auth)
+        print("Calling rerank remote function")
         return await self.rerank_handle.run.remote({"text": inputs})
     
     # @fastapi_app.post("/direct/{rest_of_path:path}")
@@ -360,11 +363,12 @@ class UmbrellaClass:
             return return_dict
     
     @fastapi_app.get("/ping")
-    @fastapi_app.post("/ping")
     async def ping_function(self, req: Request):
         print("GOT PING!!!")
         return {"success": True, "note": "Pong"}
     
+    # Callable by POST and GET
+    @fastapi_app.post("/api/{rest_of_path:path}")
     @fastapi_app.get("/api/{rest_of_path:path}")
     async def api_general_call(self, req: Request, rest_of_path: str):
         """
@@ -373,13 +377,21 @@ class UmbrellaClass:
         """
         
         try:
+            
+            # body = await req.body()
+            # print("Got request with body:", body)
             # arguments = req.query_params._dict
             print("Calling:", rest_of_path)
             if "parameters" in req.query_params._dict:
                 arguments = json.loads(req.query_params._dict["parameters"])
             else:
-                arguments = await req.json()
-            print("arguments:", arguments)
+                # We use ujson because normal `await req.json()` completely stalls on large inputs.
+                # print("Awaiting JSON")
+                
+                arguments = await asyncio.wait_for(req.json(), timeout=10)
+                
+                
+            # print("arguments:", arguments)
             route = req.scope['path']
             route_split = route.split("/")
             print("/".join(route_split[:3]), req.query_params._dict)

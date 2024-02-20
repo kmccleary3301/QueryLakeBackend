@@ -66,7 +66,7 @@ class AuthType1(BaseModel):
     password_prehash: str
 
 class AuthType2(BaseModel):
-    apiKey: str
+    api_key: str
 
 class getUserAuthType(BaseModel):
     username: str

@@ -5,7 +5,7 @@ from langchain.docstore.document import Document
 # from chromadb.api import ClientAPI
 from ..database.sql_db_tables import document_raw, DocumentEmbedding
 from ..api.hashing import random_hash, hash_function
-from typing import List, Callable, Any, Union, Awaitable
+from typing import List, Callable, Any, Union, Awaitable, Tuple
 from numpy import ndarray
 import numpy as np
 from re import sub
@@ -14,6 +14,8 @@ from sqlmodel import Session, select, and_, or_
 from ..typing.config import AuthType
 import pgvector
 from time import time
+from io import BytesIO
+import re
 
 
 # model = SentenceTransformer('BAAI/bge-large-en-v1.5')
@@ -23,23 +25,32 @@ from time import time
 async def create_embeddings_in_database(database : Session,
                                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                         auth : AuthType,
-                                        document_bytes, 
-                                        document_db_entry,
-                                        document_name):
+                                        document_bytes : bytes, 
+                                        document_db_entry : document_raw,
+                                        document_name : str):
     """
     Add document to chroma db using embeddings.
     """
-    print("PDF PROCESSING 1")
-    text_chunks = parse_PDFs(document_bytes)
-    print("PDF PROCESSING 2")
+    file_extension = document_name.split(".")[-1]
+    
+    print("Creating document embeddings")
+    
+    if file_extension in ["pdf"]:
+        text_chunks = parse_PDFs(document_bytes)
+    elif file_extension in ["txt", "md"]:
+        # text_chunks = [(chunk, {"page": i}) for i, chunk in enumerate(document_bytes.decode("utf-8").split("\n"))]
+        text_chunks = [(document_bytes.decode("utf-8"), {"page": 0})]
+    else:
+        raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md] are supported at this time.")
+    
     await create_text_embeddings(database, auth, toolchain_function_caller, text_chunks, document_db_entry, document_name)
-    print("PDF PROCESSING 3")
+    print("Done creating document embeddings")
     pass
 
 async def create_text_embeddings(database : Session,
                                  auth : AuthType,
                                  toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                                 text_segments, 
+                                 text_segments : List[Tuple[str, dict]],
                                  document_sql_entry : document_raw, 
                                  document_name: str):
     """
@@ -75,16 +86,25 @@ async def create_text_embeddings(database : Session,
 
     text_combined, text_combined_strip = "", ""
     text_combined_chunk_assignments = np.array([], dtype=np.int32)
+    
+    
+    # We are assuming an input of tuples with text and metadata.
+    # We do this to keep track of location/ordering metadata such as page number.
+    # This code concatenates the text and allows us to recover the minimum location index
+    # After splitting for embedding.
+    
+    print("Concatenating text")
     for chunk_i, chunk in enumerate(text_segments):
         chunk_combined_strip = sub(r"[\s]+", "", chunk[0]).lower()
         text_combined_strip += chunk_combined_strip
         text_combined += chunk[0] + " "
         text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
 
-    # Split
 
+    print("Splitting text")
     splits = text_splitter.split_documents([Document(page_content=text_combined, metadata={"type": "document"})])
 
+    print("Re-assigning metadata")
     splits_text = [doc.page_content for doc in splits]
     splits_metadata = []
     text_size_iterator = 0
@@ -101,26 +121,15 @@ async def create_text_embeddings(database : Session,
             splits_metadata.append(metadata)
         except:
             splits_metadata.append(metadata[-1])
+
     del text_combined_chunk_assignments
-            
-            
-
-    # <REWRITTEN_SECTION>
     
-    # embeddings = ndarray.tolist(model.encode(splits_text, normalize_embeddings=True))
-
+    print("Running embeddings")
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
     embeddings = await embedding_call(auth, splits_text)
 
-    # try:
-    #     vector_collection = vector_database.get_collection(name=model_collection_name)
-    # except:
-    #     vector_database.create_collection(name=model_collection_name, metadata={"hnsw:space": "cosine"})
-    #     vector_collection = vector_database.get_collection(name=model_collection_name)
-    
-    # documents = [random_hash() for _ in splits]
-    # metadatas = []
+    print("Adding to database")
     for i in range(len(embeddings)):
         
         document_db_entry = DocumentEmbedding(
@@ -134,27 +143,7 @@ async def create_text_embeddings(database : Session,
         )
         database.add(document_db_entry)
         
-        # md_tmp = {
-        #     "document_id": document_sql_entry.hash_id,
-        #     "collection_type": collection_type,
-        #     "parent_collection_hash_id": parent_collection_id,
-        #     "document_name": document_name,
-        #     "document_integrity": document_sql_entry.integrity_sha256
-        # }
-        # md_tmp.update(splits_metadata[i])
-        # metadatas.append(md_tmp)
-
     database.commit()
-    # print(splits_text,metadatas,embeddings,documents)
-
-    # vector_collection.add(
-    #     documents=splits_text,
-    #     metadatas=metadatas,
-    #     embeddings=embeddings,
-    #     ids=documents
-    # )
-    
-    # <REWRITTEN_SECTION>
     
     pass
 
@@ -191,57 +180,23 @@ async def create_website_embeddings(database : Session,
     splits_text = [doc.page_content for doc in splits]
     splits_metadata = [doc.metadata for doc in splits]
     
-    
-    # <REWRITTEN_SECTION>
-    # embeddings = ndarray.tolist(model.encode(splits_text, normalize_embeddings=True))
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
     embeddings = await embedding_call(auth, splits_text)
 
-
-    # try:
-    #     vector_collection = vector_database.get_collection(name=model_collection_name)
-    # except:
-    #     vector_database.create_collection(name=model_collection_name, metadata={"hnsw:space": "cosine"})
-    #     vector_collection = vector_database.get_collection(name=model_collection_name)
-    
     documents = [random_hash() for _ in splits]
 
-    # print(splits_text,metadatas,embeddings,documents)
-
-    # vector_collection.add(
-    #     documents=splits_text,
-    #     metadatas=splits_metadata,
-    #     embeddings=embeddings,
-    #     ids=documents
-    # )
     for i in range(len(embeddings)):
         
         document_db_entry = DocumentEmbedding(
-            # collection_type=collection_type,
-            # document_id=document_sql_entry.hash_id,
-            # parent_collection_hash_id=parent_collection_id,
-            # document_name=document_name,
-            # document_integrity=document_sql_entry.integrity_sha256,
             document_name=splits_metadata[i]["website_short"],
             website_url=splits_metadata[i]["url"],
             embedding=embeddings[i],
             text=splits_text[i],
         )
         database.add(document_db_entry)
-        
-        # md_tmp = {
-        #     "document_id": document_sql_entry.hash_id,
-        #     "collection_type": collection_type,
-        #     "parent_collection_hash_id": parent_collection_id,
-        #     "document_name": document_name,
-        #     "document_integrity": document_sql_entry.integrity_sha256
-        # }
-        # md_tmp.update(splits_metadata[i])
-        # metadatas.append(md_tmp)
 
     database.commit()
-    # </REWRITTEN_SECTION>
     
     pass
 

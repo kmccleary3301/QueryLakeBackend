@@ -1,5 +1,5 @@
 from langchain.docstore.document import Document
-from typing import List
+from typing import List, Tuple
 # from langchain.document_loaders import PyPDFium2Loader
 from langchain.document_loaders.blob_loaders import Blob
 # import PyPDF2
@@ -14,14 +14,14 @@ import re
 
 # PyPDF2.PdfFileReader()
 
-def parse_PDFs(bytes_in, return_all_text_as_string : bool = False) -> List[Document]:
+def parse_PDFs(bytes_in, return_all_text_as_string : bool = False) -> List[str]:
     if type(bytes_in) is bytes:
         bytes_in = BytesIO(bytes_in)
     reader = PdfReader(bytes_in)
     # blob_get = Blob(bytes_in)
     # print(reader)
 
-    all_text = []
+    all_text : List[Tuple[str, dict]] = []
     pages_text = []
     # reader = PdfReader("GeoBase_NHNC1_Data_Model_UML_EN.pdf")
     for i, page in enumerate(reader.pages):

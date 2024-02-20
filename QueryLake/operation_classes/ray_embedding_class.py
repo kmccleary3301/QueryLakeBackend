@@ -2,27 +2,25 @@
 import json
 from fastapi import Request
 from fastapi.responses import Response
-from typing import  List
+from typing import List, Union
 from ray import serve
 from transformers import AutoTokenizer, AutoModel
 import torch
+from asyncio import gather
 
-@serve.deployment
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 2}, max_replicas_per_node=1)
 class EmbeddingDeployment:
     def __init__(self, model_key: str):
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         self.model = AutoModel.from_pretrained(model_key).to(self.device)
 
-    @serve.batch()
-    async def handle_batch(self, inputs: List[List[str]]) -> List[List[List[float]]]:
-        batch_size = len(inputs)
-        # We need to flatten the inputs into a single list of string, then recombine the outputs according to the original structure.
-        flat_inputs = [(item, i_1, i_2) for i_1, sublist in enumerate(inputs) for i_2, item in enumerate(sublist)]
+    @serve.batch(max_batch_size=16, batch_wait_timeout_s=0.5)
+    async def handle_batch(self, inputs: List[str]) -> List[List[float]]:
+        print("Running handle_batch with input length:", len(inputs))
         
-        flat_inputs_indices = [item[1:] for item in flat_inputs]
-        flat_inputs_text = [item[0] for item in flat_inputs]
-        encoded_input = self.tokenizer(flat_inputs_text, padding=True, truncation=True, return_tensors='pt').to(self.device)
+        encoded_input = self.tokenizer(inputs, padding=True, truncation=True, return_tensors='pt').to(self.device)
 
         with torch.no_grad():
             model_output = self.model(**encoded_input)
@@ -30,19 +28,22 @@ class EmbeddingDeployment:
         
         sentence_embeddings = torch.nn.functional.normalize(sentence_embeddings, p=2, dim=1)
         
-        outputs = [[] for _ in range(batch_size)]
-        
-        for i, output in enumerate(sentence_embeddings.tolist()):
-            request_index, input_index = flat_inputs_indices[i]
-            outputs[request_index].append(output)
-            # outputs[item[1]][item[2]] = sentence_embeddings[i].tolist()
-        
-        return outputs
+        return sentence_embeddings.tolist()
 
-    async def __call__(self, request : Request) -> Response:
-        request_dict = await request.json()
-        return_tmp = await self.handle_batch(request_dict["text"])
-        return Response(content=json.dumps({"output": return_tmp}))
+    # async def __call__(self, request : Request) -> Response:
+    #     request_dict = await request.json()
+    #     return_tmp = await self.handle_batch(request_dict["text"])
+    #     return Response(content=json.dumps({"output": return_tmp}))
     
-    async def run(self, request_dict : dict) -> List[List[float]]:
-        return await self.handle_batch(request_dict["text"])
+    async def run(self, request_dict : Union[dict, List[str]]) -> List[List[float]]:
+        
+        if isinstance(request_dict, dict):
+            inputs = request_dict["text"]
+        else:
+            inputs = request_dict
+        
+        print("Calling embedding within handle with input length:", len(inputs))
+        # return await [self.handle_batch(e) for e in inputs] 
+        
+        # Fire them all off at once, but wait for them all to finish before returning
+        return await gather(*[self.handle_batch(e) for e in inputs])

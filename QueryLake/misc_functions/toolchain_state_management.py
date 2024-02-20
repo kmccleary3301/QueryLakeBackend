@@ -458,8 +458,7 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 object_to_append_to -= new_value
             object_in_focus = insert_in_static_route_global(object_in_focus, operator_indices, object_to_append_to, **state_kwargs)
             object = insert_in_static_route_global(object, current_indices, object_in_focus, **state_kwargs)
-            
-            
+        
         # May add insertions here.
         
         elif isinstance(action, backOut):
