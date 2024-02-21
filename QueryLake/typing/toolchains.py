@@ -35,14 +35,14 @@ class getNodeOutput(BaseModel):
     type : Optional[Literal["getNodeOutput"]] = "getNodeOutput"
     route: "staticRoute"
 
-class getFiles(BaseModel):
+class getFile(BaseModel):
     """
     There is another equivalent to state in the toolchain, which is set of files uploaded to the session.
     """
-    type : Optional[Literal["getFiles"]] = "getFiles"
+    type : Optional[Literal["getFile"]] = "getFile"
     route: Optional["staticRoute"] = None
     routes: Optional[List["staticRoute"]] = None
-    getText: Optional[bool] = False # If True, then we get the text of the file instead of the file object.
+    # getText: Optional[bool] = False # If True, then we get the text of the file instead of the file object.
 
 # Add alternatives for direct referencing of valueObjs in getFrom
 
@@ -62,7 +62,7 @@ class indexRouteRetrievedOutputArgValue(BaseModel):
     
 class indexRouteRetrievedFile(BaseModel):
     # type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
-    getFiles: getFiles
+    getFiles: getFile
 
 class indexRouteRetrieved(BaseModel):
     """
@@ -189,7 +189,7 @@ class insertAction(rootActionType):
     route : "staticRoute"
     replace: Optional[bool] = True
 
-valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput, getFiles]
+valueObj = Union[staticValue, stateValue, getNodeInput, getNodeOutput, getFile]
 staticRouteBasicElementType = Union[int, str]
 staticRouteBasic = List[staticRouteBasicElementType]
 
@@ -280,7 +280,7 @@ class nodeInputArgument(BaseModel):
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None
-    from_files: Optional[getFiles] = None
+    from_files: Optional[getFile] = None
     
     sequence: Optional[List[sequenceAction]] = []
     
@@ -404,6 +404,7 @@ class ToolChainSessionFile(BaseModel):
 stateValue.update_forward_refs()
 getNodeInput.update_forward_refs()
 getNodeOutput.update_forward_refs()
+getFile.update_forward_refs()
 indexRouteRetrieved.update_forward_refs()
 # valueFromBranchingState.update_forward_refs()
 

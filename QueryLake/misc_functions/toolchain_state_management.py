@@ -115,6 +115,7 @@ def traverse_static_route_global(object_for_static_route : Union[list, dict],
         "toolchain_state" : toolchain_state,
         "node_inputs_state" : node_inputs_state,
         "node_outputs_state" : node_outputs_state,
+        "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
     
@@ -162,7 +163,8 @@ def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
                          node_inputs_state : Union[list, dict],
                          node_outputs_state : Union[list, dict],
                          toolchain_files : Union[list, dict],
-                         get_files_callable : getFilesCallableType = None) -> Any:
+                         get_files_callable : getFilesCallableType = None,
+                         convert_file_pointers : bool = True) -> Any:
     """
     For traversing value Objects and static Route elements.
     """
@@ -174,6 +176,8 @@ def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
         "toolchain_files" : toolchain_files,
         "get_files_callable" : get_files_callable
     }
+    
+    print("GET VALUE OBJ CALLED")
     
     
     if isinstance(value_obj, staticValue):
@@ -194,8 +198,26 @@ def get_value_obj_global(value_obj : Union[valueObj, indexRouteRetrievedNew],
         target_object, target_route = node_outputs_state, value_obj.route
     elif isinstance(value_obj, indexRouteRetrievedOutputArgValue):
         target_object, target_route = node_outputs_state, value_obj.getFromOutputs.route
-    elif isinstance(value_obj, getFiles):
-        pass
+    elif isinstance(value_obj, getFile):
+        print("GET VALUE OBJ CALLED FOR getFile:", value_obj)
+        if not value_obj.routes is None:
+            print("GET VALUE OBJ CALLED FOR getFile with ROUTES:", value_obj.routes)
+            return list(map(get_value_obj_global, [{
+                **state_kwargs, 
+                "value_obj" : getFile(route=e),
+                "convert_file_pointers" : convert_file_pointers
+            } for e in value_obj.routes]))
+        else:
+            print("GET VALUE OBJ CALLED FOR getFile with ROUTE:", value_obj.route)
+            assert not value_obj.route is None, "getFile used, but no route or routes were provided"
+            target_object, target_route = toolchain_files, value_obj.route
+            get_value, _ = traverse_static_route_global(target_object, target_route, **state_kwargs)
+            if convert_file_pointers and isinstance(get_value, ToolChainSessionFile) and not get_files_callable is None:
+                
+                print("RETURNING FILE BYTES")
+                file_bytes = get_files_callable(get_value)
+                return file_bytes
+            return get_value
     
     get_value, _ = traverse_static_route_global(target_object, target_route, **state_kwargs)
     

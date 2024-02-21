@@ -1,5 +1,5 @@
 from langchain.docstore.document import Document
-from typing import List, Tuple
+from typing import List, Tuple, Union
 # from langchain.document_loaders import PyPDFium2Loader
 from langchain.document_loaders.blob_loaders import Blob
 # import PyPDF2
@@ -14,7 +14,8 @@ import re
 
 # PyPDF2.PdfFileReader()
 
-def parse_PDFs(bytes_in, return_all_text_as_string : bool = False) -> List[str]:
+def parse_PDFs(bytes_in : Union[bytes, BytesIO], 
+               return_all_text_as_string : bool = False) -> List[str]:
     if type(bytes_in) is bytes:
         bytes_in = BytesIO(bytes_in)
     reader = PdfReader(bytes_in)

@@ -26,15 +26,13 @@ from ..typing.toolchains import *
 from ..database.sql_db_tables import document_raw
 
 class ToolchainSession():
-    # SPECIAL_NODE_FUNCTIONS = ["<<ENTRY>>", "<<EVENT>>"]
-    SPECIAL_ARGUMENT_ORIGINS = ["<<SERVER_ARGS>>", "<<USER>>", "<<STATE>>"]
-
     def __init__(self,
                  database : Session,
-                 toolchain_id,
+                 auth : AuthType,
+                 toolchain_id : str,
                  toolchain_pulled : Union[dict, ToolChain], 
                  function_getter : Callable[[str], Union[Awaitable[Callable], Callable]],
-                 session_hash,
+                 session_hash : str,
                  author : str) -> None:
         """
         This should initialize the toolchain session with the toolchain id and the toolchain object itself.
@@ -58,6 +56,7 @@ class ToolchainSession():
         self.log : List[str] = []
         self.toolchain_session_files : Dict[str, ToolChainSessionFile] = {}
         self.database = database
+        self.user_auth = auth
 
     def reset_everything(self):
         """
@@ -99,7 +98,14 @@ class ToolchainSession():
         """
         database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.hash_id == file_pointer.document_hash_id)).first()
         assert database_obj.toolchain_session_hash_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
-        return database_obj.file_data
+        
+        # return database_obj.file_data
+        
+        document_args = get_document_secure(self.database, self.user_auth, file_pointer.document_hash_id)
+        
+        file_bytes = aes_decrypt_zip_file(self.database, document_args["password"], document_args["hash_id"])
+        
+        return file_bytes
     
     async def create_streaming_callables(self, 
                                          node : toolchainNode,
@@ -122,7 +128,6 @@ class ToolchainSession():
             
             random_streaming_id = random_hash()[:16]
             
-            # self.state = await self.run_feed_map_on_object(target_object=self.state, feed_map=feed_map, **state_args)    
             self.state, new_routes = run_sequence_action_on_object(self.state, 
                                                                    sequence=feed_map.sequence, 
                                                                    provided_object=feed_map.stream_initial_value, 
@@ -137,27 +142,12 @@ class ToolchainSession():
             }, ws)
             
             async def update_state_with_streaming_output(value):
-                # self.log_event("STREAM UPDATE", {
-                #     "type": "stream_output",
-                #     "stream_id": random_streaming_id,
-                #     "value": value
-                # })
                 await self.send_websocket_msg({
                     "s_id": random_streaming_id,
                     "v": value
                 }, ws)
                 for route_direct in new_routes:
-                    # previous_state_tmp = deepcopy(self.state)
-                    
                     self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=True)
-                    # self.log_event("STREAM UPDATE AT ROUTE", {
-                    #     "type": "stream_output",
-                    #     "stream_id": random_streaming_id,
-                    #     "route": route_direct,
-                    #     "value": value,
-                    #     "previous_state": previous_state_tmp,
-                    #     "new_state": self.state
-                    # })
             
             # Use the first route index as the id
             # Assuming only top-level results are streamed.
@@ -198,6 +188,8 @@ class ToolchainSession():
             node_inputs.update(self.firing_queue[node.id].copy())
         
         for node_input_arg in node.input_arguments:
+            
+            print("CREATING NODE INPUT ARG", [node_input_arg.key])
             
             if not node_input_arg.initialValue is None:
                 node_inputs[node_input_arg.key] = node_input_arg.initialValue
@@ -248,8 +240,14 @@ class ToolchainSession():
             
             # TODO: Implement file retrieval.
             elif not node_input_arg.from_files is None:
-                assert node_input_arg.key in system_args, f"File argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                print("PULLING FILE FROM FILES WITH FILES", self.toolchain_session_files)
                 
+                # assert node_input_arg.key in system_args, f"File argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                
+                node_inputs[node_input_arg.key] = get_value_obj_global(node_input_arg.from_files, {}, {}, {}, self.toolchain_session_files, self.get_file_bytes)
+                
+                
+                print("PULLED FILE FROM FILES:", type(node_inputs[node_input_arg.key]))
                 # file_pointer : ToolChainSessionFile = traverse_static_route_global
                 
                 # node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
@@ -274,14 +272,10 @@ class ToolchainSession():
         return node_inputs
     
     async def get_initial_feed_map_obj(self,
-                               feed_map : feedMapping,
-                               state_args: dict):
+                                       feed_map : feedMapping,
+                                       state_args: dict):
         if hasattr(feed_map, "value") or "value" in feed_map:
             initial_value = feed_map.value
-            print("\n\n\n\n\n\n\n\n\n\n GOT VALUE \n\n\n\n\n\n\n\n\n\n")
-            self.log_event("INITIAL VALUE RETRIEVED", {
-                "value": initial_value,
-            })
         else:
             
             # TODO: I think this is the source of our error. The get_value_obj_global function is limited in scope.
@@ -294,7 +288,10 @@ class ToolchainSession():
                 "state_kwargs": state_args
             })
             
-            initial_value = get_value_obj_global(value_obj_not_run[0], **state_args)
+            initial_value = get_value_obj_global(
+                value_obj_not_run[0],
+                **state_args,
+            )
             
             self.log_event("INITIAL VALUE EVALUATED", {
                 "type": "node_execution_got_val_obj",
@@ -409,7 +406,7 @@ class ToolchainSession():
             return None
         
         elif feed_map.destination == "<<FILES>>":
-            self.state, _ = await self.run_feed_map_on_object(target_object=self.toolchain_session_files, initial_value=init_value, **feed_map_args)
+            self.toolchain_session_files, _ = await self.run_feed_map_on_object(target_object=self.toolchain_session_files, initial_value=init_value, **feed_map_args)
         
         else:
             # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
@@ -574,8 +571,10 @@ class ToolchainSession():
             else:
                 if feed_map.destination == "<<USER>>":
                     user_return_arguments = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
-                elif feed_map.destination == "<<STATE>>":
+                elif feed_map.destination in ["<<STATE>>", "<<FILES>>"]:
                     await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.state)
+                # elif feed_map.destination == "<<FILES>>":
+                    # await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.fil)
                 else:
                     node_argument_templates[feed_map.destination] = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
                     self.log_event("CREATED INPUT SINGLE", {
@@ -694,10 +693,6 @@ class ToolchainSession():
         """
         Activate an event node with parameters by id, then propagate forward.
         """
-        # print("event_prop")
-        
-        # print("NODES DICT", self.nodes_dict)
-        
         target_event = self.nodes_dict[event_id]
         
         result = await self.run_node_then_forward(database,
@@ -722,14 +717,12 @@ class ToolchainSession():
         """
         Send the state of the session as a json.
         """
-        # print("update_active_node")
         send_information = {
             "type": "active_node_update",
             "active_node": node_id
         }
         if not arguments is None:
             send_information.update({"arguments": arguments})
-        # if not self.session_state_generator is None:
         await self.send_websocket_msg(send_information, ws)
 
     def dump(self):

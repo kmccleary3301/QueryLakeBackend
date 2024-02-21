@@ -1,5 +1,5 @@
 {
-	"name": "Static Chat Test",
+	"name": "File Upload Test",
     "id": "test_file_upload",
     "category": "Test",
 	"display_configuration": {
@@ -25,20 +25,20 @@
                     "from_user": true
                 },
                 {
-                    "key": "file",
+                    "key": "<<FILE>>",
                     "from_user": true
                 }
             ],
             "feed_mappings": [
                 {
-                    "destination": "ocr",
+                    "destination": "<<FILES>>",
                     "sequence": [
                         {
                             "type": "createAction",
-                            "route" : [ "auth" ]
+                            "route" : [ "single_upload" ]
                         }
                     ],
-                    "getFromInputs": { "route": [ "auth" ] }
+                    "getFromInputs": { "route": [ "<<FILE>>" ] }
                 },
                 {
                     "destination": "ocr",
@@ -48,7 +48,7 @@
                             "route" : [ "file" ]
                         }
                     ],
-                    "getFromInputs": { "route": [ "file" ] }
+                    "getFromInputs": { "route": [ "<<FILE>>" ] }
                 }
             ]
         },
@@ -61,15 +61,25 @@
                     "from_server": true
                 },
                 {
-                    "key": "auth"
+                    "key": "auth",
+                    "from_user": true
                 },
                 {
-                    "key": "file"
+                    "key": "file",
+                    "from_files": {
+                        "route": [ "single_upload" ]
+                    }
                 }
             ],
             "feed_mappings": [
                 {
                     "destination": "<<USER>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "output" ]
+                        }
+                    ],
                     "getFromOutputs": {
                         "route" : [ "pdf_text" ]
                     }

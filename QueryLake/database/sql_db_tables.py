@@ -69,7 +69,6 @@ class document_access_token(SQLModel, table=True):
     hash_id: str = Field(index=True, unique=True)
     expiration_timestamp: float
 
-
 class model(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True)
     name: str = Field(index=True, unique=True)

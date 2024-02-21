@@ -109,10 +109,10 @@ def get_available_toolchains(database : Session,
             toolchains_available_dict[toolchain.category] = []
         
         toolchains_available_dict[toolchain.category].append({
-            "name": toolchain.name,
+            "title": toolchain.name,
             "id": toolchain.id,
             "category": toolchain.category,
-            "chat_window_settings": toolchain.display_configuration
+            # "chat_window_settings": toolchain.display_configuration
         })
         
         if toolchain.id == default_toolchain:
@@ -132,7 +132,6 @@ def get_toolchain_from_db(database: Session,
     """
     toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
     return ToolChain(**json.loads(toolchain_db.content))
-    
 
 def create_toolchain_session(database : Session,
                              toolchain_function_caller : Callable[[], Callable],
@@ -150,6 +149,7 @@ def create_toolchain_session(database : Session,
     
     toolchain_get = get_toolchain_from_db(database, toolchain_id, auth)
     created_session = ToolchainSession(database,
+                                       auth,
                                        toolchain_id, 
                                        toolchain_get, 
                                        toolchain_function_caller, 
@@ -302,21 +302,6 @@ async def toolchain_event_call(database : Session,
         "database": database
     }
     system_args.update(auth)
-    # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
-    if event_node_id == "user_file_upload_event":
-        file_db_entry = database.exec(select(sql_db_tables.document_raw).where(and_(
-                                                                                    sql_db_tables.document_raw.toolchain_session_hash_id == session_id,
-                                                                                    sql_db_tables.document_raw.hash_id == event_parameters["hash_id"]
-                                                                                ))).first()
-        
-        document_values = get_document_secure(database, auth["username"], auth["password_prehash"], event_parameters["hash_id"])
-
-        file_bytes = get_file_bytes(database, file_db_entry.hash_id, document_values["password"])
-
-        event_parameters.update({
-            "user_file": file_bytes,
-        })
-
     
     event_parameters.update({"auth": auth})
 
@@ -359,39 +344,6 @@ async def toolchain_event_call(database : Session,
     }, ws)
     
     return result
-
-# async def toolchain_session_notification(database : Session,
-#                                          toolchain_function_caller,
-#                                          session : ToolchainSession,
-#                                          auth : AuthType,
-#                                          session_id : str,
-#                                          message : dict,
-#                                          ws : WebSocket = None):
-#     """
-#     Sends a notification message to a toolchain session.
-
-#     Parameters:
-#     - database (Session): The database session.
-#     - toolchain_function_caller: The caller function for the toolchain.
-#     - session (ToolchainSession): The toolchain session.
-#     - auth (AuthType): The authentication type.
-#     - session_id (str): The ID of the session.
-#     - message (dict): The message to be sent.
-#     - ws (WebSocket, optional): The WebSocket connection (default: None).
-
-#     Returns:
-#     - None
-
-#     Raises:
-#     - AssertionError: If the session author is not authorized.
-#     """
-    
-#     user_retrieved : getUserType  = get_user(database, auth)
-#     (user, user_auth) = user_retrieved
-#     assert session.author == user.name, "User not authorized"
-#     await session.send_websocket_msg(message, ws)
-
-
 
 async def get_toolchain_output_file_response(database : Session,
                                              document_id : str, 

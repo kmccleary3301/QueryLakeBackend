@@ -1,6 +1,6 @@
 from hashlib import sha256
 from typing import List, Callable, Awaitable, Dict, Any, Union
-import os
+import os, sys
 import re
 from fastapi import UploadFile
 from ..database import sql_db_tables
@@ -21,17 +21,10 @@ import py7zr
 from fastapi.responses import StreamingResponse
 import ocrmypdf
 from ..typing.config import AuthType
+import contextlib
+import io
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-
-# def create_document_collection(database : Session, username : str, collection_name : str, public : bool = False):
-#     new_collection = sql_db.user_document_collection(
-#         name=collection_name,
-#         author_user_name=username,
-#         creation_timestamp=time.time()
-#     )
-#     database.add(new_collection)
-#     database.commit()
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -39,7 +32,6 @@ async def upload_document(database : Session,
                           file : UploadFile, 
                           collection_hash_id : str, 
                           collection_type : str = "user",
-                          organization_hash_id : str = None,
                           public : bool = False,
                           return_file_hash : bool = False,
                           add_to_vector_db : bool = True) -> dict:
@@ -91,11 +83,12 @@ async def upload_document(database : Session,
     elif collection_type == "global":
         collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.hash_id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized"
+    
     elif collection_type == "toolchain_session":
         session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
         assert type(session) is sql_db_tables.toolchain_session, "Session not found"
         collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
-
+    
     if not public:
         if collection_type == "organization":
             public_key = organization.public_key
@@ -162,7 +155,7 @@ async def upload_document(database : Session,
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
         return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
-    return True
+    return {"hash_id": new_db_file.hash_id}
     
 def delete_document(database : Session, 
                     auth : AuthType,
@@ -177,6 +170,7 @@ def delete_document(database : Session,
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == user_auth.username, "User not authorized"
+    
     elif not document.organization_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == document.organization_document_collection_hash_id)).first()
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
@@ -214,6 +208,7 @@ def get_document_secure(database : Session,
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
     
     if not document.user_document_collection_hash_id is None:
+        
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.hash_id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == user_auth.username, "User not authorized"
         private_key_encryption_salt = user.private_key_encryption_salt
@@ -379,8 +374,26 @@ def ocr_pdf_file(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
     ocr_bytes_target = BytesIO()
+    ocr_bytes_target.seek(0)
 
-    ocrmypdf.ocr(file, ocr_bytes_target, redo_ocr=True)
+    if isinstance(file, bytes):
+        print("File is bytes!")
+        file_input : BytesIO = BytesIO(file)
+        file_input.seek(0)
+    else:
+        print("File is type", type(file), "not bytes!")
+        file_input = file
+    
+    # with contextlib.redirect_stdout(io.StringIO()):
+    
+    sys.stdout = open(os.devnull, 'w')
+    ocrmypdf.ocr(
+        file_input, 
+        ocr_bytes_target, 
+        force_ocr=True
+    )
+    sys.stdout = sys.__stdout__
+    
     text = parse_PDFs(ocr_bytes_target, return_all_text_as_string=True)
     return {
         "pdf_text": text

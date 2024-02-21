@@ -29,11 +29,6 @@ class EmbeddingDeployment:
         sentence_embeddings = torch.nn.functional.normalize(sentence_embeddings, p=2, dim=1)
         
         return sentence_embeddings.tolist()
-
-    # async def __call__(self, request : Request) -> Response:
-    #     request_dict = await request.json()
-    #     return_tmp = await self.handle_batch(request_dict["text"])
-    #     return Response(content=json.dumps({"output": return_tmp}))
     
     async def run(self, request_dict : Union[dict, List[str]]) -> List[List[float]]:
         
