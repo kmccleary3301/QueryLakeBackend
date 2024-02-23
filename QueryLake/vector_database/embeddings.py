@@ -5,17 +5,19 @@ from langchain.docstore.document import Document
 # from chromadb.api import ClientAPI
 from ..database.sql_db_tables import document_raw, DocumentEmbedding
 from ..api.hashing import random_hash, hash_function
+from ..api.single_user_auth import get_user
 from typing import List, Callable, Any, Union, Awaitable, Tuple
 from numpy import ndarray
 import numpy as np
-from re import sub
+from re import sub, split
 from .document_parsing import parse_PDFs
-from sqlmodel import Session, select, and_, or_
+from sqlmodel import Session, select, and_, or_, func
 from ..typing.config import AuthType
 import pgvector
 from time import time
 from io import BytesIO
 import re
+import sqlalchemy.sql
 
 
 # model = SentenceTransformer('BAAI/bge-large-en-v1.5')
@@ -140,6 +142,7 @@ async def create_text_embeddings(database : Session,
             document_integrity=document_sql_entry.integrity_sha256,
             embedding=embeddings[i],
             text=splits_text[i],
+            ts_content=sqlalchemy.sql.func.to_tsvector('english', splits_text[i]),
         )
         database.add(document_db_entry)
         
@@ -200,20 +203,29 @@ async def create_website_embeddings(database : Session,
     
     pass
 
-
 async def query_database(database : Session ,
                          auth : AuthType,
                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                         query : str, 
+                         query : Union[str, List[str]], 
                          collection_hash_ids : List[str], 
                          k : int = 10, 
-                         use_rerank : bool = True,
+                         use_keywords : bool = False,
+                         use_embeddings : bool = True,
+                         use_rerank : bool = False,
+                         rerank_question : str = "",
                          web_query : bool = False,
                          minimum_relevance : float = 0.05):
     """
     Create an embedding for a query and lookup a certain amount of relevant chunks.
     """
+    
+    (_, _) = get_user(database, auth)
     # vector_collection = vector_database.get_collection(name=model_collection_name)
+    assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
+    assert k > 0, "k must be greater than 0."
+    assert k < 1000, "k must be less than 1000."
+    assert any([use_keywords, use_embeddings]), "At least one of use_keywords or use_embeddings must be True."
+    
     first_pass_k = 100
 
     chunk_size = 250
@@ -229,23 +241,22 @@ async def query_database(database : Session ,
     
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
-    query_embeddings = await embedding_call(auth, [query])
-    query_embeddings = query_embeddings[0]
-    
-    # print("Query Embeddings")
-    # print(query_embeddings)
-
-    if len(collection_hash_ids) > 1:
+    if isinstance(query, str):
+        query_embeddings = await embedding_call(auth, [query])
         
+        ordering = DocumentEmbedding.embedding.cosine_distance(query_embeddings[0])
+    else:
+        query_embeddings = await embedding_call(auth, query)
+        cosine_distances = [DocumentEmbedding.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
+        ordering = func.greatest(*cosine_distances)
+        
+        
+        
+    
+    if len(collection_hash_ids) > 1:
         lookup_sql_condition = or_(
             *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
         )
-        
-        # lookup_sql_condition = {"$or": [{
-        #     "parent_collection_hash_id": {
-        #         "$eq": collection_hash_id
-        #     }
-        # } for collection_hash_id in collection_hash_ids]}
     else:
         
         lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_hash_ids[0])
@@ -277,29 +288,34 @@ async def query_database(database : Session ,
     #     n_results=first_pass_k,
     #     where=lookup_sql_condition
     # )
-    first_pass_results : List[DocumentEmbedding] = database.exec(
-        select(DocumentEmbedding).where(lookup_sql_condition)
+    selection = select(DocumentEmbedding).where(lookup_sql_condition) \
                                  .order_by(
-                                    DocumentEmbedding.embedding
-                                                     .cosine_distance(query_embeddings)
-                                  )
+                                    ordering
+                                  ) \
                                  .limit(first_pass_k if use_rerank else k)
-    )
     
-
-    # print(first_pass_results)
-    # new_documents = [{
-    #     "document": first_pass_results["documents"][0][i],
-    #     "metadata": first_pass_results["metadatas"][0][i]
-    # } for i in range(len(first_pass_results["documents"][0]))]
+    
+    print("SELECTION")
+    
+    print(type(selection))
+    print(selection)
+    
+    first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+    
+    
     new_docs_dict = {} # Remove duplicates
     for i, doc in enumerate(first_pass_results):
         # print(doc)
         content_hash = hash_function(hash_function(doc.text)+hash_function(doc.document_integrity))
         new_docs_dict[content_hash] = {
-            k : v for k, v in doc.__dict__.items() if k not in ["_sa_instance_state", "embedding"]
+            key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"]
         }
-        # print("LOOKUP DOC", new_docs_dict[content_hash])
+        
+        
+        # cosine_similarity = np.dot(doc.embedding, query_embeddings) / (np.linalg.norm(doc.embedding) * np.linalg.norm(query_embeddings))
+        # new_docs_dict[content_hash]["embedding_similarity_dot"] = doc.embedding @ query_embeddings
+        # new_docs_dict[content_hash]["embedding_similarity_cosine_similarity"] = cosine_similarity
+        
     
     new_documents = list(new_docs_dict.values())
     
@@ -307,28 +323,52 @@ async def query_database(database : Session ,
     if not use_rerank:
         return new_documents[:min(len(new_documents), k)]
 
-    # print("Rerank Query")
-    # print([(query, doc["document"]) for doc in new_documents if len(doc["document"]) > 0])
+    assert rerank_question is not None, "If using rerank, a rerank question must be provided."
     
     rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
     
-    rerank_scores = await rerank_call(auth,
-                                      [(query, doc["text"]) for doc in new_documents if len(doc["text"]) > 0])
+    rerank_scores = await rerank_call(auth, [
+        (rerank_question, doc["text"]) 
     
-    # print("Rerank Scores", rerank_scores)
-    
+    for doc in new_documents if len(doc["text"]) > 0])
     
     for i in range(len(new_documents)):
         new_documents[i]["rerank_score"] = rerank_scores[i]
     
     reranked_pairs = sorted(new_documents, key=lambda x: x["rerank_score"], reverse=True)
-
     
     reranked_pairs = [doc for doc in reranked_pairs if doc["rerank_score"] > minimum_relevance]
     
-    
     return reranked_pairs[:min(len(reranked_pairs), k)]
 
+async def keyword_query(database : Session ,
+                        auth : AuthType,
+                        query : str, 
+                        collection_hash_ids : List[str], 
+                        k : int = 10):
+    (_, _) = get_user(database, auth)
+    
+    if len(collection_hash_ids) > 1:
+        lookup_sql_condition = or_(
+            *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
+        )
+    else:
+        
+        lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_hash_ids[0])
 
-
+    selection = select(DocumentEmbedding).where(lookup_sql_condition).limit(k)
+    
+    first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+    
+    new_docs_dict = {} # Remove duplicates
+    for i, doc in enumerate(first_pass_results):
+        # print(doc)
+        content_hash = hash_function(hash_function(doc.text)+hash_function(doc.document_integrity))
+        new_docs_dict[content_hash] = {
+            key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"]
+        }
+    
+    new_documents = list(new_docs_dict.values())
+    
+    return new_documents[:min(len(new_documents), k)]
 

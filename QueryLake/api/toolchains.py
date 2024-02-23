@@ -34,6 +34,8 @@ default_toolchain = "chat_session_normal"
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
 
+
+
 async def save_toolchain_session(database : Session, 
                                  session : ToolchainSession,
                                  ws : WebSocket = None):
@@ -44,11 +46,12 @@ async def save_toolchain_session(database : Session,
     # assert session_id in TOOLCHAIN_SESSION_CAROUSEL, "Toolchain Session not found"
     toolchain_data = session.dump()
     existing_session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == session.session_hash
-                                                                                   
                                                                                    )).first()
     existing_session.title = toolchain_data["title"]
-    existing_session.state_arguments = json.dumps(toolchain_data["state_arguments"])
-    existing_session.firing_queue = json.dumps(toolchain_data["firing_queue"])
+    existing_session.state = safe_serialize(toolchain_data["state"])
+    existing_session.file_state = safe_serialize(toolchain_data["files"])
+    existing_session.firing_queue = safe_serialize(toolchain_data["firing_queue"])
+
     database.commit()
     if not ws is None:
         await session.send_websocket_msg({
@@ -80,7 +83,8 @@ def retrieve_toolchain_from_db(database : Session,
     session.load({
         "title": session_db_entry.title,
         "toolchain_id": session_db_entry.toolchain_id,
-        "state_arguments": json.loads(session_db_entry.state_arguments) if session_db_entry.state_arguments != "" else {},
+        "state": json.loads(session_db_entry.state) if session_db_entry.state != "" else {},
+        "files": json.loads(session_db_entry.file_state) if session_db_entry.file_state != "" else {},
         "session_hash_id": session_db_entry.hash_id,
         "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {}
     }, toolchain_get)
@@ -117,7 +121,7 @@ def get_available_toolchains(database : Session,
         
         if toolchain.id == default_toolchain:
             default_toolchain_loaded = toolchains_available_dict[toolchain.category][-1]
-        
+
     result = {
         "toolchains": [{"category": key, "entries": value} for key, value in toolchains_available_dict.items()],
         "default": default_toolchain_loaded
@@ -159,7 +163,7 @@ def create_toolchain_session(database : Session,
     new_session_in_database = sql_db_tables.toolchain_session(
         title=created_session.state["title"],
         hash_id=session_hash,
-        state_arguments=json.dumps(created_session.state),
+        state=json.dumps(created_session.state),
         creation_timestamp=time.time(),
         toolchain_id=toolchain_id,
         author=user_auth.username
@@ -198,10 +202,11 @@ def fetch_toolchain_sessions(database : Session,
     return_sessions = []
     for session in user_sessions:
         return_sessions.append({
-            "time": session.creation_timestamp,
             "title": session.title,
-            "hash_id": session.hash_id
+            "id": session.hash_id,
+            "time": session.creation_timestamp
         })
+    
     return {"sessions": return_sessions[::-1]}
 
 def fetch_toolchain_session(database : Session,

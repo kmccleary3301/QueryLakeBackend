@@ -72,7 +72,7 @@ def aes_decrypt_string(key : str, encrypted_hex_string : str, encoding : str = "
     """
     Decrypts ecnrypted hex string using any input key string.
     """
-    print("Decrypting with key:", [encrypted_hex_string, key])
+    # print("Decrypting with key:", [encrypted_hex_string, key])
     key = bytes("abcdef0123456789", encoding="utf-8")
     nonce = encrypted_hex_string[-64:]
     encrypted_hex_string = encrypted_hex_string[:-64]

@@ -1,9 +1,14 @@
 from hashlib import sha256
 import random
 
-def random_hash(**kwargs):
+HASH_BASE_VOCAB = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+def random_hash(length : int = 64, base : int = 16):
     """Returns a random SHA256 hash."""
-    return sha256(str(random.getrandbits(512)).encode('utf-8')).hexdigest()
+    assert base >= 2 and base <= len(HASH_BASE_VOCAB), f"Base must be between 2 and {len(HASH_BASE_VOCAB)}."
+    
+    vocab = HASH_BASE_VOCAB[:base]
+    return ''.join(random.choices(vocab, k=length))
 
 def hash_function(input : str, salt : str = None, only_salt : bool = False) -> str:
     """

@@ -358,7 +358,7 @@ class UmbrellaClass:
         except Exception as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
-            return_dict = {"success": False, "note": error_message, "trace": stack_trace}
+            return_dict = {"success": False, "error": error_message, "trace": stack_trace}
             print(json.dumps(return_dict, indent=4))
             return return_dict
     
@@ -433,7 +433,7 @@ class UmbrellaClass:
         except Exception as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
-            return_dict = {"success": False, "note": error_message, "trace": stack_trace}
+            return_dict = {"success": False, "error": error_message, "trace": stack_trace}
             print("RETURNING:", json.dumps(return_dict, indent=4))
             return return_dict
             # return {"success": False, "note": str(e)}

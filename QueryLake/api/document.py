@@ -245,27 +245,27 @@ def get_document_secure(database : Session,
         return document
     return {"password": document_password, "hash_id": document.hash_id}
 
-async def query_vector_db(database : Session,
-                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                          auth : AuthType,
-                          query: str,
-                          collection_hash_ids: List[str],
-                          k : int = 10,
-                          use_rerank : bool = False,
-                          minimum_relevance : float = 0.0):
-    """
-    Query from the vector database.
-    """
-    (_, _) = get_user(database, auth)
-    results = await query_database(database, 
-                                   auth,
-                                   toolchain_function_caller, 
-                                   query, 
-                                   collection_hash_ids, 
-                                   k=k, 
-                                   use_rerank=use_rerank,
-                                   minimum_relevance=minimum_relevance)
-    return {"result": results}
+# async def query_vector_db(database : Session,
+#                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+#                           auth : AuthType,
+#                           query: str,
+#                           collection_hash_ids: List[str],
+#                           k : int = 10,
+#                           use_rerank : bool = False,
+#                           minimum_relevance : float = 0.0):
+#     """
+#     Query from the vector database.
+#     """
+#     (_, _) = get_user(database, auth)
+#     results = await query_database(database, 
+#                                    auth,
+#                                    toolchain_function_caller, 
+#                                    query, 
+#                                    collection_hash_ids, 
+#                                    k=k, 
+#                                    use_rerank=use_rerank,
+#                                    minimum_relevance=minimum_relevance)
+#     return {"result": results}
 
 def craft_document_access_token(database : Session, 
                                 public_key: str,

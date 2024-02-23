@@ -85,6 +85,7 @@ class LLMDeploymentClass:
         else:
             chat_history = request_dict.pop("chat_history")
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, self.minimum_free_token_space)
+            # request_dict["prompt"] = prompt
         
         request_id = random_uuid()
         # stream = request_dict.pop("stream", False)

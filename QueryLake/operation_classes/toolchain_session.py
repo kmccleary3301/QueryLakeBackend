@@ -730,7 +730,8 @@ class ToolchainSession():
         return {
             "title": self.state["title"],
             "toolchain_id": self.toolchain_id,
-            "state_arguments": self.state,
+            "state": self.state,
+            "files": self.toolchain_session_files,
             "session_hash_id": self.session_hash,
             "firing_queue": self.firing_queue
         }
@@ -757,6 +758,7 @@ class ToolchainSession():
         self.session_hash = data["session_hash_id"]
         self.reset_everything()
         # self.assert_split_inputs()
-        self.state = data["state_arguments"]
+        self.state = data["state"]
+        self.toolchain_session_files = convert_pydantic_objects_in_dict(data["files"], ToolChainSessionFile)
         self.state["title"] = data["title"]
         self.firing_queue = data["firing_queue"]

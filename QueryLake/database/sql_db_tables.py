@@ -2,11 +2,22 @@ from typing import Optional, List, Literal
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON, LargeBinary
 
 from sqlalchemy.sql.schema import Column
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy import event, text
+
+from sqlalchemy.sql import func
+
 from sqlmodel import Session, create_engine
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
 from ..api.hashing import random_hash
 import pgvector
+
+def create_tsvector(*args):
+    exp = args[0]
+    for e in args[1:]:
+        exp += ' ' + e
+    return func.to_tsvector('english', exp)
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -35,9 +46,19 @@ class DocumentEmbedding(SQLModel, table=True):
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None)
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
-    text: str = Field()
     private: bool = Field(default=False)
-
+    
+    text: str = Field()
+    # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
+    ts_content: str = Field(sa_column=Column(TSVECTOR))
+    
+    
+    
+@event.listens_for(Session, 'before_flush')
+def update_ts_content(session : Session, flush_context, instances):
+    for instance in session.dirty:
+        if isinstance(instance, DocumentEmbedding):
+            instance.ts_content = text("to_tsvector('english', :text)").bindparams(text=instance.text)
 
 class ToolchainSessionFileOutput(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
@@ -53,7 +74,8 @@ class toolchain_session(SQLModel, table=True):
     creation_timestamp: float
     toolchain_id: str = Field(foreign_key="toolchain.toolchain_id", index=True)
     author: str = Field(foreign_key="user.name", index=True)
-    state_arguments: Optional[str] = Field(default=None)
+    state: Optional[str] = Field(default=None)
+    file_state : Optional[str] = Field(default=None)
     queue_inputs: Optional[str] = Field(default="")
     firing_queue: Optional[str] = Field(default="")
 

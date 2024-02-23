@@ -35,7 +35,7 @@ excluded_member_function_descriptions = [
     
     # Vector Database
     "create_embeddings_in_database", 
-    "query_database",
+    # "query_database",
     
     # Documents
     "upload_document_to_collection",
@@ -105,7 +105,7 @@ exposed_api = [
     "parse_url",
     "parse_urls",
     "perform_search_query",
-    "query_vector_db",
+    "query_database",
     "random_hash",
     "resolve_organization_invitation",
     "retrieve_toolchain_from_db",

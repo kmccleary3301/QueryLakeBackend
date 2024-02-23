@@ -8,7 +8,7 @@ from .hashing import *
 import os, json
 from .organizations import fetch_memberships
 from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2
-from typing import Tuple
+from typing import Tuple, Callable, Awaitable, Any, Union
 from .single_user_auth import get_user
 from ..database.encryption import aes_decrypt_string, aes_encrypt_string
 # from ..config import Config
@@ -24,6 +24,7 @@ with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
 GLOBAL_SETTINGS = json.loads(file_read)
 
 def add_user(database : Session,
+             toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
              global_config : Config,
              username : str, 
              password : str) -> dict:
@@ -59,31 +60,11 @@ def add_user(database : Session,
 
     database.add(new_user)
     database.commit()
-
-    new_access_token = sql_db_tables.access_token(
-        type="user_primary_token",
-        creation_timestamp=time.time(),
-        author_user_name=username,
-        hash_id=random_hash(),
-    )
-    database.add(new_access_token)
-    database.commit()
-
-    password_prehash = hash_function(password)
     
-    auth = {"username": username, "password_prehash": password_prehash}
-    
-    fetch_memberships_get = fetch_memberships(database, auth, return_subset="all")
-    # available_toolchains_get = get_available_toolchains(database, username, password_prehash)
-    return {
-        "account_made": True,
-        "password_single_hash": password_prehash,
-        "memberships": fetch_memberships_get["memberships"],
-        "admin": fetch_memberships_get["admin"],
-        "available_models": get_available_models(database, global_config, auth)["available_models"],
-    }
+    return login(database, toolchain_function_caller, global_config, username, password)
 
 def login(database : Session,
+          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
           global_config : Config,
           username : str, 
           password : str) -> dict:
@@ -107,23 +88,22 @@ def login(database : Session,
             auth = {"username": username, "password_prehash": password_prehash}
             
             fetch_memberships_get = fetch_memberships(database, auth, return_subset="all")
-            # available_toolchains_get = get_available_toolchains(database, username, password_prehash)
+
+            get_toolchains_function = toolchain_function_caller("get_available_toolchains")
             
-            # auth = (username, password_prehash)
+            toolchain_info = get_toolchains_function(database, auth)
             
             return {
-                "password_single_hash": password_prehash,
+                "username": username,
+                "password_pre_hash": password_prehash,
                 "memberships": fetch_memberships_get["memberships"],
                 "admin": fetch_memberships_get["admin"],
                 "available_models": get_available_models(database, global_config, auth)["available_models"],
-                # "available_toolchains": available_toolchains_get["toolchains"],
-                # "default_toolchain": available_toolchains_get["default"]
+                "available_toolchains": toolchain_info["toolchains"],
+                "default_toolchain": toolchain_info["default"]
             }
-        # return {"successful": False, "note": "Incorrect Password"}
         assert False, "Incorrect Password"
-
     else:
-        # return {"successful": False, "note": "User not found"}
         assert False, "User not found"
 
 def get_user_id(database : Session, username : str, password_prehash : str) -> int:
@@ -289,7 +269,7 @@ def create_api_key(database : Session,
     
     (user, _) = get_user(database, auth)
     
-    random_key_hash = random_hash()
+    random_key_hash = random_hash(base=62, length=32)
     
     api_key_actual = f"sk-{random_key_hash}"
     api_key_preview = f"sk-...{random_key_hash[-4:]}"

@@ -6,6 +6,23 @@ from io import BytesIO
 
 getFilesCallableType = Callable[[ToolChainSessionFile], Union[bytes, BytesIO, str]]
 
+def convert_pydantic_objects_in_dict(input_dict : dict, pydantic_type : BaseModel) -> dict:
+    """
+    Convert all objects in a dictionary to a pydantic type.
+    """
+    new_dict = {}
+    for key, value in input_dict.items():
+        
+        if isinstance(value, dict):
+            try:
+                new_dict[key] = pydantic_type(**value)
+            except:
+                new_dict[key] = convert_pydantic_objects_in_dict(value, pydantic_type)
+        else:
+            new_dict[key] = value
+    
+    return new_dict
+
 def append_in_route(object_for_static_route : Union[list, dict], route : List[Union[str, int]], value : Any) -> Union[list, dict]:
     """
     Insert a value into an object using a list of strings and ints.

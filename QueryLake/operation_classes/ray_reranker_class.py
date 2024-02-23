@@ -63,7 +63,7 @@ class RerankerDeployment:
             time_taken = time.time() - start_time
             print("Time taken for rerank inference:", time_taken)
         
-        scores = torch.exp(torch.tensor(scores.clone()))
+        scores = torch.exp(torch.tensor(scores.clone().detach()))
         scores = F(scores)
         
         return scores.tolist()
