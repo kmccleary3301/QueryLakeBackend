@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Tuple, Union
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON, LargeBinary
 
 from sqlalchemy.sql.schema import Column
@@ -12,12 +12,8 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
 from ..api.hashing import random_hash
 import pgvector
-
-def create_tsvector(*args):
-    exp = args[0]
-    for e in args[1:]:
-        exp += ' ' + e
-    return func.to_tsvector('english', exp)
+from sqlalchemy import Column, DDL, event, text
+from pydantic import BaseModel
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -51,14 +47,106 @@ class DocumentEmbedding(SQLModel, table=True):
     text: str = Field()
     # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
     ts_content: str = Field(sa_column=Column(TSVECTOR))
+
+
+
+# You never need to pass ts_content to DocumentEmbedding, as this will automatically
+# derive it from `text` using a trigger.
+# It also adds an index on ts_content for faster searching.
+trigger = DDL("""
+CREATE OR REPLACE FUNCTION update_ts_content()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.ts_content := to_tsvector('english', NEW.text);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_ts_content_trigger ON documentembedding;
+
+CREATE TRIGGER update_ts_content_trigger
+BEFORE INSERT OR UPDATE ON documentembedding
+FOR EACH ROW EXECUTE FUNCTION update_ts_content();
+
+CREATE INDEX IF NOT EXISTS ts_content_gin ON documentembedding USING gin(ts_content);
+""")
+event.listen(DocumentEmbedding.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
+
+
+class DocumentEmbeddingDictionary(BaseModel):
+    id: str
+    collection_type: Union[str, Literal[None]]
+    document_id: Union[str, Literal[None]]
+    document_integrity: Union[str, Literal[None]]
+    parent_collection_hash_id: Union[str, Literal[None]]
+    document_name : str
+    website_url : Union[str, Literal[None]]
+    private : bool
+    text : str
+    headline : Optional[str] = ""
+
+
+def search_embeddings_lexical(session: Session,
+                              collection_ids: List[str],
+                              search_string: Union[str, List[str]], 
+                              limit: int = 10,
+                              return_statement : bool = False) -> List[Tuple[
+                                    DocumentEmbeddingDictionary,
+                                    float,  # rank
+                                    str,    # headline
+                              ]]:
+                         
+    if isinstance(search_string, list):
+        search_string = ". ".join(search_string)
     
+    # Replace spaces with the OR operator
+    search_string = search_string.replace(' ', ' | ')
     
+    stmt = text("""
+        SELECT id,
+               collection_type,
+               document_id,
+               document_integrity,
+               parent_collection_hash_id,
+               document_name,
+               website_url,
+               private,
+               text,
+               ts_rank_cd(ts_content, query) AS rank,
+               ts_headline(text, query) AS headline
+        FROM documentembedding,
+             to_tsquery(:search_string) query
+        WHERE ts_content @@ query
+              AND parent_collection_hash_id = ANY(:collection_ids)
+        ORDER BY rank DESC
+        LIMIT :limit
+    """).bindparams(search_string=search_string, collection_ids=collection_ids, limit=limit)
     
-@event.listens_for(Session, 'before_flush')
-def update_ts_content(session : Session, flush_context, instances):
-    for instance in session.dirty:
-        if isinstance(instance, DocumentEmbedding):
-            instance.ts_content = text("to_tsvector('english', :text)").bindparams(text=instance.text)
+    def result_tuple_to_dict(value_in : tuple) -> Tuple[dict, float, str]:
+        return (DocumentEmbeddingDictionary(**{
+            "id": value_in[0],
+            "collection_type": value_in[1],
+            "document_id": value_in[2],
+            "document_integrity": value_in[3],
+            "parent_collection_hash_id": value_in[4],
+            "document_name": value_in[5],
+            "website_url": value_in[6],
+            "private": value_in[7],
+            "text": value_in[8],
+            "headline": value_in[10]
+        }), value_in[9], value_in[10])
+    
+    if return_statement:
+        return stmt
+    
+    results = session.exec(stmt)
+    return list(map(result_tuple_to_dict, results))
+
+
+
+
+
+
 
 class ToolchainSessionFileOutput(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)

@@ -3,7 +3,7 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 # from chromadb.api import ClientAPI
-from ..database.sql_db_tables import document_raw, DocumentEmbedding
+from ..database.sql_db_tables import document_raw, DocumentEmbedding, search_embeddings_lexical, DocumentEmbeddingDictionary
 from ..api.hashing import random_hash, hash_function
 from ..api.single_user_auth import get_user
 from typing import List, Callable, Any, Union, Awaitable, Tuple
@@ -11,18 +11,25 @@ from numpy import ndarray
 import numpy as np
 from re import sub, split
 from .document_parsing import parse_PDFs
-from sqlmodel import Session, select, and_, or_, func
+from sqlmodel import Session, select, and_, or_, func, not_
 from ..typing.config import AuthType
 import pgvector
 from time import time
 from io import BytesIO
 import re
-import sqlalchemy.sql
+from itertools import chain
 
 
 # model = SentenceTransformer('BAAI/bge-large-en-v1.5')
 # reranker_ce = CrossEncoder('BAAI/bge-reranker-base')
 # model_collection_name = "bge-large-en-v1-5"
+
+def split_list(input_list : list, n : int) -> List[list]:
+    """
+    Evenly split a list into `n` sublists of approximately equal length.
+    """
+    k, m = divmod(len(input_list), n)
+    return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
 async def create_embeddings_in_database(database : Session,
                                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -141,12 +148,12 @@ async def create_text_embeddings(database : Session,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
             embedding=embeddings[i],
-            text=splits_text[i],
-            ts_content=sqlalchemy.sql.func.to_tsvector('english', splits_text[i]),
+            text=splits_text[i]
         )
         database.add(document_db_entry)
         
     database.commit()
+        
     
     pass
 
@@ -207,9 +214,9 @@ async def query_database(database : Session ,
                          auth : AuthType,
                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                          query : Union[str, List[str]], 
-                         collection_hash_ids : List[str], 
+                         collection_ids : List[str], 
                          k : int = 10, 
-                         use_keywords : bool = False,
+                         use_lexical : bool = False,
                          use_embeddings : bool = True,
                          use_rerank : bool = False,
                          rerank_question : str = "",
@@ -224,7 +231,7 @@ async def query_database(database : Session ,
     assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
     assert k > 0, "k must be greater than 0."
     assert k < 1000, "k must be less than 1000."
-    assert any([use_keywords, use_embeddings]), "At least one of use_keywords or use_embeddings must be True."
+    assert any([use_lexical, use_embeddings]), "At least one of use_lexical or use_embeddings must be True."
     
     first_pass_k = 100
 
@@ -251,56 +258,64 @@ async def query_database(database : Session ,
         ordering = func.greatest(*cosine_distances)
         
         
-        
     
-    if len(collection_hash_ids) > 1:
+    
+    if len(collection_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
+            *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_ids)
         )
     else:
+        lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_ids[0])
+    
+    
+    first_lookup_results : List[DocumentEmbeddingDictionary] = []
+    
+    if use_lexical:
+        results_lexical = search_embeddings_lexical(database, collection_ids, query, 20)
         
-        lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_hash_ids[0])
-        # lookup_sql_condition = {
-        #     "parent_collection_hash_id": {
-        #         "$eq": collection_hash_ids[0]
-        #     }
-        # }
-
-    if web_query:
-        # lookup_sql_condition = {"$or": [
-        #     lookup_sql_condition,
-        #     {
-        #         "type" : {
-        #             "$eq": "website"
-        #         }
-        #     }
-        # ]}
-        
-        # TODO: Check that this works later when implementing the website search.
-        lookup_sql_condition = or_(
+        # The embedding search will now exclude our results from lexical search.
+        lookup_sql_condition = and_(
             lookup_sql_condition,
-            (DocumentEmbedding.website_url != None)
+            not_(or_(*[(DocumentEmbedding.id == e.id) for (e, _, _) in results_lexical]))
         )
+        
+        first_lookup_results.extend([e for (e, _, _) in results_lexical])
+        
+        
+
+    # if web_query:
+    #     # TODO: Check that this works later when implementing the website search.
+    #     lookup_sql_condition = or_(
+    #         lookup_sql_condition,
+    #         (DocumentEmbedding.website_url != None)
+    #     )
     
 
-    # first_pass_results = vector_collection.query(
-    #     query_embeddings=query_embeddings,
-    #     n_results=first_pass_k,
-    #     where=lookup_sql_condition
-    # )
-    selection = select(DocumentEmbedding).where(lookup_sql_condition) \
-                                 .order_by(
-                                    ordering
-                                  ) \
-                                 .limit(first_pass_k if use_rerank else k)
+    if not use_embeddings:
+        first_pass_results = first_lookup_results
+    else:
+        selection = select(DocumentEmbedding).where(lookup_sql_condition) \
+                                    .order_by(
+                                        ordering
+                                    ) \
+                                    .limit(first_pass_k if use_rerank else k)
+        
+        first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+        
+        first_pass_results : List[DocumentEmbeddingDictionary] = list(map(
+            lambda x: DocumentEmbeddingDictionary(**{
+                key : v \
+                for key, v in x.__dict__.items() \
+                if key in DocumentEmbeddingDictionary.__fields__.keys()
+            }),
+            first_pass_results
+        ))
     
-    
-    print("SELECTION")
-    
-    print(type(selection))
-    print(selection)
-    
-    first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+        # Evenly combine the lexical and embedding results, with lexical coming first.
+        if use_lexical:
+            first_pass_results_split = split_list(first_pass_results, len(first_lookup_results))
+            first_pass_results = [[lookup_result, *first_pass_results_split[i]] for i, lookup_result in enumerate(first_lookup_results)]
+            first_pass_results : List[DocumentEmbeddingDictionary] = list(chain.from_iterable(first_pass_results))
     
     
     new_docs_dict = {} # Remove duplicates
