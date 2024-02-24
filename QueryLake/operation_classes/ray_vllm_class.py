@@ -17,7 +17,7 @@ from QueryLake.misc_functions.prompt_construction import construct_chat_history
 
 
 @serve.deployment(ray_actor_options={"num_gpus": 0.6}, max_replicas_per_node=1)
-class LLMDeploymentClass:
+class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
                  **kwargs):

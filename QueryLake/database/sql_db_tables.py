@@ -14,6 +14,8 @@ from ..api.hashing import random_hash
 import pgvector
 from sqlalchemy import Column, DDL, event, text
 from pydantic import BaseModel
+import re
+from psycopg2.errors import InFailedSqlTransaction
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -84,9 +86,10 @@ class DocumentEmbeddingDictionary(BaseModel):
     private : bool
     text : str
     headline : Optional[str] = ""
+    cover_density_rank : Optional[float] = None
 
 
-def search_embeddings_lexical(session: Session,
+def search_embeddings_lexical(database: Session,
                               collection_ids: List[str],
                               search_string: Union[str, List[str]], 
                               limit: int = 10,
@@ -95,52 +98,67 @@ def search_embeddings_lexical(session: Session,
                                     float,  # rank
                                     str,    # headline
                               ]]:
-                         
-    if isinstance(search_string, list):
-        search_string = ". ".join(search_string)
-    
-    # Replace spaces with the OR operator
-    search_string = search_string.replace(' ', ' | ')
-    
-    stmt = text("""
-        SELECT id,
-               collection_type,
-               document_id,
-               document_integrity,
-               parent_collection_hash_id,
-               document_name,
-               website_url,
-               private,
-               text,
-               ts_rank_cd(ts_content, query) AS rank,
-               ts_headline(text, query) AS headline
-        FROM documentembedding,
-             to_tsquery(:search_string) query
-        WHERE ts_content @@ query
-              AND parent_collection_hash_id = ANY(:collection_ids)
-        ORDER BY rank DESC
-        LIMIT :limit
-    """).bindparams(search_string=search_string, collection_ids=collection_ids, limit=limit)
-    
-    def result_tuple_to_dict(value_in : tuple) -> Tuple[dict, float, str]:
-        return (DocumentEmbeddingDictionary(**{
-            "id": value_in[0],
-            "collection_type": value_in[1],
-            "document_id": value_in[2],
-            "document_integrity": value_in[3],
-            "parent_collection_hash_id": value_in[4],
-            "document_name": value_in[5],
-            "website_url": value_in[6],
-            "private": value_in[7],
-            "text": value_in[8],
-            "headline": value_in[10]
-        }), value_in[9], value_in[10])
-    
-    if return_statement:
-        return stmt
-    
-    results = session.exec(stmt)
-    return list(map(result_tuple_to_dict, results))
+    try:                     
+        if isinstance(search_string, list):
+            search_string = " ".join(search_string)
+
+        # Replace any characters other than letters, numbers, or spaces with a space
+        search_string = re.sub(r'[^a-zA-Z0-9]', ' ', search_string)
+        search_string = re.sub(r'\s+', ' ', search_string)
+        # search_string = [e for e in search_string.split(" ") if e.strip() != ""]
+        search_string = search_string.split(" ")
+        
+        # Replace spaces with the OR operator and limit to 512 terms
+        search_string = " | ".join(search_string[:min(64, len(search_string))])
+        
+        
+        # search_string = re.sub(r'\s+', ' ', search_string).strip()
+        # search_string = search_string.strip().replace(' ', ' | ')
+        
+        
+        stmt = text("""
+            SELECT id,
+                collection_type,
+                document_id,
+                document_integrity,
+                parent_collection_hash_id,
+                document_name,
+                website_url,
+                private,
+                text,
+                ts_rank_cd(ts_content, query) AS rank,
+                ts_headline(text, query) AS headline
+            FROM documentembedding,
+                to_tsquery(:search_string) query
+            WHERE ts_content @@ query
+                AND parent_collection_hash_id = ANY(:collection_ids)
+            ORDER BY rank DESC
+            LIMIT :limit
+        """).bindparams(search_string=search_string, collection_ids=collection_ids, limit=limit)
+        
+        def result_tuple_to_dict(value_in : tuple) -> Tuple[dict, float, str]:
+            return (DocumentEmbeddingDictionary(**{
+                "id": value_in[0],
+                "collection_type": value_in[1],
+                "document_id": value_in[2],
+                "document_integrity": value_in[3],
+                "parent_collection_hash_id": value_in[4],
+                "document_name": value_in[5],
+                "website_url": value_in[6],
+                "private": value_in[7],
+                "text": value_in[8],
+                "cover_density_rank": value_in[9],
+                "headline": value_in[10]
+            }), value_in[9], value_in[10])
+        
+        if return_statement:
+            return stmt
+        
+        results = database.exec(stmt)
+        return list(map(result_tuple_to_dict, results))
+    except InFailedSqlTransaction:
+        database.flush()
+        raise Exception("Database transaction failed. Please try again.")
 
 
 

@@ -42,12 +42,12 @@ import openai
 
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
 from QueryLake.typing.toolchains import *
-
-
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
-from QueryLake.operation_classes.ray_llm_class import LLMDeploymentClass
+from QueryLakeBackend.QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
+from QueryLake.misc_functions.function_run_clean import get_function_call_preview
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware import Middleware
 import asyncio
@@ -70,31 +70,21 @@ middleware = [
     )
 ]
 
-
 fastapi_app = FastAPI(
     # lifespan=lifespan
     middleware=middleware
 )
 
-ACTIVE_SESSIONS = {}
-
 global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
 
 API_FUNCTIONS = [pair[0] for pair in inspect.getmembers(api, inspect.isfunction)]
 API_FUNCTIONS = [func for func in API_FUNCTIONS if (not re.match(r"__.*?__", func) and func not in api.excluded_member_function_descriptions)]
-API_FUNCTION_DOCSTRINGS = [getattr(api, func).__doc__ for func in API_FUNCTIONS]
-API_FUNCTION_PARAMETERS = [inspect.signature(getattr(api, func)) for func in API_FUNCTIONS]
-API_FUNCTION_HELP_DICTIONARY = {}
-API_FUNCTION_HELP_GUIDE = ""
+API_FUNCTION_HELP_DICTIONARY, API_FUNCTION_HELP_GUIDE = {}, ""
 for func in API_FUNCTIONS:
-    arguments_list = list(inspect.signature(getattr(api, func)).parameters.items())
-    function_argument_string = "(%s)" % (", ".join([str(pair[1]) for pair in arguments_list if str(pair[0]) not in api.system_arguments]))
-    function_docstring = "       "+re.sub(r"[\n|\t]+", str(getattr(api, func).__doc__), "\n").replace("\n", "\n\t\t\t").strip()
     API_FUNCTION_HELP_DICTIONARY[func] = {
-        "arguments": function_argument_string,
-        "description": function_docstring
+        "result": get_function_call_preview(getattr(api, func), api.system_arguments),
     }
-    API_FUNCTION_HELP_GUIDE += "%s %s\n\n\tDESCRIPTION: %s\n\n\n\n" % (func, function_argument_string, function_docstring)
+    API_FUNCTION_HELP_GUIDE += "%s\n\n\n\n" % get_function_call_preview(getattr(api, func), api.system_arguments)
 
 def clean_function_arguments_for_api(system_args : dict, 
                                      user_args : dict, 
@@ -377,7 +367,6 @@ class UmbrellaClass:
         """
         
         try:
-            
             # body = await req.body()
             # print("Got request with body:", body)
             # arguments = req.query_params._dict
@@ -389,12 +378,12 @@ class UmbrellaClass:
                 # print("Awaiting JSON")
                 
                 arguments = await asyncio.wait_for(req.json(), timeout=10)
-                
-                
+            
+            
             # print("arguments:", arguments)
             route = req.scope['path']
             route_split = route.split("/")
-            print("/".join(route_split[:3]), req.query_params._dict)
+            print("/".join(route_split[:3]))
             if rest_of_path == "help":
                 if len(route_split) > 3:
                     function_name = route_split[3]
@@ -419,7 +408,7 @@ class UmbrellaClass:
                 else:
                     args_get = function_actual(**true_args)
                 
-                print("Type of args_get:", type(args_get))
+                # print("Type of args_get:", type(args_get))
                 
                 if type(args_get) is StreamingResponse:
                     return args_get
@@ -585,7 +574,7 @@ class UmbrellaClass:
                 toolchain_session.write_logs()
                 toolchain_session = None
                 del toolchain_session
-    
+
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 GLOBAL_CONFIG, TOOLCHAINS = Config.parse_file('config.json'), {}
@@ -603,7 +592,7 @@ for toolchain_file in toolchain_files_list:
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 for model_entry in GLOBAL_CONFIG.models:
-    LOCAL_MODEL_BINDINGS[model_entry.id] = LLMDeploymentClass.bind(
+    LOCAL_MODEL_BINDINGS[model_entry.id] = VLLMDeploymentClass.bind(
         model_config=model_entry,
         model=model_entry.system_path, 
         max_model_len=model_entry.max_model_len, 
