@@ -7,7 +7,6 @@ from ..api.single_user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 
-
 from copy import deepcopy, copy
 from time import sleep, time
 from ..api.hashing import random_hash

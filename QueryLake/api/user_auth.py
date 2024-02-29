@@ -269,7 +269,7 @@ def create_api_key(database : Session,
     
     (user, _) = get_user(database, auth)
     
-    random_key_hash = random_hash(base=62, length=32)
+    random_key_hash = random_hash(base=62, length=48)
     
     api_key_actual = f"sk-{random_key_hash}"
     api_key_preview = f"sk-...{random_key_hash[-4:]}"
