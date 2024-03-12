@@ -255,6 +255,19 @@ class web_search(SQLModel, table=True):
 # Decided on
 
 class user(SQLModel, table=True):
+    """
+    The user account table.
+    This relies on salted password hashing.
+    The hash process is as follows:
+    
+    1. password_salt = random_hash()
+    2. password_prehash = hash(password)
+    3. password_hash = hash(password_prehash + password_salt)'
+    
+    The password prehash is the unsalted password hash. It is never stored on disk,
+    but it is critical for decrypting user data since it is used to encrypt the user's private key.
+    """
+    
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     name: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default="", index=True)
@@ -262,9 +275,9 @@ class user(SQLModel, table=True):
     password_salt: str
     creation_timestamp: float
     is_admin: Optional[bool] = Field(default=False)
-    public_key: str
+    public_key: str                                                     # Randomly generated public key
     private_key_encryption_salt: str
-    private_key_secured: str # Encrypted with salt(password_prehash, encryption_salt)
+    private_key_secured: str                                            # Encrypted with salt(password_prehash, encryption_salt)
     serp_api_key_encrypted: Optional[str] = Field(default=None)         # Encrypted with user's public key
     openai_api_key_encrypted: Optional[str] = Field(default=None)       # Encrypted with user's public key
 
@@ -305,7 +318,7 @@ class model_query_raw(SQLModel, table=True):
     timestamp: float #UnixEpoch
     time_taken: float # In milliseconds
     access_token_id: Optional[int] = Field(foreign_key="access_token.id", index=True, default=None)
-    organization_id: Optional[int] = Field(default=None, foreign_key="organization.id", index=True)
+    organization_id: Optional[str] = Field(default=None, foreign_key="organization.id", index=True)
 
 class document_raw(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
@@ -327,7 +340,7 @@ class organization_document_collection(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     hash_id: str = Field(index=True, unique=True)
     name: str
-    author_organization_id: int = Field(foreign_key="organization.id", index=True)
+    author_organization_id: str = Field(foreign_key="organization.id", index=True)
     creation_timestamp: float
     public: Optional[bool] = Field(default=False)
     description: Optional[str] = Field(default="")
@@ -353,7 +366,7 @@ class global_document_collection(SQLModel, table=True):
 class organization_membership(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     role: str # "owner" | "admin" | "member" | "viewer"
-    organization_id: int = Field(foreign_key="organization.id", index=True)
+    organization_id: str = Field(foreign_key="organization.id", index=True)
     user_name: str = Field(foreign_key="user.name", index=True)
     invite_sender_user_name: Optional[str] = Field(default=None, foreign_key="user.name")
     
@@ -366,14 +379,11 @@ class organization_membership(SQLModel, table=True):
 
 class view_priviledge(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    user_document_collection_id: int = Field(foreign_key="user_document_collection.id", index=True)
+    user_document_collection_id: str = Field(foreign_key="user_document_collection.id", index=True)
     added_user_name: str = Field(foreign_key="user.name", index=True)
 
 class collaboration(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    organization_document_collection_id: int = Field(foreign_key="organization_document_collection.id", index=True)
-    added_organization_id: int = Field(foreign_key="organization.id", index=True)
+    organization_document_collection_id: str = Field(foreign_key="organization_document_collection.id", index=True)
+    added_organization_id: str = Field(foreign_key="organization.id", index=True)
     write_priviledge: Optional[bool] = Field(default=False)
-
-
-

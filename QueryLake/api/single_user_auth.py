@@ -1,11 +1,19 @@
 from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
 from .hashing import *
-from ..typing.config import AuthType, getUserType, AuthType1, AuthType2
-from ..database.encryption import aes_decrypt_string
+from ..typing.config import AuthType, getUserType, AuthType1, AuthType2, AuthType3, AuthType4
+from ..database.encryption import aes_decrypt_string, ecc_generate_public_private_key
+from typing import Union
+from datetime import datetime, timedelta, timezone
+from jose import JWTError, jwt
 
-def get_user(database : Session, 
-             auth: AuthType) -> getUserType:
+
+global_public_key, global_private_key = ecc_generate_public_private_key()
+OAUTH_SECRET_KEY = random_hash()
+
+
+def get_user(database : Session,
+             auth: Union[AuthType, dict, str]) -> getUserType:
     """
     Returns the a user by lookup after verifying, raises an error otherwise.
     The return value must always be a tuple of two items.
@@ -15,9 +23,12 @@ def get_user(database : Session,
     TODO: Add OAuth2 support.
     """
     
+    if isinstance(auth, str):
+        auth = AuthType4(oauth2=auth)
+    
     if type(auth) is dict:
         conversion_success = False
-        for auth_type in [AuthType1, AuthType2]:
+        for auth_type in [AuthType1, AuthType2, AuthType3, AuthType4]:
             try:
                 auth = auth_type(**auth)
                 conversion_success = True
@@ -58,3 +69,39 @@ def get_user(database : Session,
         user_auth = AuthType1(username=retrieved.author, password_prehash=user_password_prehash)
         
         return (user_db_entry, user_auth)
+    
+    # Raw Password Login Case
+    elif isinstance(auth, AuthType3):
+        statement = select(sql_db_tables.user).where(sql_db_tables.user.name == auth.username)
+        retrieved = database.exec(statement).first()
+        if not retrieved is None:
+            password_salt = retrieved.password_salt
+            password_hash_truth = retrieved.password_hash
+            password_hash = hash_function(auth.password, password_salt)
+            if password_hash == password_hash_truth:
+                return (retrieved, AuthType1(username=auth.username, password_prehash=hash_function(auth.password)))
+            else:
+                raise ValueError("Invalid Password.")
+        else:
+            raise IndexError("User Not Found")
+    
+    # OAuth2 Case
+    elif isinstance(auth, AuthType4):
+        
+        payload = jwt.decode(auth.oauth2, OAUTH_SECRET_KEY, algorithms=["HS256"])
+        username : str = payload.get("username")
+        password : str = payload.get("password")
+        token_expiration : datetime = datetime.fromtimestamp(payload.get("exp"), timezone.utc)
+        
+        print("Payload ->", payload)
+        
+        if username is None or password is None:
+            raise Exception("Your OAuth2 token has incomplete information.")
+        
+        temp_auth = AuthType3(username=username, password=password)
+        assert datetime.now(timezone.utc) < token_expiration, "Your OAuth2 token expired on " + str(token_expiration)
+        
+        return get_user(database, temp_auth)
+
+    else:
+        raise ValueError("Auth type not recognized.")

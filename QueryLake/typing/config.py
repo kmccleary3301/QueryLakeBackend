@@ -1,6 +1,9 @@
-from typing import List, Dict, Optional, Union, Tuple, Literal
+from typing import List, Dict, Optional, Union, Tuple, Literal, Annotated
 from pydantic import BaseModel
 from ..database.sql_db_tables import user
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
 
 class ModelArgs(BaseModel):
     stream: Optional[bool] = False
@@ -52,14 +55,18 @@ class Config(BaseModel):
     models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
     
-    
-
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
 
 
 
+# Authentication
+
+# We don't want AuthType1 used for session persistence. 
+# It basically makes password_prehash another password,
+# and one that clients store in session/cookies, which is bad practice.
+# password_prehash's only purpose should be for encryption.
 
 class AuthType1(BaseModel):
     username: str
@@ -67,12 +74,21 @@ class AuthType1(BaseModel):
 
 class AuthType2(BaseModel):
     api_key: str
+    
+class AuthType3(BaseModel):
+    username: str
+    password: str
+
+class AuthType4(BaseModel):
+    oauth2: str
 
 class getUserAuthType(BaseModel):
     username: str
     password_prehash: str
 
-AuthType = Union[AuthType1, AuthType2]
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+AuthType = Union[AuthType1, AuthType2, AuthType3, AuthType4]
 
 getUserType = Tuple[user, getUserAuthType]
 

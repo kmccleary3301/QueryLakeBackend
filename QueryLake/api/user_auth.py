@@ -7,12 +7,22 @@ from ..database import encryption
 from .hashing import *
 import os, json
 from .organizations import fetch_memberships
-from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2
+from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2, AuthType3
 from typing import Tuple, Callable, Awaitable, Any, Union
-from .single_user_auth import get_user
+from .single_user_auth import get_user, OAUTH_SECRET_KEY
 from ..database.encryption import aes_decrypt_string, aes_encrypt_string
-# from ..config import Config
-# from .toolchains import get_available_toolchains
+from fastapi_login import LoginManager
+from jose import JWTError, jwt
+from fastapi import FastAPI, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict
+from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+
+
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# manager = LoginManager(SECRET_KEY, tokenUrl='/auth/token', use_cookie=True)
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -61,51 +71,57 @@ def add_user(database : Session,
     database.add(new_user)
     database.commit()
     
-    return login(database, toolchain_function_caller, global_config, username, password)
+    return login(database, toolchain_function_caller, global_config, AuthType3(username=username, password=password))
 
 def login(database : Session,
           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
           global_config : Config,
-          username : str, 
-          password : str) -> dict:
+          auth : AuthType) -> dict:
     """
     This is for verifying a user login, and providing them their password prehash.
     """
-    print("Logging in user:", [username, password])
+    (user, user_auth) = get_user(database, auth)
     
-    statement = select(sql_db_tables.user).where(sql_db_tables.user.name == username)
-    retrieved = database.exec(statement).all()
-    if len(retrieved) > 0:
-        # with open(user_db_path+name_hash+".json", 'r', encoding='utf-8') as f:
-        #     user_data = json.load(f)
-        user_data = sql_db_tables.data_dict(retrieved[0])
-        password_salt = user_data["password_salt"]
-        password_hash_truth = user_data["password_hash"]
-        password_hash = hash_function(password, password_salt)
-        password_prehash = hash_function(password)
-        
-        if (password_hash == password_hash_truth):
-            auth = {"username": username, "password_prehash": password_prehash}
-            
-            fetch_memberships_get = fetch_memberships(database, auth, return_subset="all")
+    fetch_memberships_get = fetch_memberships(database, auth, return_subset="all")
 
-            get_toolchains_function = toolchain_function_caller("get_available_toolchains")
-            
-            toolchain_info = get_toolchains_function(database, auth)
-            
-            return {
-                "username": username,
-                "password_pre_hash": password_prehash,
-                "memberships": fetch_memberships_get["memberships"],
-                "admin": fetch_memberships_get["admin"],
-                "available_models": get_available_models(database, global_config, auth)["available_models"],
-                "available_toolchains": toolchain_info["toolchains"],
-                "default_toolchain": toolchain_info["default"]
-            }
-        assert False, "Incorrect Password"
-    else:
-        assert False, "User not found"
+    get_toolchains_function = toolchain_function_caller("get_available_toolchains")
+    
+    toolchain_info = get_toolchains_function(database, auth)
+    
+    return {
+        "username": user_auth.username,
+        "auth": create_oauth2_token(database, auth),
+        "memberships": fetch_memberships_get["memberships"],
+        "admin": fetch_memberships_get["admin"],
+        "available_models": get_available_models(database, global_config, auth)["available_models"],
+        "available_toolchains": toolchain_info["toolchains"],
+        "default_toolchain": toolchain_info["default"]
+    }
 
+def create_oauth2_token(database : Session,
+                        auth : Union[AuthType3, dict]) -> dict:
+    """
+    Create an OAuth2 token for the user.
+    """
+    try:
+        if isinstance(auth, dict):
+            auth = AuthType3(**auth)
+        assert isinstance(auth, AuthType3)
+    except:
+        raise ValueError("OAuth2 token creation must be authorized with username and password object.")
+    
+    _ = get_user(database, auth)
+    
+    to_encode = {
+        "username": auth.username,
+        "password": auth.password
+    }
+    
+    expire = datetime.now(timezone.utc) + timedelta(seconds=5)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, OAUTH_SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+    
 def get_user_id(database : Session, username : str, password_prehash : str) -> int:
     """
     Authenticate a user and return the id field of their entry in the SQL database.

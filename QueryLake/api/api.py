@@ -55,7 +55,6 @@ excluded_member_function_descriptions = [
 
 exposed_api = [
     "add_user",
-    "and_",
     "assess_categories_multiple",
     "assess_category_single",
     "convert_dict_list_to_markdown",
@@ -83,7 +82,6 @@ exposed_api = [
     "fetch_toolchain_session",
     "fetch_toolchain_sessions",
     "generate_measurement",
-    "get",
     "get_available_models",
     "get_available_toolchains",
     "get_document_secure",

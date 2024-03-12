@@ -4,19 +4,13 @@ import traceback
 
 from typing import Annotated, Callable, Any
 import json, os
-import ujson
-import uvicorn
 from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
 from starlette.requests import Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, SQLModel, create_engine, select
-import time
-# import py7zr
 import inspect
 import re
-import chromadb
 from copy import deepcopy
-import time
 
 from QueryLake.api import api
 from QueryLake.database import database_admin_operations, encryption, sql_db_tables
@@ -43,7 +37,7 @@ import openai
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
 from QueryLake.typing.toolchains import *
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
-from QueryLakeBackend.QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
+from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview
@@ -51,6 +45,19 @@ from QueryLake.misc_functions.function_run_clean import get_function_call_previe
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware import Middleware
 import asyncio
+
+from psycopg2.errors import InFailedSqlTransaction
+
+from fastapi import FastAPI, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict
+from fastapi_login import LoginManager
+from fastapi_login.exceptions import InvalidCredentialsException
+# from passlib.context import CryptContext
+from fastapi import Depends
+
+from QueryLake.api.single_user_auth import global_public_key, global_private_key
+
 
 origins = [
     "http://localhost:5173",
@@ -75,12 +82,13 @@ fastapi_app = FastAPI(
     middleware=middleware
 )
 
-global_public_key, global_private_key = encryption.ecc_generate_public_private_key()
-
 API_FUNCTIONS = [pair[0] for pair in inspect.getmembers(api, inspect.isfunction)]
 API_FUNCTIONS = [func for func in API_FUNCTIONS if (not re.match(r"__.*?__", func) and func not in api.excluded_member_function_descriptions)]
 API_FUNCTION_HELP_DICTIONARY, API_FUNCTION_HELP_GUIDE = {}, ""
 for func in API_FUNCTIONS:
+    if not hasattr(api, func):
+        continue
+    
     API_FUNCTION_HELP_DICTIONARY[func] = {
         "result": get_function_call_preview(getattr(api, func), api.system_arguments),
     }
@@ -109,6 +117,10 @@ def clean_function_arguments_for_api(system_args : dict,
         if function_args is None or key in function_args:
             synth_args[key] = system_args[key]
     return synth_args
+
+@fastapi_app.get("/api/python")
+def hello_world():
+    return {"message": "Hello World"}
 
 @serve.deployment
 @serve.ingress(fastapi_app)
@@ -145,6 +157,24 @@ class UmbrellaClass:
         # all_users = self.database.exec(select(sql_db_tables.user)).all()
         # print("All users:")
         # print(all_users)
+    
+    @fastapi_app.post("/get_auth_token")
+    async def login(self, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+        try:
+            arguments = {"username": form_data.username, "password": form_data.password}
+            
+            true_args = clean_function_arguments_for_api({
+                "database": self.database,
+                "toolchain_function_caller": self.api_function_getter,
+                "server_private_key": global_private_key,
+            }, arguments, function_object=api.create_oauth2_token)
+            return api.create_oauth2_token(**true_args)
+        except Exception as e:
+            if isinstance(e, InFailedSqlTransaction):
+                self.database.rollback()
+            error_message = str(e)
+            stack_trace = traceback.format_exc()
+            return {"success": False, "error": error_message, "trace": stack_trace}
     
     async def embedding_call(self, 
                              auth : AuthType,
@@ -197,6 +227,7 @@ class UmbrellaClass:
     async def llm_call(self,
                        auth : AuthType, 
                        model_parameters : dict,
+                       question : str = None,
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
         """
@@ -209,6 +240,9 @@ class UmbrellaClass:
         assert "model_choice" in model_parameters, "Model choice not specified"
         model_choice = model_parameters.pop("model_choice")
         
+        if not question is None:
+            chat_history = [{"role": "user", "content": question}]
+        
         if not chat_history is None:
             model_parameters["chat_history"] = chat_history
         
@@ -217,6 +251,14 @@ class UmbrellaClass:
             on_new_token = stream_callables["output"]
         
         assert model_choice in self.llm_handles, "Model choice not available"
+        
+        model_parameters = {
+            "max_tokens": 1000, 
+            "temperature": 0.5, 
+            "top_p": 0.9, 
+            "repetition_penalty": 1.15,
+            "stop": ["</s>"],
+        }.update(model_parameters)
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
         gen: DeploymentResponseGenerator = (
@@ -352,7 +394,7 @@ class UmbrellaClass:
             print(json.dumps(return_dict, indent=4))
             return return_dict
     
-    @fastapi_app.get("/ping")
+    @fastapi_app.get("/api/ping")
     async def ping_function(self, req: Request):
         print("GOT PING!!!")
         return {"success": True, "note": "Pong"}
@@ -420,6 +462,9 @@ class UmbrellaClass:
                     return {"success": True}
                 return {"success": True, "result": args_get}
         except Exception as e:
+            
+            if isinstance(e, InFailedSqlTransaction):
+                self.database.rollback()
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_dict = {"success": False, "error": error_message, "trace": stack_trace}

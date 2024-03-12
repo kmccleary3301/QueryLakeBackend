@@ -66,7 +66,7 @@ def retrieve_toolchain_from_db(database : Session,
                                ws : WebSocket) -> ToolchainSession:
     user_retrieved : getUserType  = get_user(database, auth)
     (user, user_auth) = user_retrieved
-    session_db_entry = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == session_id)).first()
+    session_db_entry = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == session_id)).first()
     
     
     assert session_db_entry.author == auth["username"], "User not authorized"
@@ -198,16 +198,17 @@ def fetch_toolchain_sessions(database : Session,
     user_sessions = database.exec(select(sql_db_tables.toolchain_session).where(condition)).all()
     
     # print("sessions:", user_sessions)
-    user_sessions = sorted(user_sessions, key=lambda x: x.creation_timestamp)
+    user_sessions = sorted(user_sessions, key=lambda x: x["creation_timestamp"], reverse=True)
     return_sessions = []
     for session in user_sessions:
         return_sessions.append({
             "title": session.title,
-            "id": session.hash_id,
+            "toolchain": session.toolchain_id,
+            "id": session.id,
             "time": session.creation_timestamp
         })
     
-    return {"sessions": return_sessions[::-1]}
+    return return_sessions
 
 def fetch_toolchain_session(database : Session,
                             toolchain_function_caller,

@@ -36,6 +36,10 @@ def get_function_docstring(function : Callable) -> str:
     """
     Get the docstring for a function.
     """
+    
+    if function.__doc__ is None:
+        return ""
+    
     return re.sub(r"\n[\s]+", "\n", function.__doc__.strip())
 
 def get_function_call_preview(function : Callable,
