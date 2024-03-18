@@ -107,8 +107,9 @@ def search_embeddings_lexical(database: Session,
         # search_string = [e for e in search_string.split(" ") if e.strip() != ""]
         search_string = search_string.split(" ")
         
-        # Replace spaces with the OR operator and limit to 512 terms
-        search_string = " | ".join(search_string[:min(64, len(search_string))])
+        # Replace spaces with the OR operator and limit to 64 terms
+        search_array = [e for e in search_string[:min(64, len(search_string))] if e.strip() != ""]
+        search_string = " | ".join(search_array).strip(" | ")
         
         
         # search_string = re.sub(r'\s+', ' ', search_string).strip()

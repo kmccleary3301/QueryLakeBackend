@@ -465,6 +465,7 @@ class UmbrellaClass:
             
             if isinstance(e, InFailedSqlTransaction):
                 self.database.rollback()
+            
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_dict = {"success": False, "error": error_message, "trace": stack_trace}

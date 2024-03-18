@@ -88,7 +88,9 @@ class getUserAuthType(BaseModel):
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-AuthType = Union[AuthType1, AuthType2, AuthType3, AuthType4]
+AuthType = Union[AuthType1, AuthType2, AuthType3, AuthType4, str]
 
 getUserType = Tuple[user, getUserAuthType]
 
+
+AuthInputType = Union[AuthType, dict, str]

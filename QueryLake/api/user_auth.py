@@ -7,9 +7,9 @@ from ..database import encryption
 from .hashing import *
 import os, json
 from .organizations import fetch_memberships
-from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2, AuthType3
+from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2, AuthType3, AuthType4, AuthInputType
 from typing import Tuple, Callable, Awaitable, Any, Union
-from .single_user_auth import get_user, OAUTH_SECRET_KEY
+from .single_user_auth import get_user, OAUTH_SECRET_KEY, process_input_as_auth_type
 from ..database.encryption import aes_decrypt_string, aes_encrypt_string
 from fastapi_login import LoginManager
 from jose import JWTError, jwt
@@ -40,6 +40,10 @@ def add_user(database : Session,
              password : str) -> dict:
     """
     Add user to the database.
+    
+    Depending on your user configuration, you can send a confirmation email for signup,
+    and communicate this in the response via {"pending_email": True}.
+    
     """
     assert len(username) <= 32, "Name too long"
     assert len(password) <= 32, "Password too long"
@@ -71,16 +75,24 @@ def add_user(database : Session,
     database.add(new_user)
     database.commit()
     
-    return login(database, toolchain_function_caller, global_config, AuthType3(username=username, password=password))
+    response = login(database, toolchain_function_caller, global_config, AuthType3(username=username, password=password))
+    response.update({
+        "pending_email": False
+    })
+    return response
 
 def login(database : Session,
           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
           global_config : Config,
-          auth : AuthType) -> dict:
+          auth : AuthInputType) -> dict:
     """
     This is for verifying a user login, and providing them their password prehash.
     """
+    
+    auth : AuthType = process_input_as_auth_type(auth)
     (user, user_auth) = get_user(database, auth)
+    
+    assert not isinstance(auth, AuthType2), "API keys cannot be used to login."
     
     fetch_memberships_get = fetch_memberships(database, auth, return_subset="all")
 
@@ -90,7 +102,7 @@ def login(database : Session,
     
     return {
         "username": user_auth.username,
-        "auth": create_oauth2_token(database, auth),
+        "auth": auth.oauth2 if isinstance(auth, AuthType4) else create_oauth2_token(database, auth),
         "memberships": fetch_memberships_get["memberships"],
         "admin": fetch_memberships_get["admin"],
         "available_models": get_available_models(database, global_config, auth)["available_models"],
@@ -99,25 +111,22 @@ def login(database : Session,
     }
 
 def create_oauth2_token(database : Session,
-                        auth : Union[AuthType3, dict]) -> dict:
+                        auth : AuthInputType) -> dict:
     """
     Create an OAuth2 token for the user.
     """
-    try:
-        if isinstance(auth, dict):
-            auth = AuthType3(**auth)
-        assert isinstance(auth, AuthType3)
-    except:
-        raise ValueError("OAuth2 token creation must be authorized with username and password object.")
+    auth : AuthType = process_input_as_auth_type(auth)
     
-    _ = get_user(database, auth)
+    assert isinstance(auth, (AuthType1, AuthType3)), "OAuth2 tokens can only be created with username and password."
+    
+    (_, user_auth) = get_user(database, auth)
     
     to_encode = {
-        "username": auth.username,
-        "password": auth.password
+        "username": user_auth.username,
+        "pwd_hash": user_auth.password_prehash
     }
     
-    expire = datetime.now(timezone.utc) + timedelta(seconds=5)
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, OAUTH_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
@@ -198,7 +207,7 @@ def get_available_models(database : Session,
     results = {
         "default_model": global_config.default_model,
         # "local_models": [{k : e[k] for k in ["name", "modelcard", "max_model_len"]} for e in global_config.models],
-        "local_models": global_config.models,
+        "local_models": [{k:v for k,v in e.dict().items() if k in ["name", "id", "modelcard"]} for e in global_config.models],
         "external_models": external_models
     }
     # return {"success" : True, "result" : results}
@@ -229,7 +238,7 @@ def set_organization_openai_id(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
     organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.hash_id == organization_hash_id)).first()
-
+    
     memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                 sql_db_tables.organization_membership.user_name == user_auth.username))).all()
     assert len(memberships) > 0, "User not authorized with organization"
@@ -272,18 +281,16 @@ def get_openai_api_key(database : Session,
     return {"api_key": user_openai_api_key}
 
 def create_api_key(database : Session, 
-                   auth : AuthType1,
+                   auth : AuthInputType,
                    title : str = None):
     """
     Create a new API key for the user.
     """
     
-    if isinstance(auth, dict):
-        auth = AuthType1(**auth)
+    auth : AuthType = process_input_as_auth_type(auth)
+    assert not isinstance(auth, AuthType2), "API keys cannot be used to create API keys."
     
-    assert isinstance(auth, AuthType1), "API Keys must be authorized with username and password object."
-    
-    (user, _) = get_user(database, auth)
+    (user, user_auth) = get_user(database, auth)
     
     random_key_hash = random_hash(base=62, length=48)
     
@@ -298,7 +305,7 @@ def create_api_key(database : Session,
         author=user.name,
         **{"title": title} if not title is None else {},
         key_preview=api_key_preview,
-        user_password_prehash_encrypted=aes_encrypt_string(api_key_actual, auth.password_prehash)
+        user_password_prehash_encrypted=aes_encrypt_string(api_key_actual, user_auth.password_prehash)
     )
     
     database.add(new_api_key)
@@ -306,17 +313,13 @@ def create_api_key(database : Session,
     return {"api_key": api_key_actual, "api_key_id": new_api_key.id}
 
 def delete_api_key(database : Session, 
-                   auth : AuthType1,
+                   auth : AuthInputType,
                    api_key_id : str):
     """
     Delete an API key by its id.
     """
-    print("Auth:", auth)
-    
-    if isinstance(auth, dict):
-        auth = AuthType1(**auth)
-    
-    assert isinstance(auth, AuthType1), "API key deletion must be authorized with username and password object."
+    auth : AuthType = process_input_as_auth_type(auth)
+    assert not isinstance(auth, AuthType2), "API keys cannot be used to delete API keys."
     
     (user, user_auth) = get_user(database, auth)
     
@@ -331,14 +334,12 @@ def delete_api_key(database : Session,
     return True
 
 def fetch_api_keys(database : Session, 
-                   auth : AuthType1):
+                   auth : AuthInputType):
     """
     Fetch all API keys belonging to the user.
     """
-    if isinstance(auth, dict):
-        auth = AuthType1(**auth)
-    
-    assert isinstance(auth, AuthType1), "API key deletion must be authorized with username and password object."
+    auth : AuthType = process_input_as_auth_type(auth)
+    assert not isinstance(auth, AuthType2), "API keys cannot be used to fetch API keys."
     
     (user, _) = get_user(database, auth)
     
