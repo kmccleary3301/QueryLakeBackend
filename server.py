@@ -60,11 +60,9 @@ from QueryLake.api.single_user_auth import global_public_key, global_private_key
 
 
 origins = [
-    "http://localhost:5173",
-    "http://localhost:5173/",
-    "localhost:5173",
-    "localhost:5173/",
-    "0.0.0.0:5173"
+    "http://localhost:3001",
+    "localhost:3001",
+    "0.0.0.0:3001"
 ]
 
 middleware = [
@@ -333,9 +331,10 @@ class UmbrellaClass:
         assert function_name in API_FUNCTIONS, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
     
-    @fastapi_app.post("/upload_document")
-    async def upload_document_new(self, req : Request, file : UploadFile):
+    @fastapi_app.post("/upload_document/{rest_of_path:path}")
+    async def upload_document_new(self, req : Request, rest_of_path: str, file : UploadFile):
         try:
+            print("Calling upload_document with file", file.filename)
             # arguments = req.query_params._dict
             
             
@@ -402,7 +401,7 @@ class UmbrellaClass:
     # Callable by POST and GET
     @fastapi_app.post("/api/{rest_of_path:path}")
     @fastapi_app.get("/api/{rest_of_path:path}")
-    async def api_general_call(self, req: Request, rest_of_path: str):
+    async def api_general_call(self, req: Request, rest_of_path: str, file: UploadFile = None):
         """
         This is a wrapper around every api function that is allowed. 
         It will call the function with the arguments provided, after filtering them for security.
@@ -413,6 +412,10 @@ class UmbrellaClass:
             # print("Got request with body:", body)
             # arguments = req.query_params._dict
             print("Calling:", rest_of_path)
+            
+            if not file is None:
+                print("File:", file.filename)
+            
             if "parameters" in req.query_params._dict:
                 arguments = json.loads(req.query_params._dict["parameters"])
             else:

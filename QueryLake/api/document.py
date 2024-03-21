@@ -150,11 +150,13 @@ async def upload_document(database : Session,
                                             file_data_bytes, 
                                             new_db_file, 
                                             file.filename)
+    
     time_taken = time.time() - time_start
 
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
         return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
+    
     return {"hash_id": new_db_file.hash_id}
     
 def delete_document(database : Session, 
