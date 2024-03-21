@@ -156,7 +156,7 @@ async def upload_document(database : Session,
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
         return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
-    
+
     return {"hash_id": new_db_file.hash_id}
     
 def delete_document(database : Session, 
@@ -328,8 +328,8 @@ def get_file_bytes(database : Session,
     #     return file_get.getbuffer().tobytes()
 
 async def fetch_document(database : Session,
-                         document_auth_access : str,
-                         server_private_key : str):
+                         server_private_key : str,
+                         document_auth_access : str):
     """
     Decrypt document in memory for the user's viewing.
     Return as a streaming response of bytes.

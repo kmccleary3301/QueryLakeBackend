@@ -5,6 +5,7 @@ import time
 from .user_auth import *
 from .hashing import random_hash
 from ..typing.config import AuthType
+from ..misc_functions.function_run_clean import file_size_as_string
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 # user_db_path = server_dir+"/user_db/files/"
@@ -168,7 +169,8 @@ def fetch_collection(database : Session,
     for document in documents:
         data["document_list"].append({
             "title": document.file_name,
-            "hash_id": document.hash_id
+            "hash_id": document.hash_id,
+            "size": file_size_as_string(document.size_bytes),
         })
     # return {"success": True, "result": data}
     return data
@@ -181,6 +183,8 @@ def modify_document_collection(database : Session,
                                 collection_type : str = "user"):
     """
     Changes document collection properties for a user.
+    
+    TODO: Implement public/private switch.
     """
 
     assert collection_type in ["user", "organization", "global"], "Invalid collection type"

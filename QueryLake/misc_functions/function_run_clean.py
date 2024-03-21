@@ -65,6 +65,16 @@ def get_function_call_preview(function : Callable,
     
     return f"{function.__name__}{argument_string}\n{docstring_segment}"
 
+def file_size_as_string(byte_count : int) -> str:
+    """
+    Convert a file size in bytes to a human readable string.
+    """
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if byte_count < 1024.0:
+            return f"{byte_count:.1f} {unit}"
+        byte_count /= 1024.0
+    return f"{byte_count:.2f} PB"
+
 
 if __name__ == "__main__":
     print(get_function_call_preview(get_function_call_preview))
