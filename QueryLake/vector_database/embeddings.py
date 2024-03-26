@@ -11,13 +11,15 @@ from numpy import ndarray
 import numpy as np
 from re import sub, split
 from .document_parsing import parse_PDFs
-from sqlmodel import Session, select, and_, or_, func, not_
+from sqlmodel import Session, select, SQLModel, create_engine, and_, or_, func, not_
 from ..typing.config import AuthType
 import pgvector
 from time import time
 from io import BytesIO
 import re
 from itertools import chain
+import json
+# from sqlmodel import Session, SQLModel, create_engine, select
 
 
 # model = SentenceTransformer('BAAI/bge-large-en-v1.5')
@@ -31,15 +33,28 @@ def split_list(input_list : list, n : int) -> List[list]:
     k, m = divmod(len(input_list), n)
     return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
-async def create_embeddings_in_database(database : Session,
+async def create_embeddings_in_database(
+                                        # database : Session,
                                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                         auth : AuthType,
                                         document_bytes : bytes, 
-                                        document_db_entry : document_raw,
+                                        document_db_entry_id : str,
                                         document_name : str):
     """
     Add document to chroma db using embeddings.
     """
+    
+    engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
+        
+    SQLModel.metadata.create_all(engine)
+    database = Session(engine)
+    
+    document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry_id)).first()
+    assert not document_db_entry is None, "Document not found in database."
+    assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
+    
+    # print(json.dumps(document_db_entry)
+    
     file_extension = document_name.split(".")[-1]
     
     print("Creating document embeddings")
@@ -95,7 +110,6 @@ async def create_text_embeddings(database : Session,
 
     text_combined, text_combined_strip = "", ""
     text_combined_chunk_assignments = np.array([], dtype=np.int32)
-    
     
     # We are assuming an input of tuples with text and metadata.
     # We do this to keep track of location/ordering metadata such as page number.

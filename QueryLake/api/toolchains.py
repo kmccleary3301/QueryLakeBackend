@@ -307,6 +307,8 @@ async def toolchain_event_call(database : Session,
     system_args = {
         "database": database
     }
+    print("TOOLCHAIN AUTH:", auth)
+    
     system_args.update(auth)
     
     event_parameters.update({"auth": auth})

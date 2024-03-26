@@ -213,7 +213,7 @@ class UmbrellaClass:
                     await on_new_token(text_output)
                 else:
                     on_new_token(text_output)
-                
+            
             if encode_output:
                 yield (json.dumps(ret) + "\n").encode("utf-8")
             else:
@@ -250,19 +250,24 @@ class UmbrellaClass:
         
         assert model_choice in self.llm_handles, "Model choice not available"
         
-        model_parameters = {
+        model_parameters_true = {
             "max_tokens": 1000, 
             "temperature": 0.5, 
             "top_p": 0.9, 
             "repetition_penalty": 1.15,
             "stop": ["</s>"],
-        }.update(model_parameters)
+        }
+        
+        model_parameters_true.update(model_parameters)
+        
+        return_stream_response = model_parameters_true.pop("stream_response_normal", False)
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
+        
+        
         gen: DeploymentResponseGenerator = (
-            llm_handle.generator.remote(model_parameters)
+            llm_handle.generator.remote(model_parameters_true)
         )
-        return_stream_response = model_parameters.pop("stream_response_normal", False)
         if return_stream_response:
             return StreamingResponse(
                 self.stream_results(gen, on_new_token=on_new_token, encode_output=True),
@@ -351,7 +356,7 @@ class UmbrellaClass:
                 "file": file,
             }, arguments, "upload_document")
 
-            return await api.upload_document(**true_arguments)
+            return {"success": True, "result": await api.upload_document(**true_arguments)}
         except Exception as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
@@ -544,7 +549,12 @@ class UmbrellaClass:
                     assert "command" in arguments_websocket, "No command provided"
                     command : str = arguments_websocket["command"]
                     auth : AuthType = arguments_websocket["auth"]
+                    
+                    auth = api.process_input_as_auth_type(auth)
+                    
                     arguments : dict = arguments_websocket["arguments"]
+                    
+                    (_, _) = api.get_user(self.database, auth)
                     
                     arguments.update({"auth": auth})
                     
@@ -557,7 +567,6 @@ class UmbrellaClass:
                         "toolchain/event",
                     ], "Invalid command"
                     
-                    (user, user_auth) = api.get_user(self.database, auth)
                     
                     result_message = {}
                     

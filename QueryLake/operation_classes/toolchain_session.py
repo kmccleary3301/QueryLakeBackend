@@ -725,6 +725,7 @@ class ToolchainSession():
         await self.send_websocket_msg(send_information, ws)
 
     def dump(self):
+        # self.write_logs()
         
         return {
             "title": self.state["title"],

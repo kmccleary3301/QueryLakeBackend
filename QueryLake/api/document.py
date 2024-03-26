@@ -23,6 +23,8 @@ import ocrmypdf
 from ..typing.config import AuthType
 import contextlib
 import io
+from ..misc_functions.function_run_clean import file_size_as_string
+import asyncio
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 
@@ -34,7 +36,8 @@ async def upload_document(database : Session,
                           collection_type : str = "user",
                           public : bool = False,
                           return_file_hash : bool = False,
-                          add_to_vector_db : bool = True) -> dict:
+                          add_to_vector_db : bool = True,
+                          await_embedding : bool = False) -> dict:
     """
     Upload file to server. Possibly with encryption.
     Can be a user document, organization document, or global document, or a toolchain_session document.
@@ -142,14 +145,20 @@ async def upload_document(database : Session,
     database.add(new_db_file)
     database.commit()
     if add_to_vector_db:
-        # thread = Thread(target=create_embeddings_in_database, args=(database, text_models_callback, file_data_bytes, new_db_file, file.filename))
-        # thread.start()
-        await create_embeddings_in_database(database, 
-                                            toolchain_function_caller,
-                                            auth, 
-                                            file_data_bytes, 
-                                            new_db_file, 
-                                            file.filename)
+        
+        if await_embedding:
+            await create_embeddings_in_database(
+                                                toolchain_function_caller,
+                                                auth, 
+                                                file_data_bytes, 
+                                                new_db_file.id, 
+                                                file.filename)
+        else:
+            asyncio.create_task(create_embeddings_in_database(toolchain_function_caller,
+                                                              auth, 
+                                                              file_data_bytes, 
+                                                              new_db_file.id, 
+                                                              file.filename))
     
     time_taken = time.time() - time_start
 
@@ -157,7 +166,7 @@ async def upload_document(database : Session,
     if return_file_hash:
         return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
 
-    return {"hash_id": new_db_file.hash_id}
+    return {"hash_id": new_db_file.hash_id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes))}
     
 def delete_document(database : Session, 
                     auth : AuthType,
