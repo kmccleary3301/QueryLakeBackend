@@ -279,8 +279,7 @@ class user(SQLModel, table=True):
     public_key: str                                                     # Randomly generated public key
     private_key_encryption_salt: str
     private_key_secured: str                                            # Encrypted with salt(password_prehash, encryption_salt)
-    serp_api_key_encrypted: Optional[str] = Field(default=None)         # Encrypted with user's public key
-    openai_api_key_encrypted: Optional[str] = Field(default=None)       # Encrypted with user's public key
+    external_providers_encrypted: Optional[str] = Field(default=None)   # Encrypted with salt(password_prehash, encryption_salt), is a JSON string.
 
 class organization(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)

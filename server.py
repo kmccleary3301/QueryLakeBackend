@@ -32,7 +32,6 @@ from starlette.websockets import WebSocketDisconnect
 from ray import serve
 from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 
-import openai
 
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
 from QueryLake.typing.toolchains import *
@@ -57,6 +56,7 @@ from fastapi_login.exceptions import InvalidCredentialsException
 from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
+from QueryLake.misc_functions.external_providers import external_llm_generator
 
 
 origins = [
@@ -264,10 +264,17 @@ class UmbrellaClass:
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
         
+        model_specified = model_parameters_true["model"].split("/")
+        if len(model_specified) > 1:
+            gen = external_llm_generator(self.database, 
+                                         auth, 
+                                         *model_specified,
+                                         model_parameters_true)
+        else:
+            gen: DeploymentResponseGenerator = (
+                llm_handle.generator.remote(model_parameters_true)
+            )
         
-        gen: DeploymentResponseGenerator = (
-            llm_handle.generator.remote(model_parameters_true)
-        )
         if return_stream_response:
             return StreamingResponse(
                 self.stream_results(gen, on_new_token=on_new_token, encode_output=True),
@@ -290,37 +297,6 @@ class UmbrellaClass:
         #     text_outputs = re.sub(pattern, '', text_outputs)
         
         return {"output": text_outputs, "token_count": len(results)}
-    
-    async def openai_llm_call(self,
-                              api_kwargs : dict,
-                              model_choice: str,
-                              chat_history : List[dict],
-                              model_parameters : dict,
-                              on_new_token: Callable[[str], None] = None):
-        # openai.Completion
-        auth_args = {"api_key": api_kwargs["api_key"]}
-        if "organization_id" in api_kwargs:
-            auth_args["organization"] = api_kwargs["organization_id"]
-        # client = openai.OpenAI(**api_kwargs)
-        response = ""
-        for chunk in openai.ChatCompletion.create(
-            model=model_choice,
-            messages=chat_history,
-            **model_parameters,
-            stream=True,
-        ): 
-            try:
-                content = chunk.choices[0].delta.content
-                if not content is None:
-                    response.append(content)
-                    if not on_new_token is None:
-                        if inspect.iscoroutinefunction(on_new_token):
-                            await on_new_token(content)
-                        else:
-                            on_new_token(content)
-            except:
-                pass
-        return {"output": "".join(response), "token_count": len(response)}
     
     def api_function_getter(self, function_name):
         if function_name == "llm":

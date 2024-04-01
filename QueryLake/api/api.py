@@ -98,6 +98,7 @@ exposed_api = [
     "llm_call_model_synchronous",
     "login",
     "modify_document_collection",
+    "modify_user_external_providers",
     "ocr_pdf_file",
     "parse_PDFs",
     "parse_url",

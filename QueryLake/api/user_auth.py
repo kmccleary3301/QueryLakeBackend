@@ -8,7 +8,8 @@ from .hashing import *
 import os, json
 from .organizations import fetch_memberships
 from ..typing.config import Config, AuthType, getUserType, AuthType1, AuthType2, AuthType3, AuthType4, AuthInputType
-from typing import Tuple, Callable, Awaitable, Any, Union
+from ..typing.toolchains import deleteAction
+from typing import Tuple, Callable, Awaitable, Any, Union, List
 from .single_user_auth import get_user, OAUTH_SECRET_KEY, process_input_as_auth_type
 from ..database.encryption import aes_decrypt_string, aes_encrypt_string
 from fastapi_login import LoginManager
@@ -18,6 +19,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
+from ..misc_functions.toolchain_state_management import run_sequence_action_on_object
 
 
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -33,11 +35,13 @@ with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
 
 GLOBAL_SETTINGS = json.loads(file_read)
 
-def add_user(database : Session,
-             toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-             global_config : Config,
-             username : str, 
-             password : str) -> dict:
+def add_user(
+    database : Session,
+    toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+    global_config : Config,
+    username : str, 
+    password : str
+) -> dict:
     """
     Add user to the database.
     
@@ -81,10 +85,12 @@ def add_user(database : Session,
     })
     return response
 
-def login(database : Session,
-          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-          global_config : Config,
-          auth : AuthInputType) -> dict:
+def login(
+    database : Session,
+    toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+    global_config : Config,
+    auth : AuthInputType
+) -> dict:
     """
     This is for verifying a user login, and providing them their password prehash.
     """
@@ -110,8 +116,10 @@ def login(database : Session,
         "default_toolchain": toolchain_info["default"]
     }
 
-def create_oauth2_token(database : Session,
-                        auth : AuthInputType) -> dict:
+def create_oauth2_token(
+    database : Session,
+    auth : AuthInputType
+) -> dict:
     """
     Create an OAuth2 token for the user.
     """
@@ -131,7 +139,11 @@ def create_oauth2_token(database : Session,
     encoded_jwt = jwt.encode(to_encode, OAUTH_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
     
-def get_user_id(database : Session, username : str, password_prehash : str) -> int:
+def get_user_id(
+    database : Session, 
+    username : str, 
+    password_prehash : str
+) -> int:
     """
     Authenticate a user and return the id field of their entry in the SQL database.
     Returns -1 if the username doesn't exist.
@@ -153,8 +165,10 @@ def get_user_id(database : Session, username : str, password_prehash : str) -> i
     else:
         return -1
 
-def get_user_private_key(database : Session, 
-                         auth : AuthType) -> str:
+def get_user_private_key(
+    database : Session, 
+    auth : AuthType
+) -> str:
     """
     Fetch user private key.
     """
@@ -167,9 +181,11 @@ def get_user_private_key(database : Session,
 
     return {"private_key": user_private_key}
 
-def get_organization_private_key(database : Session, 
-                                 auth : AuthType, 
-                                 organization_hash_id : str) -> str:
+def get_organization_private_key(
+    database : Session, 
+    auth : AuthType, 
+    organization_hash_id : str
+) -> str:
     """
     Decrypt organization private key from user's membership entry in the database.
     """
@@ -190,9 +206,11 @@ def get_organization_private_key(database : Session,
 
     return {"private_key": organization_private_key}
 
-def get_available_models(database : Session,
-                         global_config : Config,
-                         auth : AuthType):
+def get_available_models(
+    database : Session,
+    global_config : Config,
+    auth : AuthType
+):
     """
     Gets a list of all models on the server available to the given user.
     Plan on making changes so that organizations can have private models.
@@ -213,9 +231,11 @@ def get_available_models(database : Session,
     # return {"success" : True, "result" : results}
     return {"available_models": results}
 
-def set_user_openai_api_key(database : Session, 
-                            auth : AuthType,
-                            openai_api_key : str):
+def set_user_openai_api_key(
+    database : Session, 
+    auth : AuthType,
+    openai_api_key : str
+):
     """
     Sets user OpenAI API key in SQL db.
     Necessary to use OpenAI models for chat outputs.
@@ -227,10 +247,12 @@ def set_user_openai_api_key(database : Session,
     # return {"success": True}
     return True
 
-def set_organization_openai_id(database : Session, 
-                               auth : AuthType,
-                               openai_organization_id : str,
-                               organization_hash_id : str):
+def set_organization_openai_id(
+    database : Session, 
+    auth : AuthType,
+    openai_organization_id : str,
+    organization_hash_id : str
+):
     """
     Sets organization OpenAI ID Key.
     Using this allows users to use OpenAI models with charges made
@@ -252,9 +274,11 @@ def set_organization_openai_id(database : Session,
     # return {"success": True}
     return True
 
-def get_openai_api_key(database : Session, 
-                       auth : AuthType,
-                       organization_hash_id : str = None):
+def get_openai_api_key(
+    database : Session, 
+    auth : AuthType,
+    organization_hash_id : str = None
+):
     """
     Retrieve user OpenAI API key.
     If organization is specified, return an array with the former plus
@@ -280,9 +304,11 @@ def get_openai_api_key(database : Session,
     # return {"success": True, "result": user_openai_api_key}
     return {"api_key": user_openai_api_key}
 
-def create_api_key(database : Session, 
-                   auth : AuthInputType,
-                   title : str = None):
+def create_api_key(
+    database : Session, 
+    auth : AuthInputType,
+    title : str = None
+):
     """
     Create a new API key for the user.
     """
@@ -312,9 +338,11 @@ def create_api_key(database : Session,
     database.commit()
     return {"api_key": api_key_actual, "api_key_id": new_api_key.id}
 
-def delete_api_key(database : Session, 
-                   auth : AuthInputType,
-                   api_key_id : str):
+def delete_api_key(
+    database : Session, 
+    auth : AuthInputType,
+    api_key_id : str
+):
     """
     Delete an API key by its id.
     """
@@ -333,8 +361,10 @@ def delete_api_key(database : Session,
     
     return True
 
-def fetch_api_keys(database : Session, 
-                   auth : AuthInputType):
+def fetch_api_keys(
+    database : Session, 
+    auth : AuthInputType
+):
     """
     Fetch all API keys belonging to the user.
     """
@@ -352,3 +382,68 @@ def fetch_api_keys(database : Session,
     } for e in api_keys]
     
     return {"api_keys": api_keys}
+
+def get_user_external_providers_dict(
+    database : Session,
+    auth : AuthInputType
+) -> dict:
+    """
+    Get user external providers dictionary.
+    """
+    auth : AuthType = process_input_as_auth_type(auth)
+    (user, user_auth) = get_user(database, auth)
+    
+    private_key_encryption_salt = user.private_key_encryption_salt
+    user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
+    user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+    
+    if user.external_providers_encrypted is None:
+        return {}
+    
+    external_providers = encryption.aes_decrypt_string(user_private_key, user.external_providers_encrypted)
+    external_providers = json.loads(external_providers)
+    
+    return external_providers
+
+
+def modify_user_external_providers(
+    database : Session,
+    auth : AuthInputType,
+    update : dict = None,
+    delete : List[Union[str, int]] = None
+):
+    """
+    Modify user external providers.
+    """
+    auth : AuthType = process_input_as_auth_type(auth)
+    assert not isinstance(auth, AuthType2), "API keys cannot be used to change external providers."
+    assert not update is None or not delete is None, "Must specify either update or delete."
+    
+    (user, user_auth) = get_user(database, auth)
+    
+    private_key_encryption_salt = user.private_key_encryption_salt
+    user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
+    user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+    
+    if user.external_providers_encrypted is None:
+        external_providers = {}
+    else:
+        external_providers = encryption.aes_decrypt_string(user_private_key, user.external_providers_encrypted)
+        external_providers = json.loads(external_providers)
+    
+    if not update is None:
+        external_providers.update(update)
+    else:
+        external_providers = run_sequence_action_on_object(
+            external_providers,
+            {}, {}, {}, {}, [deleteAction(route=delete)]
+        )
+    
+    write_external_providers = json.dumps(external_providers)
+    write_external_providers = encryption.aes_encrypt_string(user_private_key, write_external_providers)
+    
+    user.external_providers_encrypted = write_external_providers if len(external_providers) > 0 else None
+    
+    database.commit()
+    
+    return True
