@@ -262,15 +262,15 @@ class UmbrellaClass:
         
         return_stream_response = model_parameters_true.pop("stream_response_normal", False)
         
-        llm_handle : DeploymentHandle = self.llm_handles[model_choice]
         
-        model_specified = model_parameters_true["model"].split("/")
+        model_specified = model_choice.split("/")
         if len(model_specified) > 1:
             gen = external_llm_generator(self.database, 
                                          auth, 
                                          *model_specified,
                                          model_parameters_true)
         else:
+            llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen: DeploymentResponseGenerator = (
                 llm_handle.generator.remote(model_parameters_true)
             )
