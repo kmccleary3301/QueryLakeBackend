@@ -152,7 +152,7 @@ def search_embeddings_lexical(database: Session,
                 "text": value_in[9],
                 "cover_density_rank": value_in[10],
                 "headline": value_in[11]
-            }), value_in[9], value_in[10])
+            }), value_in[10], value_in[11])
         
         if return_statement:
             return stmt
