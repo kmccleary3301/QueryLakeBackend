@@ -89,7 +89,6 @@ class DocumentEmbeddingDictionary(BaseModel):
     headline : Optional[str]
     cover_density_rank : Optional[float]
 
-
 def search_embeddings_lexical(database: Session,
                               collection_ids: List[str],
                               search_string: Union[str, List[str]], 
@@ -122,6 +121,7 @@ def search_embeddings_lexical(database: Session,
             SELECT id,
                 collection_type,
                 document_id,
+                document_chunk_number,
                 document_integrity,
                 parent_collection_hash_id,
                 document_name,
@@ -143,14 +143,15 @@ def search_embeddings_lexical(database: Session,
                 "id": value_in[0],
                 "collection_type": value_in[1],
                 "document_id": value_in[2],
-                "document_integrity": value_in[3],
-                "parent_collection_hash_id": value_in[4],
-                "document_name": value_in[5],
-                "website_url": value_in[6],
-                "private": value_in[7],
-                "text": value_in[8],
-                "cover_density_rank": value_in[9],
-                "headline": value_in[10]
+                "document_chunk_number": value_in[3],
+                "document_integrity": value_in[4],
+                "parent_collection_hash_id": value_in[5],
+                "document_name": value_in[6],
+                "website_url": value_in[7],
+                "private": value_in[8],
+                "text": value_in[9],
+                "cover_density_rank": value_in[10],
+                "headline": value_in[11]
             }), value_in[9], value_in[10])
         
         if return_statement:
