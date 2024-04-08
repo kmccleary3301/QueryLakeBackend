@@ -235,19 +235,23 @@ async def query_database(database : Session ,
                          use_rerank : bool = False,
                          rerank_question : str = "",
                          web_query : bool = False,
+                         ratio: float = 0.5,
                          minimum_relevance : float = 0.05):
     """
     Create an embedding for a query and lookup a certain amount of relevant chunks.
     """
     
     (_, _) = get_user(database, auth)
-    # vector_collection = vector_database.get_collection(name=model_collection_name)
+    
     assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
     assert k > 0, "k must be greater than 0."
-    assert k < 1000, "k must be less than 1000."
+    assert k <= 1000, "k cannot be more than 1000."
     assert any([use_lexical, use_embeddings]), "At least one of use_lexical or use_embeddings must be True."
     
-    first_pass_k = 100
+    first_pass_k = min(1000, 3*k if use_rerank else k)
+    first_pass_k_lexical = int(first_pass_k*ratio) if (use_lexical and use_embeddings) else first_pass_k
+    first_pass_k_embedding = first_pass_k - first_pass_k_lexical if use_lexical else first_pass_k
+    
 
     chunk_size = 250
     chunk_overlap = 30
@@ -285,15 +289,14 @@ async def query_database(database : Session ,
     first_lookup_results : List[DocumentEmbeddingDictionary] = []
     
     if use_lexical:
-        results_lexical = search_embeddings_lexical(database, collection_ids, query, 20)
-        
+        results_lexical = search_embeddings_lexical(database, collection_ids, query, first_pass_k_lexical)
         # The embedding search will now exclude our results from lexical search.
         lookup_sql_condition = and_(
             lookup_sql_condition,
             not_(or_(*[(DocumentEmbedding.id == e.id) for (e, _, _) in results_lexical]))
         )
-        
         first_lookup_results.extend([e for (e, _, _) in results_lexical])
+        print("FIRST PASS LEXICAL RESULTS:", len(first_lookup_results))
         
         
 
@@ -303,7 +306,6 @@ async def query_database(database : Session ,
     #         lookup_sql_condition,
     #         (DocumentEmbedding.website_url != None)
     #     )
-    
 
     if not use_embeddings:
         first_pass_results = first_lookup_results
@@ -312,7 +314,7 @@ async def query_database(database : Session ,
                                     .order_by(
                                         ordering
                                     ) \
-                                    .limit(first_pass_k if use_rerank else k)
+                                    .limit(first_pass_k_embedding)
         
         first_pass_results : List[DocumentEmbedding] = database.exec(selection)
         
@@ -324,6 +326,8 @@ async def query_database(database : Session ,
             }),
             first_pass_results
         ))
+        
+        print("FIRST PASS EMBEDDING RESULTS:", len(first_pass_results))
     
         # Evenly combine the lexical and embedding results, with lexical coming first.
         if use_lexical:

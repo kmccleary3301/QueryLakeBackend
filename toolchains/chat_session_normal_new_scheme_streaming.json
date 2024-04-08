@@ -2,43 +2,6 @@
 	"name": "Streaming Chat Test",
     "id": "test_chat_session_normal_streaming",
     "category": "Test",
-	"display_configuration": {
-		"display_mappings": [
-            {
-                "route" : [ "chat_history" ],
-                "display_as": "chat"
-            }
-        ],
-        "input_config": [
-            {
-                "type": "chat_bar",
-                "properties": {
-                    "text" : {
-                        "event": "user_question_event",
-                        "event_parameter": "question"
-                    }
-                },
-                "display_text" : "Ask Anything"
-            },
-            {
-                "type": "llm_model_choice",
-                "event": "user_question_event",
-                "event_parameter": "model_choice"
-            },
-            {
-                "type": "toggle",
-                "display_text": "Search Web",
-                "event": "user_question_event",
-                "event_parameter": "search_web"
-            },
-            {
-                "type" : "native_application_parameter",
-                "origin": "selected_collections",
-                "event": "user_question_event",
-                "event_parameter": "search_web"
-            }
-        ]
-	},
     "initial_state": {
         "title": "Chat",
         "chat_history": []

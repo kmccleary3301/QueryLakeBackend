@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional, Union, Tuple, Literal, Any
 from pydantic import BaseModel
+from .toolchain_interface import DisplaySection
 
 """
 Below is the typing scheme for object traversal and manipulation within ToolChains.
@@ -341,14 +342,14 @@ inputConfigType = Union[
 ]
 
 
-class displayConfiguration(BaseModel):
-    """
-    This is the display and usage configuration of the toolchain.
-    """
-    display_mappings: List[Union[chatWindowMapping, eventButton]]
-    max_files: Optional[int] = 0
-    # enable_rag: Optional[bool] = False,
-    input_config : Optional[List[inputConfigType]] = []
+# class displayConfiguration(BaseModel):
+#     """
+#     This is the display and usage configuration of the toolchain.
+#     """
+#     display_mappings: List[Union[chatWindowMapping, eventButton]]
+#     max_files: Optional[int] = 0
+#     # enable_rag: Optional[bool] = False,
+#     input_config : Optional[List[inputConfigType]] = []
     
 
 class toolchainNode(BaseModel):
@@ -386,7 +387,7 @@ class ToolChain(BaseModel):
     name: str
     id: str
     category: str
-    display_configuration: displayConfiguration
+    display_configuration: Optional[DisplaySection] = None
     
     suggestions: Optional[List[startScreenSuggestion]] = []
     

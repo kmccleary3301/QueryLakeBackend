@@ -2,15 +2,6 @@
 	"name": "File Upload Test",
     "id": "test_file_upload",
     "category": "Test",
-	"display_configuration": {
-		"display_mappings": [
-            {
-                "route" : [ "chat_history" ],
-                "display_as": "chat"
-            }
-        ],
-        "max_files": 1
-	},
     "initial_state": {
         "title": "Chat",
         "chat_history": []

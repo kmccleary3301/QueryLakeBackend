@@ -85,16 +85,13 @@ def add_toolchains_to_database(database : Session,
             find_existing_toolchain[0].category = toolchain_content.category
             find_existing_toolchain[0].content = json.dumps(toolchain_content.dict(), indent=4)
             database.commit()
-            continue
-
-        new_toolchain = sql_db_tables.toolchain(
-            toolchain_id=toolchain_id,
-            title=toolchain_content.name,
-            category=toolchain_content.category,
-            content=json.dumps(toolchain_content.dict(), indent=4)
-        )
-        # print("Adding toolchain to db:", new_toolchain.__dict__)
-
-        database.add(new_toolchain)
+        else:
+            new_toolchain = sql_db_tables.toolchain(
+                toolchain_id=toolchain_id,
+                title=toolchain_content.name,
+                category=toolchain_content.category,
+                content=json.dumps(toolchain_content.dict(), indent=4)
+            )
+            database.add(new_toolchain)
         database.commit()
     return

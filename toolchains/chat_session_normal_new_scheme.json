@@ -2,15 +2,6 @@
 	"name": "Static Chat Test",
     "id": "test_chat_session_normal",
     "category": "Test",
-	"display_configuration": {
-		"display_mappings": [
-            {
-                "route" : [ "chat_history" ],
-                "display_as": "chat"
-            }
-        ],
-        "max_files": 10
-	},
     "initial_state": {
         "title": "Chat",
         "chat_history": []

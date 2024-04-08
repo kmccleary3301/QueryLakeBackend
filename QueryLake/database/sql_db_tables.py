@@ -160,12 +160,6 @@ def search_embeddings_lexical(database: Session,
         database.flush()
         raise Exception("Database transaction failed. Please try again.")
 
-
-
-
-
-
-
 class ToolchainSessionFileOutput(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     creation_timestamp: float
@@ -334,6 +328,8 @@ class document_raw(SQLModel, table=True):
     toolchain_session_hash_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.hash_id", index=True)
     
     file_data: bytes = Field(sa_column=Column(LargeBinary))
+    finished_processing: Optional[bool] = Field(default=False)
+    
 
 
 class organization_document_collection(SQLModel, table=True):
