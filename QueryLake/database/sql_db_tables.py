@@ -38,6 +38,7 @@ class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
+    document_chunk_number: Optional[int] = Field(default=None)
     document_integrity: Optional[str] = Field(default=None)
     parent_collection_hash_id: Optional[str] = Field(index=True, default=None)
     document_name: str = Field()
@@ -78,14 +79,15 @@ class DocumentEmbeddingDictionary(BaseModel):
     id: str
     collection_type: Union[str, Literal[None]]
     document_id: Union[str, Literal[None]]
+    document_chunk_number: Optional[int]
     document_integrity: Union[str, Literal[None]]
     parent_collection_hash_id: Union[str, Literal[None]]
     document_name : str
-    website_url : Union[str, Literal[None]]
+    website_url : Optional[Union[str, Literal[None]]]
     private : bool
     text : str
-    headline : Optional[str] = ""
-    cover_density_rank : Optional[float] = None
+    headline : Optional[str]
+    cover_density_rank : Optional[float]
 
 
 def search_embeddings_lexical(database: Session,

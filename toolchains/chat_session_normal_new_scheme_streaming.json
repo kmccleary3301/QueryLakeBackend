@@ -2,6 +2,38 @@
 	"name": "Streaming Chat Test",
     "id": "test_chat_session_normal_streaming",
     "category": "Test",
+    "display_configuration": {
+        "split": "none",
+        "align": "center",
+        "tailwind": "w-[60vw]",
+        "mappings": [
+            {
+                "display_route": [
+                    "chat_history"
+                ],
+                "display_as": "chat"
+            }
+        ],
+        "footer": {
+            "align": "justify",
+            "tailwind": "",
+            "mappings": [
+                {
+                    "display_as": "chat_input",
+                    "hooks": [
+                        {
+                            "hook": "on_submit",
+                            "target_event": "user_question_event",
+                            "target_route": "question",
+                            "store": false
+                        }
+                    ],
+                    "config": [],
+                    "tailwind": "w-[60vw]"
+                }
+            ]
+        }
+    },
     "initial_state": {
         "title": "Chat",
         "chat_history": []

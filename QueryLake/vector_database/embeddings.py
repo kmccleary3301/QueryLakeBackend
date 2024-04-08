@@ -123,11 +123,8 @@ async def create_text_embeddings(database : Session,
         text_combined += chunk[0] + " "
         text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
 
-
-    print("Splitting text")
     splits = text_splitter.split_documents([Document(page_content=text_combined, metadata={"type": "document"})])
-
-    print("Re-assigning metadata")
+    
     splits_text = [doc.page_content for doc in splits]
     splits_metadata = []
     text_size_iterator = 0
@@ -152,23 +149,22 @@ async def create_text_embeddings(database : Session,
     
     embeddings = await embedding_call(auth, splits_text)
 
-    print("Adding to database")
-    for i in range(len(embeddings)):
-        
+    for i, vec in enumerate(embeddings):
         document_db_entry = DocumentEmbedding(
             collection_type=collection_type,
             document_id=document_sql_entry.hash_id,
+            document_chunk_number=i,
             parent_collection_hash_id=parent_collection_id,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
-            embedding=embeddings[i],
+            embedding=vec,
             text=splits_text[i]
         )
         database.add(document_db_entry)
-        
-    database.commit()
-        
     
+    document_raw.finished_processing = True
+    database.commit()
+
     pass
 
 async def create_website_embeddings(database : Session, 
@@ -268,14 +264,13 @@ async def query_database(database : Session ,
     
     if isinstance(query, str):
         query_embeddings = await embedding_call(auth, [query])
-        
         ordering = DocumentEmbedding.embedding.cosine_distance(query_embeddings[0])
     else:
         query_embeddings = await embedding_call(auth, query)
         cosine_distances = [DocumentEmbedding.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
         ordering = func.greatest(*cosine_distances)
-        
-        
+    
+    
     
     
     if len(collection_ids) > 1:
@@ -341,7 +336,7 @@ async def query_database(database : Session ,
         # print(doc)
         content_hash = hash_function(hash_function(doc.text)+hash_function(doc.document_integrity))
         new_docs_dict[content_hash] = {
-            key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"]
+            key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"] and v is not None
         }
         
         
@@ -361,9 +356,11 @@ async def query_database(database : Session ,
     rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
     
     rerank_scores = await rerank_call(auth, [
-        (rerank_question, doc["text"]) 
-    
-    for doc in new_documents if len(doc["text"]) > 0])
+        (
+            rerank_question, 
+            doc["text"]
+        ) for doc in new_documents if len(doc["text"]) > 0
+    ])
     
     for i in range(len(new_documents)):
         new_documents[i]["rerank_score"] = rerank_scores[i]
