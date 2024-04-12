@@ -4,8 +4,9 @@
     "category": "Test",
     "display_configuration": {
         "split": "none",
+        "size": 100,
         "align": "center",
-        "tailwind": "w-[60vw]",
+        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]",
         "mappings": [
             {
                 "display_route": [
@@ -16,7 +17,7 @@
         ],
         "footer": {
             "align": "justify",
-            "tailwind": "",
+            "tailwind": "pb-2",
             "mappings": [
                 {
                     "display_as": "chat_input",
@@ -29,7 +30,7 @@
                         }
                     ],
                     "config": [],
-                    "tailwind": "w-[60vw]"
+                    "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
                 }
             ]
         }

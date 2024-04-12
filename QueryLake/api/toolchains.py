@@ -34,8 +34,6 @@ default_toolchain = "chat_session_normal"
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
 
-
-
 async def save_toolchain_session(database : Session, 
                                  session : ToolchainSession,
                                  ws : WebSocket = None):
@@ -136,6 +134,17 @@ def get_toolchain_from_db(database: Session,
     """
     toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
     return ToolChain(**json.loads(toolchain_db.content))
+
+def fetch_toolchain_config(database: Session,
+                           toolchain_id : str,
+                           auth : AuthType):
+    """
+    TODO: Revisit this for permission locks.
+    """
+    (_, _) = get_user(database, auth)
+    
+    toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
+    return json.loads(toolchain_db.content)
 
 def create_toolchain_session(database : Session,
                              toolchain_function_caller : Callable[[], Callable],

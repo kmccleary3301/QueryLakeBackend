@@ -51,11 +51,9 @@ $$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$
 def add_models_to_database(database, models : List[Model]) -> None:
     for model_config in models:
         try:
-
             find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.id == model_config.id)).all()
             if len(find_existing_model) > 0:
                 continue
-
             new_model = sql_db_tables.model(
                 id=model_config.name,
                 name=model_config.name,

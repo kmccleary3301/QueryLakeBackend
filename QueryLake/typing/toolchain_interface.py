@@ -67,19 +67,29 @@ ContentMapping = Union[DisplayMapping, InputMapping]
 
 # Standard types.
 
-class ContentSection(BaseModel):
-    split: str = "none"
-    align: str
-    tailwind: Optional[str] = ""
-    mappings: List[ContentMapping]
 
-class DivisionSection(BaseModel):
-    split: str
-    sections: List[ContentSection]
 
 class HeaderSection(BaseModel):
     align: str
     tailwind: Optional[str] = ""
     mappings: List[ContentMapping]
+
+class ContentSection(BaseModel):
+    split: str = "none"
+    size: float
+    align: str
+    tailwind: Optional[str] = ""
+    mappings: List[ContentMapping]
+    header: Optional[HeaderSection]
+    footer: Optional[HeaderSection]
+
+class DivisionSection(BaseModel):
+    split: str
+    size: float
+    sections: List[ContentSection]
+    header: Optional[HeaderSection]
+    footer: Optional[HeaderSection]
+
+
 
 DisplaySection = Union[ContentSection, DivisionSection]

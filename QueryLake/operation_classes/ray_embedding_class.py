@@ -8,12 +8,12 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 from asyncio import gather
 
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 2}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.1, "num_cpus": 2}, max_replicas_per_node=1)
 class EmbeddingDeployment:
     def __init__(self, model_key: str):
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.device = "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
         self.model = AutoModel.from_pretrained(model_key).to(self.device)
 
     @serve.batch(max_batch_size=16, batch_wait_timeout_s=0.5)

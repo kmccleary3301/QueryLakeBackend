@@ -9,7 +9,6 @@ from vllm.utils import random_uuid
 from QueryLake.misc_functions.vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
 from ray import serve
 
-
 from QueryLake.misc_functions.grammar_sampling_functions import get_token_id, get_logits_processor_from_grammar_options
 
 from QueryLake.typing.config import Padding, Model
