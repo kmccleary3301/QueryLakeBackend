@@ -257,11 +257,14 @@ class ToolchainSession():
                     "node_input_arg": node_input_arg,
                     "node_arguments": node_arguments
                 })
-                assert node_input_arg.key in node_arguments, f"Node argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
-                node_inputs[node_input_arg.key] = node_arguments[node_input_arg.key]
-                self.log_event("FOUND NODE INPUT ARG", {
-                    "value": node_inputs[node_input_arg.key]
-                })
+                
+                assert (node_input_arg.key in node_arguments or node_input_arg.optional), \
+                    f"Node argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+                if node_input_arg.key in node_arguments:
+                    node_inputs[node_input_arg.key] = node_arguments[node_input_arg.key]
+                    self.log_event("FOUND NODE INPUT ARG", {
+                        "value": node_inputs[node_input_arg.key]
+                    })
                 
         self.log_event("CREATED NODE INPUTS", {
             "node_id": node.id,
@@ -534,7 +537,10 @@ class ToolchainSession():
                 "get_files_callable" : self.get_file_bytes
             }
             
-            init_value = await self.get_initial_feed_map_obj(feed_map, new_state_args)
+            try:
+                init_value = await self.get_initial_feed_map_obj(feed_map, new_state_args)
+            except Exception as e:
+                continue
             
             feed_map_args = {
                 "feed_map": feed_map,

@@ -224,8 +224,8 @@ class UmbrellaClass:
     
     async def llm_call(self,
                        auth : AuthType, 
-                       model_parameters : dict,
                        question : str = None,
+                       model_parameters : dict = {},
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
         """
@@ -235,8 +235,6 @@ class UmbrellaClass:
         TODO: Add optionality via default values to the model parameters.
         """
         (user, user_auth) = api.get_user(self.database, auth)
-        assert "model_choice" in model_parameters, "Model choice not specified"
-        model_choice = model_parameters.pop("model_choice")
         
         if not question is None:
             chat_history = [{"role": "user", "content": question}]
@@ -248,17 +246,24 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        assert model_choice in self.llm_handles, "Model choice not available"
+        
         
         model_parameters_true = {
+            "model_choice": "mistral-7b-instruct-v0.1",
             "max_tokens": 1000, 
-            "temperature": 0.5, 
-            "top_p": 0.9, 
+            "temperature": 0.1, 
+            "top_p": 0.1, 
             "repetition_penalty": 1.15,
-            "stop": ["</s>"],
+            "stop": ["<|im_end|>"],
+            "include_stop_str_in_output": True
         }
-        
         model_parameters_true.update(model_parameters)
+        
+        model_choice = model_parameters_true.pop("model_choice", "mistral-7b-instruct-v0.1")
+        assert model_choice in self.llm_handles, "Model choice not available"
+        
+        
+        
         
         return_stream_response = model_parameters_true.pop("stream_response_normal", False)
         
