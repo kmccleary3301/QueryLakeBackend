@@ -104,7 +104,7 @@ def login(
 
     get_toolchains_function = toolchain_function_caller("get_available_toolchains")
     
-    toolchain_info = get_toolchains_function(database, auth)
+    toolchain_info = get_toolchains_function(database, global_config, auth)
     
     return {
         "username": user_auth.username,

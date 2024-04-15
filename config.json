@@ -1,5 +1,6 @@
 {
-    "default_model": "Mistral 7B Instruct",
+    "default_toolchain": "test_chat_session_normal_streaming",
+    "default_model": "mistral-7b-instruct-v0.1",
     "models": [
         {
             "name": "Mistral 7B Instruct",

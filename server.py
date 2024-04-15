@@ -56,7 +56,7 @@ from fastapi_login.exceptions import InvalidCredentialsException
 from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
-from QueryLake.misc_functions.external_providers import external_llm_generator
+from QueryLake.misc_functions.external_providers import external_llm_generator, stream_results_tokens
 
 
 origins = [
@@ -196,32 +196,6 @@ class UmbrellaClass:
             return_tmp = await self.rerank_handle.run.remote(request_dict)
         return return_tmp
     
-    async def stream_results(self, 
-                             results_generator: DeploymentResponseGenerator,
-                             encode_output : bool = False,
-                             on_new_token: Awaitable[Callable[[str], None]] = None) -> AsyncGenerator[bytes, None]:
-        
-        num_returned, tokens_returned = 0, []
-        async for request_output in results_generator:
-            text_outputs = [output.text for output in request_output.outputs]
-            assert len(text_outputs) == 1
-            text_output = text_outputs[0][num_returned:]
-            ret = {"text": text_output}
-            
-            if not on_new_token is None:
-                if inspect.iscoroutinefunction(on_new_token):
-                    await on_new_token(text_output)
-                else:
-                    on_new_token(text_output)
-            
-            if encode_output:
-                yield (json.dumps(ret) + "\n").encode("utf-8")
-            else:
-                yield text_output
-            num_returned += len(text_output)
-            tokens_returned.append(text_output)
-        # return tokens_returned
-    
     async def llm_call(self,
                        auth : AuthType, 
                        question : str = None,
@@ -249,7 +223,7 @@ class UmbrellaClass:
         
         
         model_parameters_true = {
-            "model_choice": "mistral-7b-instruct-v0.1",
+            "model_choice": self.config.default_model,
             "max_tokens": 1000, 
             "temperature": 0.1, 
             "top_p": 0.1, 
@@ -260,15 +234,14 @@ class UmbrellaClass:
         model_parameters_true.update(model_parameters)
         
         model_choice = model_parameters_true.pop("model_choice", "mistral-7b-instruct-v0.1")
+        
         assert model_choice in self.llm_handles, "Model choice not available"
-        
-        
-        
         
         return_stream_response = model_parameters_true.pop("stream_response_normal", False)
         
-        
         model_specified = model_choice.split("/")
+        
+        stop_sequences = model_parameters_true.pop("stop", [])
         if len(model_specified) > 1:
             gen = external_llm_generator(self.database, 
                                          auth, 
@@ -282,11 +255,11 @@ class UmbrellaClass:
         
         if return_stream_response:
             return StreamingResponse(
-                self.stream_results(gen, on_new_token=on_new_token, encode_output=True),
+                stream_results_tokens(gen, on_new_token=on_new_token, encode_output=True, stop_sequences=stop_sequences),
             )
         else:
             results = []
-            async for result in self.stream_results(gen, on_new_token=on_new_token):
+            async for result in stream_results_tokens(gen, on_new_token=on_new_token):
                 results.append(result)
         
         # strings_to_remove = model_parameters["stop"] if "stop" in model_parameters else []

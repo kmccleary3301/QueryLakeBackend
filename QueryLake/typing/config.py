@@ -51,6 +51,7 @@ class LoaderParameters(BaseModel):
     beam_length: Dict
 
 class Config(BaseModel):
+    default_toolchain: str
     default_model: str
     models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]

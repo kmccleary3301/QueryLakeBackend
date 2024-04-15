@@ -20,16 +20,14 @@ from ..api.user_auth import get_user_private_key
 from ..database.encryption import aes_encrypt_zip_file, aes_decrypt_zip_file
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi import WebSocket
-import zipfile
 from ..misc_functions.function_run_clean import run_function_safe
 from ..typing.config import AuthType, getUserType
 from typing import Callable, Any, List, Dict, Union
 from ..typing.toolchains import *
 from ..operation_classes.toolchain_session import ToolchainSession
 from ..misc_functions.toolchain_state_management import safe_serialize
+from ..typing.config import Config
 from io import BytesIO
-
-default_toolchain = "chat_session_normal"
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -89,14 +87,14 @@ def retrieve_toolchain_from_db(database : Session,
     return session
 
 def get_available_toolchains(database : Session,
+                             global_config : Config,
                              auth : AuthType):
     """
     Returns available toolchains with chat window settings and all.
     Will find organization locked
     If there are organization locked toolchains, they will be added to the database.
     """
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
+    (user, user_auth) = get_user(database, auth)
     
     toolchains_db : List[sql_db_tables.toolchain] = database.exec(select(sql_db_tables.toolchain)).all()
     
@@ -117,7 +115,7 @@ def get_available_toolchains(database : Session,
             # "chat_window_settings": toolchain.display_configuration
         })
         
-        if toolchain.id == default_toolchain:
+        if toolchain.id == global_config.default_toolchain:
             default_toolchain_loaded = toolchains_available_dict[toolchain.category][-1]
 
     result = {
@@ -132,6 +130,7 @@ def get_toolchain_from_db(database: Session,
     """
     TODO: Revisit this for permission locks.
     """
+    (user, user_auth) = get_user(database, auth)
     toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
     return ToolChain(**json.loads(toolchain_db.content))
 
@@ -316,7 +315,7 @@ async def toolchain_event_call(database : Session,
     system_args = {
         "database": database
     }
-    print("TOOLCHAIN AUTH:", auth)
+    # print("TOOLCHAIN AUTH:", auth)
     
     system_args.update(auth)
     

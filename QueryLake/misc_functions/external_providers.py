@@ -8,6 +8,8 @@ import openai
 from typing import AsyncIterator, List
 import inspect
 import json
+from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
+from typing import Awaitable, Callable, AsyncGenerator
 
 
 EXTERNAL_PROIVDERS = [
@@ -80,4 +82,30 @@ def external_llm_generator(
         )
     else:
         raise ValueError("Invalid provider.")
+
+
+
+async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
+                                encode_output : bool = False,
+                                on_new_token: Awaitable[Callable[[str], None]] = None,
+                                stop_sequences: List[str] = None) -> AsyncGenerator[bytes, None]:
     
+    num_returned, tokens_returned = 0, []
+    async for request_output in results_generator:
+        text_outputs = [output.text for output in request_output.outputs]
+        assert len(text_outputs) == 1
+        text_output = text_outputs[0][num_returned:]
+        ret = {"text": text_output}
+        
+        if not on_new_token is None:
+            if inspect.iscoroutinefunction(on_new_token):
+                await on_new_token(text_output)
+            else:
+                on_new_token(text_output)
+        
+        if encode_output:
+            yield (json.dumps(ret) + "\n").encode("utf-8")
+        else:
+            yield text_output
+        num_returned += len(text_output)
+        tokens_returned.append(text_output)

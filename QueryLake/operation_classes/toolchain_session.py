@@ -188,7 +188,7 @@ class ToolchainSession():
         
         for node_input_arg in node.input_arguments:
             
-            print("CREATING NODE INPUT ARG", [node_input_arg.key])
+            # print("CREATING NODE INPUT ARG", [node_input_arg.key])
             
             if not node_input_arg.initialValue is None:
                 node_inputs[node_input_arg.key] = node_input_arg.initialValue
