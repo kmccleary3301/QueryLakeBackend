@@ -69,7 +69,7 @@ class VLLMDeploymentClass:
         self.special_token_ids = tokenizer_tmp.all_special_ids
         
         self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
-
+        
         self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine.tokenizer)
         
         print("Test count tokens ->", self.count_tokens("Hello, world!"))

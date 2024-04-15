@@ -56,7 +56,8 @@ from fastapi_login.exceptions import InvalidCredentialsException
 from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
-from QueryLake.misc_functions.external_providers import external_llm_generator, stream_results_tokens
+from QueryLake.misc_functions.external_providers import external_llm_generator
+from QueryLake.misc_functions.server_class_functions import stream_results_tokens
 
 
 origins = [
@@ -241,7 +242,10 @@ class UmbrellaClass:
         
         model_specified = model_choice.split("/")
         
-        stop_sequences = model_parameters_true.pop("stop", [])
+        stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
+        print("Stop sequences:", stop_sequences)
+        
+        
         if len(model_specified) > 1:
             gen = external_llm_generator(self.database, 
                                          auth, 
@@ -259,20 +263,10 @@ class UmbrellaClass:
             )
         else:
             results = []
-            async for result in stream_results_tokens(gen, on_new_token=on_new_token):
+            async for result in stream_results_tokens(gen, on_new_token=on_new_token, stop_sequences=stop_sequences):
                 results.append(result)
         
-        # strings_to_remove = model_parameters["stop"] if "stop" in model_parameters else []
-        
         text_outputs = "".join(results)
-        
-        # if len(strings_to_remove) > 0:
-        #     # Create a regex pattern that matches any of the strings
-        #     pattern = '|'.join(map(re.escape, strings_to_remove))
-        #     pattern = re.compile(f"[{pattern}]+(.*?)$")
-        #     # Text to remove strings from
-        #     # Remove the strings
-        #     text_outputs = re.sub(pattern, '', text_outputs)
         
         return {"output": text_outputs, "token_count": len(results)}
     
