@@ -221,15 +221,13 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        
-        
         model_parameters_true = {
             "model_choice": self.config.default_model,
-            "max_tokens": 1000, 
+            "max_tokens": 4096, 
             "temperature": 0.1, 
             "top_p": 0.1, 
             "repetition_penalty": 1.15,
-            "stop": ["<|im_end|>"],
+            "stop": ["<|im_end|>", "</s>"],
             "include_stop_str_in_output": True
         }
         model_parameters_true.update(model_parameters)
@@ -243,7 +241,7 @@ class UmbrellaClass:
         model_specified = model_choice.split("/")
         
         stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
-        print("Stop sequences:", stop_sequences)
+        # print("Stop sequences:", stop_sequences)
         
         
         if len(model_specified) > 1:
@@ -509,20 +507,9 @@ class UmbrellaClass:
                     assert command in [
                         "toolchain/load",
                         "toolchain/create",
-                        # "toolchain/retrieve_files",
                         "toolchain/file_upload_event_call",
-                        "toolchain/entry",
                         "toolchain/event",
                     ], "Invalid command"
-                    
-                    
-                    result_message = {}
-                    
-                    # Make sure session is in system args
-                    # if not toolchain_session is None and not "session" in system_args:
-                    #     system_args["session"] = toolchain_session
-                    # elif toolchain_session is None and "session" in system_args:
-                    #     del system_args["session"]
                     
                     if command == "toolchain/load":
                         if not toolchain_session is None:
@@ -530,11 +517,15 @@ class UmbrellaClass:
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
                         toolchain_session : ToolchainSession = api.fetch_toolchain_session(**true_args)
-                        # system_args["session"] = toolchain_session
+                        result = {
+                            "success": True,
+                            "toolchain_session_id": toolchain_session.session_hash,
+                            "state": toolchain_session.state,
+                        }
                     
                     elif command == "toolchain/create":
                         if not toolchain_session is None:
-                            api.save_toolchain_session(self.database, toolchain_session)
+                            await api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.create_toolchain_session)
                         toolchain_session : ToolchainSession = api.create_toolchain_session(**true_args)
@@ -561,10 +552,10 @@ class UmbrellaClass:
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
                     
-                    del result_message
                     del result
                     
-                    await api.save_toolchain_session(self.database, toolchain_session)
+                    
+                    # await api.save_toolchain_session(self.database, toolchain_session)
                 
                 except WebSocketDisconnect:
                     raise WebSocketDisconnect
@@ -572,11 +563,15 @@ class UmbrellaClass:
                     error_message = str(e)
                     stack_trace = traceback.format_exc()
                     await ws.send_text(json.dumps({"error": error_message, "trace": stack_trace}))
-                    await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
+                    await ws.send_text((json.dumps({"ACTION": "END_WS_CALL_ERROR"})).encode("utf-8"))
         except WebSocketDisconnect as e:
             print("Websocket disconnected")
             if not toolchain_session is None:
                 print("Unloading Toolchain")
+                
+                if toolchain_session.first_event_fired:
+                    await api.save_toolchain_session(self.database, toolchain_session)
+                    
                 toolchain_session.write_logs()
                 toolchain_session = None
                 del toolchain_session

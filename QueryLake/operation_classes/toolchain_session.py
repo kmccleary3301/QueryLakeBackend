@@ -56,6 +56,7 @@ class ToolchainSession():
         self.toolchain_session_files : Dict[str, ToolChainSessionFile] = {}
         self.database = database
         self.user_auth = auth
+        self.first_event_fired = False
 
     def reset_everything(self):
         """
@@ -96,7 +97,7 @@ class ToolchainSession():
         Get the bytes of a file from the toolchain session.
         """
         database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.hash_id == file_pointer.document_hash_id)).first()
-        assert database_obj.toolchain_session_hash_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
+        assert database_obj.toolchain_session_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
         
         # return database_obj.file_data
         
@@ -698,6 +699,8 @@ class ToolchainSession():
         """
         Activate an event node with parameters by id, then propagate forward.
         """
+        self.first_event_fired = True
+        
         target_event = self.nodes_dict[event_id]
         
         result = await self.run_node_then_forward(database,

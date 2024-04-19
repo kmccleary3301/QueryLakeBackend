@@ -16,8 +16,9 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                 await on_new_token(text_input)
             else:
                 on_new_token(text_input)
+        
         tokens_returned.append(text_input)
-                
+    
     def check_stop_sequence(text_in):
         if text_in == "":
             return False
@@ -37,15 +38,13 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
         num_returned = num_returned + len(text_output)
         
         # The following code is responsible for withholding the output if 
-        # a stop sequence is being matched to avoid a partial stop sequence
+        # a stop sequence is being matched. This avoids a partial stop sequence
         # being returned just before termination.
         if stop_sequences is not None:
             if not hold_queue:
                 for i in range(len(text_output)):
                     match_stop = check_stop_sequence(text_output[i:])
-                    print("CHECKING:", [text_output[:i], text_output[i:], match_stop])
                     if match_stop:
-                        print("MATCH STOP FOUND:", [text_output[:i], text_output[i:]])
                         last_valid = text_output[:i]
                         if len(last_valid) > 0:
                             await new_token_call(last_valid)
@@ -57,6 +56,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                 stop_queue.append(text_output)
                 stop_queue_full = "".join(stop_queue)
                 if (any([stop_sequence in stop_queue_full for stop_sequence in stop_sequences])):
+                    print("Stopping sequence found:", stop_queue_full)
                     return
                 elif (check_stop_sequence(stop_queue_full)):
                     continue

@@ -6,7 +6,7 @@
         "split": "none",
         "size": 100,
         "align": "center",
-        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]",
+        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8",
         "mappings": [
             {
                 "display_route": [

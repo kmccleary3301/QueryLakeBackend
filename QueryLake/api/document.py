@@ -50,7 +50,7 @@ async def upload_document(database : Session,
         "user": "user_document_collection_hash_id", 
         "organization": "organization_document_collection_hash_id",
         "global": "global_document_collection_hash_id",
-        "toolchain_session": "toolchain_session_hash_id" 
+        "toolchain_session": "toolchain_session_id" 
     }
 
     assert collection_type in ["global", "organization", "user", "toolchain_session"]
@@ -88,9 +88,9 @@ async def upload_document(database : Session,
         assert user.is_admin == True, "User not authorized"
     
     elif collection_type == "toolchain_session":
-        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
+        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
         assert type(session) is sql_db_tables.toolchain_session, "Session not found"
-        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
     
     if not public:
         if collection_type == "organization":
@@ -244,7 +244,7 @@ def get_document_secure(database : Session,
         organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
 
         document_password = encryption.ecc_decrypt_string(organization_private_key, document.encryption_key_secure)
-    elif not document.toolchain_session_hash_id is None:
+    elif not document.toolchain_session_id is None:
         private_key_encryption_salt = user.private_key_encryption_salt
         user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 

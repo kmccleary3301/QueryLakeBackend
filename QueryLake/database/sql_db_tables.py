@@ -16,6 +16,7 @@ from sqlalchemy import Column, DDL, event, text
 from pydantic import BaseModel
 import re
 from psycopg2.errors import InFailedSqlTransaction
+from functools import partial
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -170,8 +171,7 @@ class ToolchainSessionFileOutput(SQLModel, table=True):
     file_data: bytes = Field(sa_column=Column(LargeBinary))
 
 class toolchain_session(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    hash_id: str = Field(index=True, unique=True)
+    id: Optional[str] = Field(default_factory=partial(random_hash, 26, 62), primary_key=True, index=True, unique=True)
     title: Optional[str] = Field(default=None)
     hidden: Optional[bool] = Field(default=False)
     creation_timestamp: float
@@ -328,7 +328,7 @@ class document_raw(SQLModel, table=True):
     organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.hash_id", index=True)
     user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
     global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
-    toolchain_session_hash_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.hash_id", index=True)
+    toolchain_session_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.id", index=True)
     
     file_data: bytes = Field(sa_column=Column(LargeBinary))
     finished_processing: Optional[bool] = Field(default=False)

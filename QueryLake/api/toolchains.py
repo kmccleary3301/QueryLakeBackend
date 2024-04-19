@@ -41,9 +41,12 @@ async def save_toolchain_session(database : Session,
     # print("Saving session %s" % (session_id))
     # assert session_id in TOOLCHAIN_SESSION_CAROUSEL, "Toolchain Session not found"
     toolchain_data = session.dump()
-    existing_session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.hash_id == session.session_hash
-                                                                                   )).first()
+    existing_session : sql_db_tables.toolchain_session = \
+        database.exec(select(sql_db_tables.toolchain_session)
+                .where(sql_db_tables.toolchain_session.id == session.session_hash)).first()
+    
     existing_session.title = toolchain_data["title"]
+    existing_session.author = session.author
     existing_session.state = safe_serialize(toolchain_data["state"])
     existing_session.file_state = safe_serialize(toolchain_data["files"])
     existing_session.firing_queue = safe_serialize(toolchain_data["firing_queue"])
@@ -55,35 +58,41 @@ async def save_toolchain_session(database : Session,
             "title": existing_session.title
         })
     
-def retrieve_toolchain_from_db(database : Session,
-                               toolchain_function_caller,
-                               auth : AuthType,
-                               session_id : str,
-                               ws : WebSocket) -> ToolchainSession:
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
-    session_db_entry = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == session_id)).first()
+def retrieve_toolchain_session_from_db(database : Session,
+                                       toolchain_function_caller,
+                                       auth : AuthType,
+                                       session_id : str,
+                                       ws : WebSocket) -> ToolchainSession:
+    (user, user_auth) = get_user(database, auth)
     
+    print("retrieve_toolchain_from_db", user, user_auth, session_id)
     
-    assert session_db_entry.author == auth["username"], "User not authorized"
-    assert not session_db_entry is None, "Session not found" 
+    session_db_entry : sql_db_tables.toolchain_session = \
+        database.exec(select(sql_db_tables.toolchain_session)
+                      .where(sql_db_tables.toolchain_session.id == session_id)).first()
+    
+    assert not session_db_entry is None, f"Session not found (id: `{session_id}`)" 
+    assert session_db_entry.author == user_auth.username, f"User not authorized ('{session_db_entry.author}' vs '{user_auth.username}')"
     
     toolchain_get = get_toolchain_from_db(database, session_db_entry.toolchain_id, auth)
     
     session = ToolchainSession(database,
+                               auth,
                                session_db_entry.toolchain_id, 
                                toolchain_get, 
                                toolchain_function_caller, 
-                               session_db_entry.hash_id, 
-                               user_auth.username)
+                               session_db_entry.id,
+                               session_db_entry.author)
     session.load({
         "title": session_db_entry.title,
         "toolchain_id": session_db_entry.toolchain_id,
         "state": json.loads(session_db_entry.state) if session_db_entry.state != "" else {},
         "files": json.loads(session_db_entry.file_state) if session_db_entry.file_state != "" else {},
-        "session_hash_id": session_db_entry.hash_id,
+        "session_hash_id": session_db_entry.id,
         "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {}
     }, toolchain_get)
+    session.first_event_fired = True
+
     return session
 
 def get_available_toolchains(database : Session,
@@ -157,7 +166,6 @@ def create_toolchain_session(database : Session,
     """
     user_retrieved : getUserType  = get_user(database, auth)
     (_, user_auth) = user_retrieved
-    session_hash = random_hash()
     
     toolchain_get = get_toolchain_from_db(database, toolchain_id, auth)
     created_session = ToolchainSession(database,
@@ -165,12 +173,11 @@ def create_toolchain_session(database : Session,
                                        toolchain_id, 
                                        toolchain_get, 
                                        toolchain_function_caller, 
-                                       session_hash, 
+                                       "",
                                        user_auth.username)
     
     new_session_in_database = sql_db_tables.toolchain_session(
         title=created_session.state["title"],
-        hash_id=session_hash,
         state=json.dumps(created_session.state),
         creation_timestamp=time.time(),
         toolchain_id=toolchain_id,
@@ -178,6 +185,8 @@ def create_toolchain_session(database : Session,
     )
     database.add(new_session_in_database)
     database.commit()
+    
+    created_session.session_hash = new_session_in_database.id
     
     return created_session
 
@@ -227,9 +236,8 @@ def fetch_toolchain_session(database : Session,
     Retrieve toolchain session from session id.
     If not in memory, it is loaded from the database.
     """
-    user_retrieved : getUserType  = get_user(database, auth)
-    (user, user_auth) = user_retrieved
-    return retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id, ws)
+    (user, user_auth) = get_user(database, auth)
+    return retrieve_toolchain_session_from_db(database, toolchain_function_caller, auth, session_id, ws)
 
 def get_session_state(database : Session,
                       toolchain_function_caller,
@@ -242,7 +250,7 @@ def get_session_state(database : Session,
 
     user = get_user(database, **auth)
     if session is None:
-        session = retrieve_toolchain_from_db(database, toolchain_function_caller, auth, session_id)
+        session = retrieve_toolchain_session_from_db(database, toolchain_function_caller, auth, session_id)
     # session["last_activity"] = time.time()
     return {"success": True, "result": session.state_arguments}
 
@@ -258,7 +266,7 @@ def retrieve_files_for_session(database : Session,
     (user, user_auth) = user_retrieved
     # session = retrieve_toolchain_from_db(database, toolchain_function_caller, toolchains_available, auth, session_id)
     assert session.author == user.name, "User not authorized"
-    file_db_entries = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.toolchain_session_hash_id == session.session_hash)).all()
+    file_db_entries = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.toolchain_session_id == session.session_hash)).all()
     return [get_file_bytes(database, doc.hash_id, get_user_private_key(database, auth)["private_key"]) for doc in file_db_entries]
 
 async def toolchain_file_upload_event_call(database : Session,
@@ -282,7 +290,7 @@ async def toolchain_file_upload_event_call(database : Session,
     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
 
 
-    file_db_entry = database.exec(select(sql_db_tables.document_raw).where(and_(sql_db_tables.document_raw.toolchain_session_hash_id == session_id,
+    file_db_entry = database.exec(select(sql_db_tables.document_raw).where(and_(sql_db_tables.document_raw.toolchain_session_id == session_id,
                                                                                 sql_db_tables.document_raw.hash_id == document_hash_id
                                                                                 ))).first()
     file_bytes = get_file_bytes(database, file_db_entry.hash_id, get_user_private_key(database, auth)["private_key"])

@@ -56,7 +56,6 @@ class VLLMDeploymentClass:
         self.model_config = model_config
         self.padding : Padding = model_config.padding
         self.default_model_args = self.model_config.default_parameters
-        self.minimum_free_token_space = kwargs.pop("minimum_free_token_space", 2000)
         
         args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
         
@@ -83,7 +82,7 @@ class VLLMDeploymentClass:
             prompt = request_dict.pop("prompt")
         else:
             chat_history = request_dict.pop("chat_history")
-            prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, self.minimum_free_token_space)
+            prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] + 2)
             # request_dict["prompt"] = prompt
         
         request_id = random_uuid()
