@@ -60,7 +60,7 @@ async def llm_make_conversation_title(global_config : Config,
         chat_history="\t"+chat_history_stated.replace("\n", "\n\t"),
         last_question=chat_history[-1].content
     )
-    
+
     result = await llm_call(
         auth=auth,
         question=question,
@@ -70,5 +70,5 @@ async def llm_make_conversation_title(global_config : Config,
         stream_callables=stream_callables
     )
     
-    return result["output"].strip()
+    return result
     

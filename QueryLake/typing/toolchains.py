@@ -359,7 +359,7 @@ class toolchainNode(BaseModel):
     id: str
     
     # One of the following must be provided.
-    is_event: Optional[bool] = False
+    # is_event: Optional[bool] = False
     api_function: Optional[str] = None
     
     # arguments: Optional[List[str]] = []

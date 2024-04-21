@@ -89,7 +89,7 @@ class ToolchainSession():
 
     def reset_firing_queue(self):
         self.firing_queue : Dict[str, Union[Literal[False], dict]] = {
-            key : False for key, node in self.nodes_dict.items() if not (node.is_event)
+            key : False for key in self.nodes_dict.keys()
         }
     
     def get_file_bytes(self, file_pointer : ToolChainSessionFile) -> Union[bytes, BytesIO, str]:
@@ -184,7 +184,7 @@ class ToolchainSession():
         
         state_copied_reference = deepcopy(self.state)
         
-        if (use_firing_queue) and (not node.is_event) and (self.firing_queue[node.id] != False):
+        if (use_firing_queue) and (self.firing_queue[node.id] != False):
             node_inputs.update(self.firing_queue[node.id].copy())
         
         for node_input_arg in node.input_arguments:
@@ -234,9 +234,11 @@ class ToolchainSession():
                     "value": node_inputs[node_input_arg.key]
                 })
             
+            # TODO: Unnecessary since we can do this automatically.
             elif node_input_arg.from_server:
-                assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
-                node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
+                continue
+            #     assert node_input_arg.key in system_args, f"Server argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
+            #     node_inputs[node_input_arg.key] = system_args[node_input_arg.key]
             
             # TODO: Implement file retrieval.
             elif not node_input_arg.from_files is None:
@@ -267,6 +269,7 @@ class ToolchainSession():
                         "value": node_inputs[node_input_arg.key]
                     })
                 
+        node_inputs.update(system_args)
         self.log_event("CREATED NODE INPUTS", {
             "node_id": node.id,
             "node_inputs": node_inputs
@@ -496,14 +499,14 @@ class ToolchainSession():
         
         # Fire the node or assert that it is an event node and the mappings are valid.
         
-        if node.is_event or node.api_function is None:
+        if node.api_function is None:
             assert all([
                 not any([
                     hasattr(feed_map, "getFromOutputs"),
                     hasattr(feed_map, "getFrom") and feed_map.getFrom.type == "getNodeOutput", 
                 ]) \
                 for feed_map in node.feed_mappings
-            ]), f"Event node \'{node.id}\' has mappings grabbing outside node outputs, which do not exist since it is an event."
+            ]), f"Non-function node \'{node.id}\' has mappings which grab from node outputs, which do not exist since it is not a function."
             node_outputs = {}
         else:
             self.state, stream_callables = await self.create_streaming_callables(node, state_kwargs, ws)
@@ -751,9 +754,9 @@ class ToolchainSession():
         
         print("DUMPING LOGS WITH LENGTH", len(self.log))
         
-        with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
-            f.write("\n\n".join(self.log))
-            f.close()
+        # with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
+        #     f.write("\n\n".join(self.log))
+        #     f.close()
     
     def load(self, data, toolchain: ToolChain):
         

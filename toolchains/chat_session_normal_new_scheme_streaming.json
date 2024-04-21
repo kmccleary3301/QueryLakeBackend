@@ -42,7 +42,6 @@
     "nodes": [
         {
             "id": "user_question_event",
-            "is_event": true,
             "input_arguments": [
                 {
                     "key": "model_parameters",
@@ -169,6 +168,14 @@
             "api_function": "llm_make_conversation_title",
             "input_arguments": [
                 {
+                    "key": "toolchain_function_caller",
+                    "from_server": true
+                },
+                {
+                    "key": "global_config",
+                    "from_server": true
+                },
+                {
                     "key": "auth",
                     "from_user": true
                 },
@@ -187,7 +194,7 @@
                         }
                     ],
                     "getFromOutputs": {
-                        "route": [ "result" ]
+                        "route": [ "output" ]
                     }
                 }
             ]

@@ -9,7 +9,6 @@
     "nodes": [
         {
             "id": "user_question_event",
-            "is_event": true,
             "input_arguments": [
                 {
                     "key": "model_parameters",

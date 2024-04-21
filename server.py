@@ -552,7 +552,7 @@ class UmbrellaClass:
 
                     elif command == "toolchain/event":
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
-                        event_result = await api.toolchain_event_call(**true_args, session=toolchain_session)
+                        event_result = await api.toolchain_event_call(**true_args, system_args=system_args, session=toolchain_session)
                         result = {"event_result": event_result}
                     
                     await ws.send_text((json.dumps(result)).encode("utf-8"))

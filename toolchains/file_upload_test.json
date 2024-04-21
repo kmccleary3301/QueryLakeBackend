@@ -9,7 +9,6 @@
     "nodes": [
         {
             "id": "user_file_upload_event",
-            "is_event": true,
             "input_arguments": [
                 {
                     "key": "auth",

@@ -306,6 +306,7 @@ async def toolchain_event_call(database : Session,
                                session_id : str,
                                event_node_id : str,
                                event_parameters : dict,
+                               system_args: dict,
                                ws : WebSocket = None,
                                return_file_response : bool = False):
     """
@@ -317,9 +318,6 @@ async def toolchain_event_call(database : Session,
     (user, user_auth) = user_retrieved
     assert session.author == user.name, "User not authorized"
     
-    system_args = {
-        "database": database
-    }
     # print("TOOLCHAIN AUTH:", auth)
     
     system_args.update(auth)
