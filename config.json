@@ -1,6 +1,6 @@
 {
     "default_toolchain": "test_chat_session_normal_streaming",
-    "default_model": "mistral-7b-instruct-v0.1",
+    "default_model": "llama-3-8b-instruct",
     "models": [
         {
             "name": "Mistral 7B Instruct",
@@ -10,10 +10,9 @@
             "max_model_len": 8192,
             "system_path": "/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ",
             "default_parameters": {
-                "stream": true, 
                 "max_tokens": 1000, 
                 "temperature": 0.5, 
-                "top_k": 0,
+                "top_k": 20,
                 "top_p": 0.9, 
                 "repetition_penalty": 1.15,
                 "stop": [ "<|im_end|>" ]
@@ -24,7 +23,30 @@
                 "question_wrap": "<|im_start|>user\n{question}<|im_end|>\n",
                 "response_wrap": "<|im_start|>assistant\n{response}<|im_end|>\n"
             },
-            "default_system_instructions": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+            "default_system_instruction": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
+        },
+        {
+            "name": "LLaMA 3 8B Instruct",
+            "id": "llama-3-8b-instruct",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
+            "quantization": "awq",
+            "max_model_len": 8192,
+            "system_path": "/home/kyle_m/QueryLake_Development/llm_models/llama-3-8b-instruct-awq",
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [ "<|eot_id|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and try to format your math equations, symbols, etc with latex in mathjax enclosures, i.e. $$...$$ for newline expressions and $...$ for inline expressions."
         }
     ],
     "external_model_providers": {

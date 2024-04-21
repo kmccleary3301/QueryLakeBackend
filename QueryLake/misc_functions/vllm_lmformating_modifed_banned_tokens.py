@@ -9,12 +9,13 @@ With personal modifications to allow for banned tokens.
 try:
     import torch
     import vllm
-    from transformers import PreTrainedTokenizerBase
+    from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast
 except ImportError:
     raise ImportError('vllm is not installed. Please install it with "pip install vllm"')
 from lmformatenforcer import CharacterLevelParser, TokenEnforcer, FormatEnforcerAnalyzer, TokenEnforcerTokenizerData
-from lmformatenforcer.integrations.transformers import build_token_enforcer_tokenizer_data
-from typing import List, Optional, Union
+from lmformatenforcer.integrations.vllm import build_vllm_token_enforcer_tokenizer_data
+# from lmformatenforcer.tokenizerprefixtree import TokenizerPrefixTree, TokenizerPrefixTreeNode, JsonFreetextTokenCache
+from typing import List, Optional, Union, Tuple, Set
 import math
 
 
@@ -43,10 +44,57 @@ class VLLMLogitsProcessor:
         
         return scores
 
+# def _add_token_to_tree(token_str: str, token_idx: int, node: TokenizerPrefixTreeNode):
+#     for character in token_str:
+#         if character not in node.children:
+#             node.children[character] = TokenizerPrefixTreeNode()
+#         node = node.children[character]
+#     node.tokens.append(token_idx)
 
-def build_vllm_token_enforcer_tokenizer_data(llm: Union[vllm.LLM, PreTrainedTokenizerBase]) -> TokenEnforcerTokenizerData:
-    tokenizer = llm.get_tokenizer() if isinstance(llm, vllm.LLM) else llm
-    return build_token_enforcer_tokenizer_data(tokenizer)
+# def prefix_tree_test(regular_tokens: List[Tuple[int, str, bool]]):
+#     print("Prefix 1")
+#     root = TokenizerPrefixTreeNode()
+#     print("Prefix 2")
+#     json_freetext_tokens = JsonFreetextTokenCache()
+#     print("Prefix 3")
+#     new_word_tokens: Set[int] = set()
+#     print("Prefix 4")
+#     tokens_to_strs = {token_idx: token_str for token_idx, token_str, _ in regular_tokens}
+#     print("Prefix 5")
+#     print(len(regular_tokens))
+#     for token_idx, decoded, is_new_word in regular_tokens:
+#         _add_token_to_tree(decoded, token_idx, root)
+#         json_freetext_tokens.add_token(decoded, token_idx)
+#         if is_new_word:
+#             new_word_tokens.add(token_idx)
+
+#         json_freetext_tokens.freeze()
+#     print("Prefix 6")
+
+# def build_token_enforcer_tokenizer_data(tokenizer: PreTrainedTokenizerBase) -> TokenEnforcerTokenizerData:
+    # print("Building 1")
+    # regular_tokens = _build_regular_tokens_list(tokenizer)
+    # print("Building 2")
+    # def decode_fn(tokens: List[int]) -> str:
+    #     decoded = tokenizer.decode(tokens)
+    #     cleaned = decoded.rstrip('�')
+    #     return cleaned
+    # print("Building 3")
+    
+    # regular_tokens = regular_tokens
+    # print("Building 4")
+    # tokenizer = prefix_tree_test(regular_tokens)
+    # print("Building 4.5")
+    # tokenizer_tree = TokenizerPrefixTree(regular_tokens)
+    # print("Building 5")
+    # decoder = decoder
+    # print("Building 6")
+    # eos_token_id = eos_token_id
+    # print("Building 7")
+    # tokenizer_alphabet = "".join(token_str for token_str in tokenizer_tree.root.children.keys() if len(token_str) == 1)
+    # print("Building 8")
+    
+    # return TokenEnforcerTokenizerData(regular_tokens, decode_fn, tokenizer.eos_token_id)
 
 
 def build_vllm_logits_processor(llm: Union[vllm.LLM, PreTrainedTokenizerBase, TokenEnforcerTokenizerData], 

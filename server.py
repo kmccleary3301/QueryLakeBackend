@@ -29,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse, Response
 from starlette.websockets import WebSocketDisconnect
 
-from ray import serve
+from ray import serve, get
 from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 
 
@@ -57,7 +57,7 @@ from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
 from QueryLake.misc_functions.external_providers import external_llm_generator
-from QueryLake.misc_functions.server_class_functions import stream_results_tokens
+from QueryLake.misc_functions.server_class_functions import stream_results_tokens, consume_deployment_response
 
 
 origins = [
@@ -137,6 +137,8 @@ class UmbrellaClass:
         #     # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
         #     stream=True,
         # )
+        
+        self.llm_handles_no_stream = llm_handles
         self.llm_handles : Dict[str, DeploymentHandle] = { k : handle.options(
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
             stream=True,
@@ -197,6 +199,10 @@ class UmbrellaClass:
             return_tmp = await self.rerank_handle.run.remote(request_dict)
         return return_tmp
     
+    async def llm_count_tokens(self, model_id : str, input_string : str):
+        assert model_id in self.llm_handles, "Model choice not available"
+        return await self.llm_handles_no_stream[model_id].count_tokens.remote(input_string)
+    
     async def llm_call(self,
                        auth : AuthType, 
                        question : str = None,
@@ -209,7 +215,7 @@ class UmbrellaClass:
         TODO: Move OpenAI calls here for integration.
         TODO: Add optionality via default values to the model parameters.
         """
-        (user, user_auth) = api.get_user(self.database, auth)
+        (_, _) = api.get_user(self.database, auth)
         
         if not question is None:
             chat_history = [{"role": "user", "content": question}]
@@ -221,22 +227,19 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        model_parameters_true = {
-            "model_choice": self.config.default_model,
-            "max_tokens": 4096, 
-            "temperature": 0.1, 
-            "top_p": 0.1, 
-            "repetition_penalty": 1.15,
-            "stop": ["<|im_end|>", "</s>"],
-            "include_stop_str_in_output": True
-        }
-        model_parameters_true.update(model_parameters)
-        
-        model_choice = model_parameters_true.pop("model_choice", "mistral-7b-instruct-v0.1")
-        
+        model_choice = model_parameters.pop("model_choice", self.config.default_model)
         assert model_choice in self.llm_handles, "Model choice not available"
         
-        return_stream_response = model_parameters_true.pop("stream_response_normal", False)
+        model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
+                                            .where(sql_db_tables.model.id == self.config.default_model)).first()
+        
+        model_parameters_true = {
+            **json.loads(model_entry.default_settings)
+        }
+        
+        model_parameters_true.update(model_parameters)
+        
+        return_stream_response = model_parameters_true.pop("stream", False)
         
         model_specified = model_choice.split("/")
         
@@ -252,12 +255,12 @@ class UmbrellaClass:
         else:
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen: DeploymentResponseGenerator = (
-                llm_handle.generator.remote(model_parameters_true)
+                llm_handle.get_result_loop.remote(model_parameters_true)
             )
         
         if return_stream_response:
             return StreamingResponse(
-                stream_results_tokens(gen, on_new_token=on_new_token, encode_output=True, stop_sequences=stop_sequences),
+                stream_results_tokens(gen, on_new_token=on_new_token, encode_output=False, stop_sequences=stop_sequences),
             )
         else:
             results = []
@@ -269,9 +272,12 @@ class UmbrellaClass:
         return {"output": text_outputs, "token_count": len(results)}
     
     def api_function_getter(self, function_name):
+        
         if function_name == "llm":
             # return self.run_llm_new
             return self.llm_call
+        elif function_name == "llm_count_tokens":
+            return self.llm_count_tokens
         elif function_name == "text_models_callback":
             return self.text_models_callback
         elif function_name == "embedding":
@@ -593,6 +599,10 @@ for toolchain_file in toolchain_files_list:
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 for model_entry in GLOBAL_CONFIG.models:
+    # TODO: This will all be deprecated once we switch to ray clusters.
+    if not model_entry.id == GLOBAL_CONFIG.default_model:
+        continue
+    
     LOCAL_MODEL_BINDINGS[model_entry.id] = VLLMDeploymentClass.bind(
         model_config=model_entry,
         model=model_entry.system_path, 

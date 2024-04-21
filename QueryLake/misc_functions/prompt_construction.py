@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 from ..database.sql_db_tables import model
 from ..typing.config import Padding, Model, ChatHistoryEntry
 import tiktoken
-from typing import Callable, List
+from typing import Callable, List, Awaitable
 
 def num_tokens_from_string(string: str, model : str) -> int:
     """Returns the number of tokens in a text string."""
@@ -67,41 +67,31 @@ def construct_chat_history_old(max_tokens : int,
     
     print([i for i in range(len(chat_history), 0, -2)])
     
-    
+    begin_prefix = bot_response_pad.split("{response}")[0]
+    prefix_tokens = token_counter(begin_prefix)
     
     for i in range(1, len(chat_history), 2):
-        # print("I:", i)
-        
         if i == len(chat_history) - 1:
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
-            # print("ADDING SINGLE:", [new_entry])
         else: 
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)+bot_response_pad.replace("{response}", chat_history[i+1].content)
-            # print("ADDING DOUBLE:", [new_entry])
-        # print("ADDING:", [new_entry])
-        
         
         token_counts.append(token_counter(new_entry))
         chat_history_new.append(new_entry)
     token_counts = token_counts[::-1]
-        # print("%40s %d" % (new_entry[:40], token_counts[-1]))
-    # print(max_tokens)
+    
     token_count_total = sys_token_count
     construct_prompt_array = []
     token_counts = token_counts[::-1]
     for i, entry in enumerate(chat_history_new[::-1]):
         token_count_tmp = token_counts[i]
-        if (token_count_total+token_count_tmp) > (max_tokens - minimum_context_room):
+        if (token_count_total+token_count_tmp+prefix_tokens) > (max_tokens - minimum_context_room):
             break
         token_count_total += token_counts[i]
         construct_prompt_array.append(entry)
     
+    final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + begin_prefix
     
-    
-    final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + bot_response_pad.split("{response}")[0]
-
-    # print("FINAL PROMPT")
-    # print(final_result)
     return final_result
 
 def construct_chat_history(model : Model, 
@@ -111,7 +101,7 @@ def construct_chat_history(model : Model,
     
     chat_history : List[ChatHistoryEntry] = [ChatHistoryEntry(**entry) for entry in chat_history]
     if chat_history[0].role != "system":
-        chat_history = [ChatHistoryEntry(role="system", content=model.default_system_instructions)] + chat_history
+        chat_history = [ChatHistoryEntry(role="system", content=model.default_system_instruction)] + chat_history
     
     assert all([entry.role != "system" for entry in chat_history[1:]])
     assert all([entry.role == "user" for entry in chat_history[1::2]])
@@ -129,3 +119,59 @@ def construct_chat_history(model : Model,
     
 
 
+
+
+async def async_construct_chat_history_old(max_tokens : int, 
+                                           token_counter : Callable[[str], Awaitable[int]], 
+                                           sys_instr_pad : str, 
+                                           usr_entry_pad : str, 
+                                           bot_response_pad : str, 
+                                           chat_history: List[ChatHistoryEntry],
+                                           minimum_context_room : int = 1000,
+                                           pairwise : bool = True,
+                                           preface_format : bool = True) -> str:
+    """
+    Construct model input, trimming from beginning until minimum context room is allowed.
+    chat history should be ordered from oldest to newest, and entries in the input list
+    should be pairs of the form (user_question, model_response).
+    """
+    
+    
+    system_instruction_prompt = sys_instr_pad.replace("{system_instruction}", chat_history[0].content)
+    sys_token_count = await token_counter(system_instruction_prompt)    
+    
+    chat_history_new, token_counts, roles = [], [], []
+    
+    begin_prefix = bot_response_pad.split("{response}")[0] if preface_format else ""
+    prefix_tokens = await token_counter(begin_prefix) if preface_format else 0
+    
+    for i in range(1, len(chat_history)):
+        if chat_history[i].role == "user": 
+            new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
+        elif chat_history[i].role == "assistant": 
+            new_entry = bot_response_pad.replace("{response}", chat_history[i].content)
+        
+        token_counts.append(await token_counter(new_entry))
+        chat_history_new.append(new_entry)
+        roles.append(chat_history[i].role)
+    
+    last_role_is_assistant = False
+    
+    token_counts = token_counts[::-1]
+    token_count_total = sys_token_count
+    construct_prompt_array = []
+    token_counts = token_counts[::-1]
+    for i, entry in enumerate(chat_history_new[::-1]):
+        token_count_tmp = token_counts[i]
+        if (token_count_total+token_count_tmp+prefix_tokens) > (max_tokens - minimum_context_room):
+            break
+        token_count_total += token_counts[i]
+        construct_prompt_array.append(entry)
+        last_role_is_assistant = (roles[i] == "assistant")
+        
+    if pairwise and last_role_is_assistant:
+        construct_prompt_array.pop()
+    
+    final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + begin_prefix
+    
+    return final_result

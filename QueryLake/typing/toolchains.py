@@ -378,7 +378,6 @@ class startScreenSuggestion(BaseModel):
     display_text: str
     event_id: str
     event_parameters: Optional[Dict[str, Any]] = {}
-
     
 class ToolChain(BaseModel):
     """
@@ -387,8 +386,8 @@ class ToolChain(BaseModel):
     name: str
     id: str
     category: str
+    first_event_follow_up: Optional[str] = None
     display_configuration: Optional[DisplaySection] = None
-    
     suggestions: Optional[List[startScreenSuggestion]] = []
     
     initial_state: Dict[str, Any]

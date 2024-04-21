@@ -13,9 +13,9 @@ from QueryLake.misc_functions.grammar_sampling_functions import get_token_id, ge
 
 from QueryLake.typing.config import Padding, Model
 from QueryLake.misc_functions.prompt_construction import construct_chat_history
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
-
-@serve.deployment(ray_actor_options={"num_gpus": 0.6}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.7}, max_replicas_per_node=1)
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
@@ -58,46 +58,42 @@ class VLLMDeploymentClass:
         self.default_model_args = self.model_config.default_parameters
         
         args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
-        
         self.context_size = args.max_model_len
         
         self.engine = AsyncLLMEngine.from_engine_args(args)
-        
         tokenizer_tmp = self.engine.engine.tokenizer
-        
         self.special_token_ids = tokenizer_tmp.all_special_ids
-        
         self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
-        
-        self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine.tokenizer)
-        
-        print("Test count tokens ->", self.count_tokens("Hello, world!"))
+        self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine)
     
     def count_tokens(self, input_string : str):
         return len(self.engine.engine.tokenizer(input_string)["input_ids"])
     
-    def generator(self, request_dict : dict):
-        
+    def get_result_loop(self, request_dict : dict):
         if "prompt" in request_dict:
             prompt = request_dict.pop("prompt")
         else:
             chat_history = request_dict.pop("chat_history")
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] + 2)
-            # request_dict["prompt"] = prompt
-        
+
         request_id = random_uuid()
-        # stream = request_dict.pop("stream", False)
         
         grammar_options = request_dict.pop("grammar", None)
+        
+        # print("Got grammar options:", grammar_options)
         
         logits_processor_local = get_logits_processor_from_grammar_options(
             grammar_options,
             self.tokenizer_data, 
             space_tokens=self.space_tokens, 
             special_ids=self.special_token_ids,
-        )
+        ) if not grammar_options is None else None
         
-        sampling_params = SamplingParams(**request_dict)
+        # print("Got logits processor", logits_processor_local)
+        
+        keys = ['n', 'best_of', 'presence_penalty', 'frequency_penalty', 'repetition_penalty', 'temperature', 'top_p', 'top_k', 'min_p', 'use_beam_search', 'length_penalty', 'early_stopping', 'stop', 'stop_token_ids', 'include_stop_str_in_output', 'ignore_eos', 'max_tokens', 'logprobs', 'prompt_logprobs', 'skip_special_tokens', 'spaces_between_special_tokens', 'logits_processors']
+        filtered_dict = {k: request_dict[k] for k in keys if k in request_dict}
+        sampling_params = SamplingParams(**filtered_dict)
         
         if not logits_processor_local is None:
             sampling_params.logits_processors = [logits_processor_local]

@@ -30,7 +30,7 @@ class Model(BaseModel):
     default_parameters: ModelArgs
     max_model_len: int
     padding: Padding
-    default_system_instructions: str
+    default_system_instruction: str
 
 class ExternalModelProviders(BaseModel):
     name: str

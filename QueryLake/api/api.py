@@ -7,6 +7,8 @@ from .user_auth import *
 from .web_search import *
 # from .llm_model_calls import *
 from .toolchains import *
+from .custom_model_functions.standalone_question import llm_isolate_question
+from .custom_model_functions.create_conversation_title import llm_make_conversation_title
 # from .patho_report_stager import *
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
@@ -96,6 +98,8 @@ exposed_api = [
     "llm_call_chat_session",
     "llm_call_chat_session_direct",
     "llm_call_model_synchronous",
+    "llm_isolate_question",
+    "llm_make_conversation_title",
     "login",
     "modify_document_collection",
     "modify_user_external_providers",

@@ -6,6 +6,7 @@ from ..database import sql_db_tables
 from typing import Dict, List
 from ..typing.config import Model
 from ..typing.toolchains import ToolChain
+from sqlmodel import Session
 
 # from sqlmodel import Session, select, and_
 
@@ -48,14 +49,23 @@ And math expressions would look like:
 $$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$
 """)
 
-def add_models_to_database(database, models : List[Model]) -> None:
+def add_models_to_database(database : Session, models : List[Model]) -> None:
     for model_config in models:
-        try:
-            find_existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.id == model_config.id)).all()
-            if len(find_existing_model) > 0:
-                continue
+        existing_model = database.exec(select(sql_db_tables.model).where(sql_db_tables.model.id == model_config.id)).first()
+        if not existing_model is None:
+            existing_model.id = model_config.id
+            existing_model.name = model_config.name
+            existing_model.path_on_server = model_config.system_path
+            existing_model.quantization = model_config.quantization
+            existing_model.default_settings = json.dumps(model_config.default_parameters.dict(), indent=4)
+            existing_model.system_instruction_wrapper = model_config.padding.system_instruction_wrap
+            existing_model.context_wrapper = model_config.padding.context_wrap
+            existing_model.user_question_wrapper = model_config.padding.question_wrap
+            existing_model.bot_response_wrapper = model_config.padding.response_wrap
+            existing_model.default_system_instruction = model_config.default_system_instruction
+        else:
             new_model = sql_db_tables.model(
-                id=model_config.name,
+                id=model_config.id,
                 name=model_config.name,
                 path_on_server=model_config.system_path,
                 quantization=model_config.quantization,
@@ -69,9 +79,7 @@ def add_models_to_database(database, models : List[Model]) -> None:
             # print("Adding model to db:", new_model.__dict__)
 
             database.add(new_model)
-            database.commit()
-        except:
-            pass
+        database.commit()
     
 def add_toolchains_to_database(database : Session,
                                toolchains : Dict[str, ToolChain]) -> None:

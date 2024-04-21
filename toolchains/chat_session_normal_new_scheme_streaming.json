@@ -6,7 +6,7 @@
         "split": "none",
         "size": 100,
         "align": "center",
-        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8",
+        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8 pt-4",
         "mappings": [
             {
                 "display_route": [
@@ -161,6 +161,34 @@
                     },
                     "stream": true,
                     "stream_initial_value": ""
+                }
+            ]
+        },
+        {
+            "id": "make_conversation_title",
+            "api_function": "llm_make_conversation_title",
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "title" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "result" ]
+                    }
                 }
             ]
         }

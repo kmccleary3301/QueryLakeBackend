@@ -109,23 +109,20 @@ def get_logits_processor_from_grammar_options(
     """
     Create a logits processor from a grammar option provided by the user.
     """
-    try:
-        if grammar_options[0] == "regex":
-            regex_pattern = re.compile(grammar_options[1])
-            parser_tmp = RegexParser(regex_pattern)
-            logits_processor = build_vllm_logits_processor(tokenizer_data, parser_tmp, analyze=True)
-            return logits_processor
-        elif grammar_options[0] == "typescript":
-            pydantic_class = ts_to_pydantic(grammar_options[1])
-            schema_parser = JsonSchemaParser(pydantic_class.schema())
-            logits_processor = build_vllm_logits_processor(
-                tokenizer_data, 
-                schema_parser, 
-                banned_tokens=space_tokens
-            )
-            return logits_processor
-    except:
-        pass
+    if grammar_options[0] == "regex":
+        regex_pattern = re.compile(grammar_options[1])
+        parser_tmp = RegexParser(regex_pattern)
+        logits_processor = build_vllm_logits_processor(tokenizer_data, parser_tmp, analyze=True)
+        return logits_processor
+    elif grammar_options[0] == "typescript":
+        pydantic_class = ts_to_pydantic(grammar_options[1])
+        schema_parser = JsonSchemaParser(pydantic_class.schema(), num_consecutive_whitespaces=0)
+        logits_processor = build_vllm_logits_processor(
+            tokenizer_data, 
+            schema_parser, 
+            banned_tokens=space_tokens
+        )
+        return logits_processor
     
     return None
 

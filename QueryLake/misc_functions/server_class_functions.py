@@ -69,3 +69,12 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
         if not hold_queue:
             await new_token_call(text_output)
             yield yield_function(text_output)
+            
+            
+async def consume_deployment_response(results_generator: DeploymentResponseGenerator) -> List[str]:
+    token_list, i = [], 0
+    async for result in results_generator:
+        token_list.append(result.output)
+    if len(token_list) == 1:
+        token_list = token_list[0].outputs
+    return token_list

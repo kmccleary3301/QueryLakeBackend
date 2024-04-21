@@ -63,9 +63,7 @@ def retrieve_toolchain_session_from_db(database : Session,
                                        auth : AuthType,
                                        session_id : str,
                                        ws : WebSocket) -> ToolchainSession:
-    (user, user_auth) = get_user(database, auth)
-    
-    print("retrieve_toolchain_from_db", user, user_auth, session_id)
+    (_, user_auth) = get_user(database, auth)
     
     session_db_entry : sql_db_tables.toolchain_session = \
         database.exec(select(sql_db_tables.toolchain_session)
@@ -121,7 +119,6 @@ def get_available_toolchains(database : Session,
             "title": toolchain.name,
             "id": toolchain.id,
             "category": toolchain.category,
-            # "chat_window_settings": toolchain.display_configuration
         })
         
         if toolchain.id == global_config.default_toolchain:
@@ -212,10 +209,10 @@ def fetch_toolchain_sessions(database : Session,
                         not_(is_(sql_db_tables.toolchain_session.title, None)),
                         sql_db_tables.toolchain_session.hidden == False)
 
-    user_sessions = database.exec(select(sql_db_tables.toolchain_session).where(condition)).all()
+    user_sessions : List[sql_db_tables.toolchain_session] = \
+        database.exec(select(sql_db_tables.toolchain_session).where(condition)).all()
     
-    # print("sessions:", user_sessions)
-    user_sessions = sorted(user_sessions, key=lambda x: x["creation_timestamp"], reverse=True)
+    user_sessions = sorted(user_sessions, key=lambda x: x.creation_timestamp, reverse=True)
     return_sessions = []
     for session in user_sessions:
         return_sessions.append({
