@@ -2,6 +2,7 @@
 	"name": "Streaming Chat Test",
     "id": "test_chat_session_normal_streaming",
     "category": "Test",
+    "first_event_follow_up": "make_conversation_title",
     "display_configuration": {
         "split": "none",
         "size": 100,
@@ -36,7 +37,7 @@
         }
     },
     "initial_state": {
-        "title": "Chat",
+        "title": "New Chat",
         "chat_history": []
     },
     "nodes": [
@@ -195,7 +196,9 @@
                     ],
                     "getFromOutputs": {
                         "route": [ "output" ]
-                    }
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
                 }
             ]
         }

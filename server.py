@@ -518,7 +518,7 @@ class UmbrellaClass:
                     ], "Invalid command"
                     
                     if command == "toolchain/load":
-                        if not toolchain_session is None:
+                        if not toolchain_session is None and toolchain_session.first_event_fired:
                             await api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.fetch_toolchain_session)
@@ -530,7 +530,7 @@ class UmbrellaClass:
                         }
                     
                     elif command == "toolchain/create":
-                        if not toolchain_session is None:
+                        if not toolchain_session is None and toolchain_session.first_event_fired:
                             await api.save_toolchain_session(self.database, toolchain_session)
                             toolchain_session = None
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.create_toolchain_session)
@@ -554,12 +554,16 @@ class UmbrellaClass:
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
                         event_result = await api.toolchain_event_call(**true_args, system_args=system_args, session=toolchain_session)
                         result = {"event_result": event_result}
+                        toolchain_session.first_event_fired = True
+                    
+                    if toolchain_session.first_event_fired:
+                        print("SAVING TOOLCHAIN")
+                        await api.save_toolchain_session(self.database, toolchain_session)
                     
                     await ws.send_text((json.dumps(result)).encode("utf-8"))
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL"})).encode("utf-8"))
                     
                     del result
-                    
                     
                     # await api.save_toolchain_session(self.database, toolchain_session)
                 

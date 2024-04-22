@@ -513,7 +513,6 @@ class ToolchainSession():
             
             await self.notify_ws_state_difference(early_state_reference, self.state, ws)
             
-            early_state_reference = deepcopy(self.state)
             
             
             get_function = self.function_getter(node.api_function)
@@ -523,6 +522,7 @@ class ToolchainSession():
             })
             
             node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
+            early_state_reference = deepcopy(self.state)
             
             self.log_event("NODE INPUTS AFTER API FUNCTION CALL", {
                 "inputs": node_inputs,
@@ -702,8 +702,6 @@ class ToolchainSession():
         """
         Activate an event node with parameters by id, then propagate forward.
         """
-        self.first_event_fired = True
-        
         target_event = self.nodes_dict[event_id]
         
         result = await self.run_node_then_forward(database,

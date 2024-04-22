@@ -85,7 +85,8 @@ def retrieve_toolchain_session_from_db(database : Session,
         "title": session_db_entry.title,
         "toolchain_id": session_db_entry.toolchain_id,
         "state": json.loads(session_db_entry.state) if session_db_entry.state != "" else {},
-        "files": json.loads(session_db_entry.file_state) if session_db_entry.file_state != "" else {},
+        "files": json.loads(session_db_entry.file_state) if session_db_entry.file_state != "" and \
+                 not session_db_entry.file_state is None else {},
         "session_hash_id": session_db_entry.id,
         "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {}
     }, toolchain_get)
@@ -329,8 +330,6 @@ async def toolchain_event_call(database : Session,
                                       event_parameters, 
                                       system_args,
                                       ws)
-    
-    await save_toolchain_session(database, session)
     
     if return_file_response:
         assert "file_bytes" in result and "file_name" in result, "Output doesn't contain file bytes"

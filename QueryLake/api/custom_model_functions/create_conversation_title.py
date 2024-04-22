@@ -12,6 +12,8 @@ Below is a chat conversation between a user and an assistant. The user asks a qu
 </CHAT_HISTORY>
 
 Write a very short (5 words or less) title/header for this conversation.
+Avoid the words 'Chat' and 'Conversation', or anything similarly redundant. It's just the topic.
+Don't stylize your response with things like astericks or quotes. Just the title.
 Respond **only** with the new title, no prefacing or introduction (i.e. do not start with `Here is your title`).
 """
 # If you think it would add to the title, start the title with an appropriate emoji.
@@ -39,7 +41,7 @@ async def llm_make_conversation_title(global_config : Config,
     if chat_history[0]["role"] != "system":
         chat_history = [{"role": "system", "content": ""}] + chat_history
     
-    chat_history = [ChatHistoryEntry(**entry) for entry in chat_history]
+    chat_history : List[ChatHistoryEntry] = [ChatHistoryEntry(**entry) for entry in chat_history]
     
     token_count_general = toolchain_function_caller("llm_count_tokens")
     
