@@ -181,6 +181,7 @@ class toolchain_session(SQLModel, table=True):
     file_state : Optional[str] = Field(default=None)
     queue_inputs: Optional[str] = Field(default="")
     firing_queue: Optional[str] = Field(default="")
+    first_event_fired: Optional[bool] = Field(default=False, index=True)
 
 class toolchain(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)

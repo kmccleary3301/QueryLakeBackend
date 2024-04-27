@@ -4,6 +4,8 @@ from sqlmodel import Session
 from ...typing.config import AuthType, ChatHistoryEntry, Config
 from ...misc_functions.prompt_construction import async_construct_chat_history_old
 from copy import deepcopy
+from ..single_user_auth import get_user
+from sqlmodel import Session
 
 ISOLATE_QUESTION_PROMPT = """
 Below is a chat conversation between a user and an assistant. The user asks a question, and the model responds.
@@ -23,7 +25,8 @@ Respond **only** with the rephrased question, no prefacing or introduction (i.e.
 """
 
 
-async def llm_isolate_question(global_config : Config,
+async def llm_isolate_question(database : Session,
+                               global_config : Config,
                                auth : AuthType,
                                toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                chat_history: List[dict],
@@ -32,6 +35,7 @@ async def llm_isolate_question(global_config : Config,
     Given a chat history with a most recent question, rephrase the question so
     that it is completely clear without context.
     """
+    (_, _) = get_user(database, auth)
     
     if model_choice is None:
         model_choice = global_config.default_model
@@ -54,7 +58,7 @@ Statement
         }
     )
     question_check = question_check["output"]
-    print("QUESTION CHECK RESULT:", question_check)
+    # print("QUESTION CHECK RESULT:", question_check)
     
     if not 'YES' in question_check:
         return False
@@ -92,8 +96,8 @@ Statement
         # last_question=chat_history[-1].content
     )
 
-    print("QUESTION PROMPT:", question)
-    print("QUESTION PROMPT:", [question])
+    # print("QUESTION PROMPT:", question)
+    # print("QUESTION PROMPT:", [question])
     
     result = await llm_call(
         auth=auth,
@@ -102,7 +106,7 @@ Statement
             "model_choice": model_choice,
         }
     )
-    print("STANDALONE QUESTION:", result["output"])
+    # print("STANDALONE QUESTION:", result["output"])
     
-    return result["output"].strip()
+    return result
     

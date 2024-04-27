@@ -55,6 +55,7 @@ class Config(BaseModel):
     default_model: str
     models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
+    providers: Optional[List[str]] = []
     
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]

@@ -187,7 +187,6 @@ class UmbrellaClass:
                           auth : AuthType,
                           inputs : List[Tuple[str, str]]):
         (user, user_auth) = api.get_user(self.database, auth)
-        print("Calling rerank remote function")
         return await self.rerank_handle.run.remote({"text": inputs})
     
     # @fastapi_app.post("/direct/{rest_of_path:path}")

@@ -53,22 +53,16 @@ async def create_embeddings_in_database(
     assert not document_db_entry is None, "Document not found in database."
     assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
     
-    # print(json.dumps(document_db_entry)
-    
     file_extension = document_name.split(".")[-1]
-    
-    print("Creating document embeddings")
     
     if file_extension in ["pdf"]:
         text_chunks = parse_PDFs(document_bytes)
     elif file_extension in ["txt", "md"]:
-        # text_chunks = [(chunk, {"page": i}) for i, chunk in enumerate(document_bytes.decode("utf-8").split("\n"))]
         text_chunks = [(document_bytes.decode("utf-8"), {"page": 0})]
     else:
         raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md] are supported at this time.")
     
     await create_text_embeddings(database, auth, toolchain_function_caller, text_chunks, document_db_entry, document_name)
-    print("Done creating document embeddings")
     pass
 
 async def create_text_embeddings(database : Session,
@@ -144,7 +138,7 @@ async def create_text_embeddings(database : Session,
 
     del text_combined_chunk_assignments
     
-    print("Running embeddings")
+    # print("Running embeddings")
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
     embeddings = await embedding_call(auth, splits_text)
@@ -232,7 +226,7 @@ async def query_database(database : Session ,
                          rerank_question : str = "",
                          web_query : bool = False,
                          ratio: float = 0.5,
-                         minimum_relevance : float = 0.05):
+                         minimum_relevance : float = 0.05) -> List[DocumentEmbeddingDictionary]:
     """
     Create an embedding for a query and lookup a certain amount of relevant chunks.
     """
@@ -291,8 +285,6 @@ async def query_database(database : Session ,
             not_(or_(*[(DocumentEmbedding.id == e.id) for (e, _, _) in results_lexical]))
         )
         first_lookup_results.extend([e for (e, _, _) in results_lexical])
-        print("FIRST PASS LEXICAL RESULTS:", len(first_lookup_results))
-        
         
 
     # if web_query:
@@ -321,8 +313,6 @@ async def query_database(database : Session ,
             }),
             first_pass_results
         ))
-        
-        print("FIRST PASS EMBEDDING RESULTS:", len(first_pass_results))
     
         # Evenly combine the lexical and embedding results, with lexical coming first.
         if use_lexical:
@@ -401,4 +391,55 @@ async def keyword_query(database : Session ,
     new_documents = list(new_docs_dict.values())
     
     return new_documents[:min(len(new_documents), k)]
+
+def concat_without_overlap(strings):
+    result = strings[0]
+    for s in strings[1:]:
+        overlap = min(len(result), len(s))
+        while overlap > 0 and result[-overlap:] != s[:overlap]:
+            overlap -= 1
+        result += s[overlap:]
+    return result
+
+def expand_source(database : Session,
+                  auth : AuthType,
+                  chunk_id : str,
+                  range : Tuple[int, int]):
+    """
+    Given the id of an embedding chunk from the vector database, get the surrounding chunks to provide context.
+    """
+    (_, _) = get_user(database, auth)
+    
+    assert isinstance(range, tuple) and len(range) == 2, "Range must be a tuple of two integers."
+    assert range[0] < 0, "Range start must be less than 0."
+    assert range[1] > 0, "Range end must be greater than 0."
+    
+    main_chunk = database.exec(select(DocumentEmbedding).where(DocumentEmbedding.id == chunk_id)).first()
+    
+    assert not main_chunk is None, "Chunk not found"
+    main_chunk_index = main_chunk.document_chunk_number
+    
+    chunk_range : List[DocumentEmbedding] = database.exec(select(DocumentEmbedding).where(and_(
+        DocumentEmbedding.document_id == main_chunk.document_id,
+        DocumentEmbedding.document_chunk_number >= main_chunk_index + range[0],
+        DocumentEmbedding.document_chunk_number <= main_chunk_index + range[1],
+    ))).all()
+    
+    chunk_range : List[DocumentEmbedding] = sorted(chunk_range, key=lambda x: x.document_chunk_number)
+    
+    chunks_of_text = [chunk.text for chunk in chunk_range]
+    
+    # return concat_without_overlap(chunks_of_text)
+    
+    return DocumentEmbeddingDictionary(
+        id=chunk_range[0].id,
+        document_id=chunk_range[0].document_id,
+        document_chunk_number=chunk_range[0].document_chunk_number,
+        document_integrity=chunk_range[0].document_integrity,
+        parent_collection_hash_id=chunk_range[0].parent_collection_hash_id,
+        document_name=chunk_range[0].document_name,
+        website_url=chunk_range[0].website_url,
+        private=chunk_range[0].private,
+        text=concat_without_overlap(chunks_of_text),
+    ).dict()
 

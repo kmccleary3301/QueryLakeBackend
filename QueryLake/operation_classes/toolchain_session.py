@@ -743,7 +743,8 @@ class ToolchainSession():
             "state": self.state,
             "files": self.toolchain_session_files,
             "session_hash_id": self.session_hash,
-            "firing_queue": self.firing_queue
+            "firing_queue": self.firing_queue,
+            "first_event_fired": self.first_event_fired
         }
         
     def write_logs(self):
@@ -771,4 +772,5 @@ class ToolchainSession():
         self.state = data["state"]
         self.toolchain_session_files = convert_pydantic_objects_in_dict(data["files"], ToolChainSessionFile)
         self.state["title"] = data["title"]
-        self.firing_queue = data["firing_queue"]
+        self.firing_queue = data["firing_queue"],
+        self.first_event_fired = data["first_event_fired"]

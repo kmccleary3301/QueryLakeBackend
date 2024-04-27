@@ -64,5 +64,10 @@
                 "modelcard": "https://platform.openai.com/docs/models/gpt-3-5"
             }
         ]
-    }
+    },
+    "providers": [
+        "OpenAI",
+        "Anthropic",
+        "Serper.dev"
+    ]
 }

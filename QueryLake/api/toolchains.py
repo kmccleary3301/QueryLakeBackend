@@ -50,6 +50,7 @@ async def save_toolchain_session(database : Session,
     existing_session.state = safe_serialize(toolchain_data["state"])
     existing_session.file_state = safe_serialize(toolchain_data["files"])
     existing_session.firing_queue = safe_serialize(toolchain_data["firing_queue"])
+    existing_session.first_event_fired = toolchain_data["first_event_fired"]
 
     database.commit()
     if not ws is None:
@@ -88,9 +89,9 @@ def retrieve_toolchain_session_from_db(database : Session,
         "files": json.loads(session_db_entry.file_state) if session_db_entry.file_state != "" and \
                  not session_db_entry.file_state is None else {},
         "session_hash_id": session_db_entry.id,
-        "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {}
+        "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {},
+        "first_event_fired": session_db_entry.first_event_fired
     }, toolchain_get)
-    session.first_event_fired = True
 
     return session
 
@@ -201,14 +202,16 @@ def fetch_toolchain_sessions(database : Session,
     user_retrieved : getUserType  = get_user(database, auth)
     (user, user_auth) = user_retrieved
     if not cutoff_date is None:
-        condition = and_(sql_db_tables.toolchain_session.author == user_auth.username, 
-                        not_(is_(sql_db_tables.toolchain_session.title, None)),
-                        sql_db_tables.toolchain_session.hidden == False,
-                        sql_db_tables.toolchain_session.creation_timestamp > cutoff_date)
+        condition = and_(sql_db_tables.toolchain_session.author == user_auth.username,
+                         sql_db_tables.toolchain_session.first_event_fired == True,
+                         not_(is_(sql_db_tables.toolchain_session.title, None)),
+                         sql_db_tables.toolchain_session.hidden == False,
+                         sql_db_tables.toolchain_session.creation_timestamp > cutoff_date)
     else:
         condition = and_(sql_db_tables.toolchain_session.author == user_auth.username, 
-                        not_(is_(sql_db_tables.toolchain_session.title, None)),
-                        sql_db_tables.toolchain_session.hidden == False)
+                         sql_db_tables.toolchain_session.first_event_fired == True,
+                         not_(is_(sql_db_tables.toolchain_session.title, None)),
+                         sql_db_tables.toolchain_session.hidden == False)
 
     user_sessions : List[sql_db_tables.toolchain_session] = \
         database.exec(select(sql_db_tables.toolchain_session).where(condition)).all()

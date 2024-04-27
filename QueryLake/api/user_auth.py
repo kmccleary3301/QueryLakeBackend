@@ -113,7 +113,9 @@ def login(
         "admin": fetch_memberships_get["admin"],
         "available_models": get_available_models(database, global_config, auth)["available_models"],
         "available_toolchains": toolchain_info["toolchains"],
-        "default_toolchain": toolchain_info["default"]
+        "default_toolchain": toolchain_info["default"],
+        "user_set_providers": list(get_user_external_providers_dict(database, auth).keys()),
+        "providers": global_config.providers
     }
 
 def create_oauth2_token(
@@ -408,6 +410,7 @@ def get_user_external_providers_dict(
 
 def modify_user_external_providers(
     database : Session,
+    global_config : Config,
     auth : AuthInputType,
     update : dict = None,
     delete : List[Union[str, int]] = None
@@ -418,6 +421,10 @@ def modify_user_external_providers(
     auth : AuthType = process_input_as_auth_type(auth)
     assert not isinstance(auth, AuthType2), "API keys cannot be used to change external providers."
     assert not update is None or not delete is None, "Must specify either update or delete."
+    if not update is None:
+        assert all([e in global_config.providers for e in update.keys()]), "Invalid provider"
+    else:
+        assert delete[0] in global_config.providers, "Invalid provider"
     
     (user, user_auth) = get_user(database, auth)
     
