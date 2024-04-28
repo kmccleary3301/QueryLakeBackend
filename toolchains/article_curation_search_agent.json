@@ -1,7 +1,7 @@
 {
-	"name": "Streaming Chat Test",
-    "id": "test_chat_session_normal_streaming",
-    "category": "Test",
+	"name": "Article Assistant",
+    "id": "article_curation_search_agent",
+    "category": "Summarization",
     "first_event_follow_up": "make_conversation_title",
     "display_configuration": {
         "split": "none",
@@ -11,7 +11,8 @@
         "mappings": [
             {
                 "display_route": [
-                    "chat_history"
+                    "chat_history",
+                    -1
                 ],
                 "display_as": "chat"
             }
@@ -28,6 +29,13 @@
                             "target_event": "user_question_event",
                             "fire_index": 1,
                             "target_route": "question",
+                            "store": false
+                        },
+                        {
+                            "hook": "selected_collections",
+                            "target_event": "user_question_event",
+                            "fire_index": 1,
+                            "target_route": "collection_hash_ids",
                             "store": false
                         }
                     ],
@@ -91,17 +99,57 @@
                     }
                 },
                 {
-                    "destination": "third_step",
+                    "destination": "multi_search",
                     "sequence": [
                         {
                             "type": "createAction",
-                            "route" : [ "model_parameters" ]
+                            "route" : [ "auth" ]
                         }
                     ],
-                    "getFromInputs": { "route": [ "model_parameters" ] }
+                    "getFromInputs": { "route": [ "auth" ] }
                 },
                 {
-                    "destination": "third_step",
+                    "destination": "multi_search",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "collection_ids" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "collection_hash_ids" ] }
+                }
+            ]
+        },
+        {
+            "id": "multi_search",
+            "api_function": "llm_multistep_search",
+            "input_arguments": [
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "auth"
+                },
+                {
+                    "key": "collection_ids"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "llm_call",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "sources" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "sources" ]
+                    }
+                },
+                {
+                    "destination": "llm_call",
                     "sequence": [
                         {
                             "type": "createAction",
@@ -113,7 +161,7 @@
             ]
         },
         {
-            "id": "third_step",
+            "id": "llm_call",
             "api_function": "llm",
             "input_arguments": [
                 {
@@ -124,8 +172,7 @@
                     "key": "auth"
                 },
                 {
-                    "key": "model_parameters",
-                    "optional": true
+                    "key": "sources"
                 }
             ],
             "feed_mappings": [
@@ -149,11 +196,12 @@
                             "initialValue": {
                                 "type": "staticValue",
                                 "value": {
-                                    "role": "assistant"           
+                                    "role": "assistant",
+                                    "content": ""
                                 }
                             },
-                            "insertion_values": [ null ],
-                            "insertions": [ [ "content" ] ],
+                            "insertion_values": [ null, {"type": "getNodeInput", "route": ["sources"]} ],
+                            "insertions": [ [ "content" ], [ "sources" ] ],
                             "route" : [ "chat_history" ]
                         }
                     ],

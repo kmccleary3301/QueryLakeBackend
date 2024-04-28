@@ -32,7 +32,7 @@ InputComponenets = Literal["file_upload", "chat_input"]
 
 
 class DisplayMapping(BaseModel):
-    display_route: List[Union[str, int]]
+    display_route: List[Union[int, str]] # The order here matters, otherwise ints will become string representations.
     display_as: DisplayComponents
 
 class InputEvent(BaseModel):

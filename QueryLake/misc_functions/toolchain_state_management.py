@@ -442,8 +442,10 @@ def run_sequence_action_on_object(subject_state : Union[list, dict],
                 
             
             assert isinstance(object_to_append_to, list) or (isinstance(object_to_append_to, str) and isinstance(initial_created_obj, str)), "appendAction used, but the object in focus was not a list or string"
-            object_to_append_to.append(initial_created_obj)
-            
+            if isinstance(object_to_append_to, list):
+                object_to_append_to.append(initial_created_obj)
+            else:
+                object_to_append_to += initial_created_obj
             
             
             

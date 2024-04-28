@@ -184,7 +184,7 @@ class ToolchainSession():
         
         state_copied_reference = deepcopy(self.state)
         
-        if (use_firing_queue) and (self.firing_queue[node.id] != False):
+        if (use_firing_queue) and (node.id in self.firing_queue) and (self.firing_queue[node.id] != False):
             node_inputs.update(self.firing_queue[node.id].copy())
         
         for node_input_arg in node.input_arguments:
@@ -735,8 +735,7 @@ class ToolchainSession():
         await self.send_websocket_msg(send_information, ws)
 
     def dump(self):
-        # self.write_logs()
-        
+        self.write_logs()
         return {
             "title": self.state["title"],
             "toolchain_id": self.toolchain_id,
@@ -753,9 +752,9 @@ class ToolchainSession():
         
         print("DUMPING LOGS WITH LENGTH", len(self.log))
         
-        # with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
-        #     f.write("\n\n".join(self.log))
-        #     f.close()
+        with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
+            f.write("\n\n".join(self.log))
+            f.close()
     
     def load(self, data, toolchain: ToolChain):
         
@@ -772,5 +771,5 @@ class ToolchainSession():
         self.state = data["state"]
         self.toolchain_session_files = convert_pydantic_objects_in_dict(data["files"], ToolChainSessionFile)
         self.state["title"] = data["title"]
-        self.firing_queue = data["firing_queue"],
+        self.firing_queue = data["firing_queue"]
         self.first_event_fired = data["first_event_fired"]

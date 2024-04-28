@@ -206,6 +206,7 @@ class UmbrellaClass:
                        auth : AuthType, 
                        question : str = None,
                        model_parameters : dict = {},
+                       sources : List[dict] = [],
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
         """
@@ -254,7 +255,7 @@ class UmbrellaClass:
         else:
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen: DeploymentResponseGenerator = (
-                llm_handle.get_result_loop.remote(model_parameters_true)
+                llm_handle.get_result_loop.remote(model_parameters_true, sources=sources)
             )
         
         if return_stream_response:

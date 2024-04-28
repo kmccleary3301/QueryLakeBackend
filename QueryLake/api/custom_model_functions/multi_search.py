@@ -11,7 +11,7 @@ from .standalone_question import llm_isolate_question
 from ...database.sql_db_tables import DocumentEmbeddingDictionary
 import re
 from ..web_search import web_search
-from datetime import datetime
+from ..user_auth import get_user_external_providers_dict
 
 MULTI_STEP_SEARCH_PROMPT = """
 Your task is to compile information relevant to the question stated below.
@@ -60,7 +60,8 @@ Follow the examples as closely as possible.
     
 5.  EXIT: If you are satisfied with the information you have, respond with EXIT.
     Example: (EXIT)
-    
+
+Only these five commands are available. Do not make up your own commands.
 Your response must be formatted exactly like the examples, meaning it must be written as
 (ACTION: "ARGUMENT1", "ARGUMENT2", ...) if you are providing arguments.
 Try not to include anything else.
@@ -74,15 +75,24 @@ async def llm_multistep_search(database : Session,
                                collection_ids: List[str],
                                model_choice : str = None,
                                max_searches : int = 5,
-                               search_web : bool = False) -> str:
+                               search_web : bool = False,
+                               minimum_relevance : float = 0.5) -> str:
     """
     Given a chat history with a most recent question, 
     perform iterative search using the LLM as an agent.
     """
     (_, _) = get_user(database, auth)
     
+    print("GOT ARGS:", chat_history, collection_ids, model_choice, max_searches, search_web)
+    
     assert max_searches > 0, "You must have at least one search."
     assert max_searches < 20, "You cannot perform more than 20 search steps."
+    
+    if len(collection_ids) == 0 and search_web is False:
+        return []
+    
+    if search_web:
+        search_web = "Serper.dev" in get_user_external_providers_dict(database, auth)
     
     if model_choice is None:
         model_choice = global_config.default_model
@@ -97,7 +107,9 @@ async def llm_multistep_search(database : Session,
                                                      chat_history, 
                                                      model_choice)
     
-    if standalone_question["output"] is False:
+    print("GOT STANDALONE QUESTION:", standalone_question)
+    
+    if standalone_question is False:
         return []
     
     
@@ -233,12 +245,25 @@ async def llm_multistep_search(database : Session,
             if len(search_strings) > 0:
                 notes.append(search_strings[0])
                 # print(search_strings[0])
-            
+        
         elif "EXIT" in current_response:
             return sources
         else:
             previous_commands.append(f"INVALID COMMAND: {current_response}")
         
+    if len(sources) > 0:
+        rerank_scores = await toolchain_function_caller("rerank")(
+            auth,
+            [(primary_question, source["text"]) for source in sources]
+        )
+        for i in range(len(sources)):
+            sources[i]["rerank_score"] = rerank_scores[i]
+    
+    sources = [s for s in sources if s["rerank_score"] > minimum_relevance]
+    sources = sorted(sources, key=lambda x: x["rerank_score"], reverse=True)
+    
+    print("Primary Question:", primary_question)
+    
     return {"sources": sources, "commands": previous_commands, "notes": notes}
     
     

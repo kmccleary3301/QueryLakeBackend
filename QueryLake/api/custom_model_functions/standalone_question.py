@@ -65,7 +65,7 @@ Statement
     
     
     if len(chat_history) == 1:
-        return chat_history[0]["content"]
+        return {"output": chat_history[0]["content"]}
     
     if chat_history[0]["role"] != "system":
         chat_history = [{"role": "system", "content": ""}] + chat_history

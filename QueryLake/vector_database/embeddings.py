@@ -30,6 +30,8 @@ def split_list(input_list : list, n : int) -> List[list]:
     """
     Evenly split a list into `n` sublists of approximately equal length.
     """
+    if n <= 0:
+        return [input_list]
     k, m = divmod(len(input_list), n)
     return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
@@ -327,7 +329,6 @@ async def query_database(database : Session ,
             first_pass_results_split = split_list(first_pass_results, len(first_lookup_results))
             first_pass_results = [[lookup_result, *first_pass_results_split[i]] for i, lookup_result in enumerate(first_lookup_results)]
             first_pass_results : List[DocumentEmbeddingDictionary] = list(chain.from_iterable(first_pass_results))
-    
     
     new_docs_dict = {} # Remove duplicates
     for i, doc in enumerate(first_pass_results):
