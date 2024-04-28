@@ -10,6 +10,8 @@ from ...vector_database.embeddings import query_database, expand_source
 from .standalone_question import llm_isolate_question
 from ...database.sql_db_tables import DocumentEmbeddingDictionary
 import re
+from ..web_search import web_search
+from datetime import datetime
 
 MULTI_STEP_SEARCH_PROMPT = """
 Your task is to compile information relevant to the question stated below.
@@ -25,12 +27,12 @@ Below is your current working set of information and sources.
 {current_information}   
 </CURRENT_INFORMATION>
 
-Here are your previous searches that have been performed on this question.
-<PREVIOUS_SEARCHES>
+Here are your previous commands that have been performed on this question.
+<PREVIOUS_COMMANDS>
 {previous_searches}
-</PREVIOUS_SEARCHES>
+</PREVIOUS_COMMANDS>
 
-And here are the notes that have been made following previous searches.
+And here are the notes that have been made following previous commands.
 <NOTES_SECTION>
 {notes}
 </NOTES_SECTION>
@@ -41,7 +43,7 @@ You are to respond with a specific term to indicate your next action, and some a
 Below are your options, written as the term you can use to respond and the effect it will have.
 Follow the examples as closely as possible.
 
-1.  SEARCH: Perform a search for information on the question.
+1.  SEARCH: Perform a search for information on the question. Arguments are required!
     This requires two strings as inputs, a topical search similar to a Google search,
     and a direct question for the search engine. This is because it works in two steps,
     one with a lexical lookup and one that can evaluate the questions with the actual question in mind.
@@ -64,7 +66,6 @@ Your response must be formatted exactly like the examples, meaning it must be wr
 Try not to include anything else.
 """
 
-
 async def llm_multistep_search(database : Session,
                                global_config : Config,
                                auth : AuthType,
@@ -72,7 +73,8 @@ async def llm_multistep_search(database : Session,
                                chat_history: List[dict],
                                collection_ids: List[str],
                                model_choice : str = None,
-                               max_searches : int = 5) -> str:
+                               max_searches : int = 5,
+                               search_web : bool = False) -> str:
     """
     Given a chat history with a most recent question, 
     perform iterative search using the LLM as an agent.
@@ -85,7 +87,7 @@ async def llm_multistep_search(database : Session,
     if model_choice is None:
         model_choice = global_config.default_model
         
-    max_actions = max_searches * 2
+    max_actions = max_searches * 4
     llm_call = toolchain_function_caller("llm")
     
     standalone_question = await llm_isolate_question(database, 
@@ -101,11 +103,10 @@ async def llm_multistep_search(database : Session,
     
     primary_question : str = standalone_question["output"]
     
-    notes, previous_searches, chunk_sizes = [], [], []
+    notes, previous_commands, chunk_sizes = [], [], []
     sources : List[DocumentEmbeddingDictionary] = []
+    source_ids = []
     action_count, search_count = 0, 0
-    
-    
     
     while (action_count < max_actions and search_count < max_searches):
         action_count += 1
@@ -113,8 +114,8 @@ async def llm_multistep_search(database : Session,
         sources_formatted = "\n\n".join(["SOURCE_%d\n\n%s" % (i+1, source["text"]) for i, source in enumerate(sources)]).strip() \
             if len(sources) > 0 else "No sources have been provided."
         
-        previous_searches_formatted = "\n".join(previous_searches).strip() \
-            if len(previous_searches) > 0 else "No previous searches have been made."
+        previous_searches_formatted = "\n".join(previous_commands).strip() \
+            if len(previous_commands) > 0 else "No previous searches have been made."
         
         notes_formatted = "\n".join(notes).strip() \
             if len(notes) > 0 else "No notes have been provided." 
@@ -135,16 +136,21 @@ async def llm_multistep_search(database : Session,
         )
         current_response = current_response["output"]
         
-        print("RESPONSE:", current_response)
+        # print("RESPONSE:", current_response)
         
         if "SEARCH" in current_response:
             search_count += 1
             response_call : re.Match = re.search(r'SEARCH\:\s*(\"(.*?)\"\,?\s*)+', current_response)
             if response_call is None:
+                previous_commands.append(f"INVALID COMMAND: {current_response}")
                 continue
             response_string = response_call.group(0)
+            previous_commands.append(response_string)
             queries = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
-            if len(queries) < 2:
+            if len(queries) == 1:
+                if search_web:
+                    await web_search(database, toolchain_function_caller, auth, queries[0], 10)
+                
                 search_results = await query_database(database,
                                                       auth,
                                                       toolchain_function_caller,
@@ -152,26 +158,38 @@ async def llm_multistep_search(database : Session,
                                                       collection_ids=collection_ids,
                                                       use_lexical=True,
                                                       use_embeddings=True,
+                                                      use_web=True,
                                                       k=5)
-            else:
+            elif len(queries) == 2:
+                if search_web:
+                    await web_search(database, toolchain_function_caller, auth, queries[1], 10)
                 search_results = await query_database(database,
                                                       auth,
                                                       toolchain_function_caller,
                                                       queries[0],
                                                       use_lexical=True,
                                                       use_embeddings=True,
+                                                      use_web=True,
                                                       collection_ids=collection_ids,
                                                       k=5,
                                                       use_rerank=True,
                                                       minimum_relevance=1,
                                                       rerank_question=queries[1])
-            sources += search_results
+            else:
+                previous_commands.append(f"INVALID COMMAND: {current_response}")
+                continue
+            
+            new_sources = [source for source in search_results if source["id"] not in source_ids]
+            sources += new_sources
+            source_ids += [source["id"] for source in new_sources]
             chunk_sizes += [1 for _ in range(len(search_results))]
         elif "EXPAND_SOURCE" in current_response:
             response_call : re.Match = re.search(r'EXPAND_SOURCE\:\s*(\"(.*?)\"\,?\s*)+', current_response)
             if response_call is None:
+                previous_commands.append(f"INVALID COMMAND: {current_response}")
                 continue
             response_string = response_call.group(1)
+            previous_commands.append(response_call.group(0))
             search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
             
             for search_string in search_strings:
@@ -188,8 +206,10 @@ async def llm_multistep_search(database : Session,
             deletions = []
             response_call : re.Match = re.search(r'DELETE_SOURCES\:\s*(\"(.*?)\"\,?\s*)+', current_response)
             if response_call is None:
+                previous_commands.append(f"INVALID COMMAND: {current_response}")
                 continue
             response_string = response_call.group(0)
+            previous_commands.append(response_string)
             search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
             for search_string in search_strings:
                 if re.search(r'SOURCE_\d+', search_string):
@@ -205,8 +225,10 @@ async def llm_multistep_search(database : Session,
         elif "NOTE" in current_response:
             response_call : re.Match = re.search(r'NOTE\:\s*(\"(.*?)\"\,?\s*)+', current_response)
             if response_call is None:
+                previous_commands.append(f"INVALID COMMAND: {current_response}")
                 continue
             response_string = response_call.group(0)
+            previous_commands.append(response_string)
             search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
             if len(search_strings) > 0:
                 notes.append(search_strings[0])
@@ -214,7 +236,9 @@ async def llm_multistep_search(database : Session,
             
         elif "EXIT" in current_response:
             return sources
+        else:
+            previous_commands.append(f"INVALID COMMAND: {current_response}")
         
-    return sources
+    return {"sources": sources, "commands": previous_commands, "notes": notes}
     
     

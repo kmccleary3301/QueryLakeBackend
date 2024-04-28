@@ -38,6 +38,7 @@ class DisplayMapping(BaseModel):
 class InputEvent(BaseModel):
     hook: str
     target_event: str
+    fire_index: int
     store: bool
     target_route: str
 

@@ -19,16 +19,8 @@ def parse_PDFs(bytes_in : Union[bytes, BytesIO],
     if type(bytes_in) is bytes:
         bytes_in = BytesIO(bytes_in)
     reader = PdfReader(bytes_in)
-    # blob_get = Blob(bytes_in)
-    # print(reader)
-
     all_text : List[Tuple[str, dict]] = []
-    pages_text = []
-    # reader = PdfReader("GeoBase_NHNC1_Data_Model_UML_EN.pdf")
     for i, page in enumerate(reader.pages):
-        # print("Page #%03d" % (i))
-        # print(page.mediabox)
-        # page = reader.pages[3]
         parts = []
 
         def visitor_body(text, cm, tm, fontDict, fontSize):
@@ -68,7 +60,7 @@ def parse_PDFs(bytes_in : Union[bytes, BytesIO],
     # print(pdf_loader.lazy_load(blob_get))
 
 
-def parse_url(url_in : str) -> Document:
+async def parse_url(url_in : str) -> Document:
     try:
         resource = request.urlopen(request.Request(url=url_in, headers={'User-Agent': 'Mozilla/5.0'}))
         content =  resource.read().decode(resource.headers.get_content_charset())

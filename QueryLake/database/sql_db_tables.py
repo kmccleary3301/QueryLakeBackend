@@ -17,6 +17,7 @@ from pydantic import BaseModel
 import re
 from psycopg2.errors import InFailedSqlTransaction
 from functools import partial
+from time import time
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -37,6 +38,7 @@ class ApiKey(SQLModel, table=True):
 
 class DocumentEmbedding(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    creation_timestamp: Optional[float] = Field(default_factory=time)
     collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None)
     document_chunk_number: Optional[int] = Field(default=None)
@@ -89,12 +91,14 @@ class DocumentEmbeddingDictionary(BaseModel):
     text : str
     headline : Optional[str]
     cover_density_rank : Optional[float]
+    creation_timestamp : float
 
 def search_embeddings_lexical(database: Session,
                               collection_ids: List[str],
                               search_string: Union[str, List[str]], 
                               limit: int = 10,
-                              return_statement : bool = False) -> List[Tuple[
+                              return_statement : bool = False,
+                              web_search : bool = False) -> List[Tuple[
                                     DocumentEmbeddingDictionary,
                                     float,  # rank
                                     str,    # headline
@@ -113,12 +117,12 @@ def search_embeddings_lexical(database: Session,
         search_array = [e for e in search_string[:min(64, len(search_string))] if e.strip() != ""]
         search_string = " | ".join(search_array).strip(" | ")
         
+        if web_search:
+            where_clause = where_clause = "WHERE ts_content @@ query AND (parent_collection_hash_id = ANY(:collection_ids) OR website_url IS NOT NULL)"
+        else:
+            where_clause = "WHERE ts_content @@ query AND parent_collection_hash_id = ANY(:collection_ids)"
         
-        # search_string = re.sub(r'\s+', ' ', search_string).strip()
-        # search_string = search_string.strip().replace(' ', ' | ')
-        
-        
-        stmt = text("""
+        stmt = text(f"""
             SELECT id,
                 collection_type,
                 document_id,
@@ -130,11 +134,11 @@ def search_embeddings_lexical(database: Session,
                 private,
                 text,
                 ts_rank_cd(ts_content, query) AS rank,
-                ts_headline(text, query) AS headline
+                ts_headline(text, query) AS headline,
+                creation_timestamp
             FROM documentembedding,
                 to_tsquery(:search_string) query
-            WHERE ts_content @@ query
-                AND parent_collection_hash_id = ANY(:collection_ids)
+            {where_clause}
             ORDER BY rank DESC
             LIMIT :limit
         """).bindparams(search_string=search_string, collection_ids=collection_ids, limit=limit)
@@ -152,7 +156,8 @@ def search_embeddings_lexical(database: Session,
                 "private": value_in[8],
                 "text": value_in[9],
                 "cover_density_rank": value_in[10],
-                "headline": value_in[11]
+                "headline": value_in[11],
+                "creation_timestamp": value_in[12]
             }), value_in[10], value_in[11])
         
         if return_statement:
@@ -221,7 +226,7 @@ class chat_session_new(SQLModel, table=True):
     model: str = Field(foreign_key="model.name")
 
     system_instruction: Optional[str] = Field(default=None)
-
+    
     author_user_name: str = Field(foreign_key="user.name", index=True)
     access_token_id: int = Field(foreign_key="access_token.id", index=True)
     creation_timestamp: float
@@ -330,6 +335,8 @@ class document_raw(SQLModel, table=True):
     user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
     global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
     toolchain_session_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.id", index=True)
+    
+    website_url: Optional[str] = Field(default=None)
     
     file_data: bytes = Field(sa_column=Column(LargeBinary))
     finished_processing: Optional[bool] = Field(default=False)

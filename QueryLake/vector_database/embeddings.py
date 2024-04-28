@@ -13,7 +13,7 @@ from re import sub, split
 from .document_parsing import parse_PDFs
 from sqlmodel import Session, select, SQLModel, create_engine, and_, or_, func, not_
 from ..typing.config import AuthType
-import pgvector
+import pgvector # Not sure exactly how the import works here, but it's necessary for sqlmodel queries.
 from time import time
 from io import BytesIO
 import re
@@ -41,11 +41,11 @@ async def create_embeddings_in_database(
                                         document_db_entry_id : str,
                                         document_name : str):
     """
-    Add document to chroma db using embeddings.
+    Add document to postgres vector database using embeddings.
     """
     
     engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
-        
+    
     SQLModel.metadata.create_all(engine)
     database = Session(engine)
     
@@ -57,10 +57,10 @@ async def create_embeddings_in_database(
     
     if file_extension in ["pdf"]:
         text_chunks = parse_PDFs(document_bytes)
-    elif file_extension in ["txt", "md"]:
+    elif file_extension in ["txt", "md", "json"]:
         text_chunks = [(document_bytes.decode("utf-8"), {"page": 0})]
     else:
-        raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md] are supported at this time.")
+        raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
     
     await create_text_embeddings(database, auth, toolchain_function_caller, text_chunks, document_db_entry, document_name)
     pass
@@ -99,6 +99,9 @@ async def create_text_embeddings(database : Session,
     elif not document_sql_entry.organization_document_collection_hash_id is None:
         collection_type = "organization"
         parent_collection_id = document_sql_entry.organization_document_collection_hash_id
+    elif not document_sql_entry.website_url is None:
+        collection_type = "website"
+        parent_collection_id = None
     else:
         return
 
@@ -144,7 +147,7 @@ async def create_text_embeddings(database : Session,
     embeddings = await embedding_call(auth, splits_text)
 
     for i, vec in enumerate(embeddings):
-        document_db_entry = DocumentEmbedding(
+        embedding_db_entry = DocumentEmbedding(
             collection_type=collection_type,
             document_id=document_sql_entry.hash_id,
             document_chunk_number=i,
@@ -152,10 +155,10 @@ async def create_text_embeddings(database : Session,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
             embedding=vec,
-            text=splits_text[i]
+            text=splits_text[i],
+            **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
         )
-        database.add(document_db_entry)
-    
+        database.add(embedding_db_entry)
     document_raw.finished_processing = True
     database.commit()
 
@@ -223,8 +226,8 @@ async def query_database(database : Session ,
                          use_lexical : bool = False,
                          use_embeddings : bool = True,
                          use_rerank : bool = False,
+                         use_web : bool = False,
                          rerank_question : str = "",
-                         web_query : bool = False,
                          ratio: float = 0.5,
                          minimum_relevance : float = 0.05) -> List[DocumentEmbeddingDictionary]:
     """
@@ -273,20 +276,25 @@ async def query_database(database : Session ,
         )
     else:
         lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_ids[0])
+        
+    if use_web:
+        lookup_sql_condition = or_(
+            lookup_sql_condition,
+            not_(DocumentEmbedding.website_url == None)
+        )    
     
     
     first_lookup_results : List[DocumentEmbeddingDictionary] = []
     
     if use_lexical:
-        results_lexical = search_embeddings_lexical(database, collection_ids, query, first_pass_k_lexical)
+        results_lexical = search_embeddings_lexical(database, collection_ids, query, first_pass_k_lexical, web_search=use_web)
         # The embedding search will now exclude our results from lexical search.
         lookup_sql_condition = and_(
             lookup_sql_condition,
             not_(or_(*[(DocumentEmbedding.id == e.id) for (e, _, _) in results_lexical]))
-        )
+        ) if len(results_lexical) > 0 else lookup_sql_condition
         first_lookup_results.extend([e for (e, _, _) in results_lexical])
-        
-
+    
     # if web_query:
     #     # TODO: Check that this works later when implementing the website search.
     #     lookup_sql_condition = or_(

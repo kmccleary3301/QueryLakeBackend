@@ -221,16 +221,21 @@ class feedMappingAtomic(BaseModel):
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
     route: Optional[staticRoute] = None # If not None, we simply store the given value at this route, and ignore the sequence.
+    
+    
+    # Streaming can take the form of continually appending to a value or setting a value.
+    stream_type: Optional[Literal["append", "set"]] = "append"
     stream: Optional[bool] = False
-    stream_initial_value: Optional[Any] = None # Must be provided if stream is True. Pretty much always an empty string or list.
+    # Initial stream value must be provided if stream is True and stream type is append. 
+    # Pretty much always an empty string or list.
+    stream_initial_value: Optional[Any] = None 
     
     store: Optional[bool] = False # If True, then we store the inputs into the mapped node without firing it.
     
     # If defined, we take the target arguments and split them at the given route. 
     # The route in the stored function inputs is already a list or some iterable, but
     # The actual queue has this copied with the value replaced with an element in each copy.
-    iterate: Optional[bool] = False 
-
+    iterate: Optional[bool] = False
     condition: Optional[Union[Condition, conditionBasic]] = None
 
 
@@ -262,10 +267,10 @@ class feedMappingOutputValue(feedMappingAtomic):
 # is a defaulting order, and it's checking is limited.
 feedMapping = Union[
     feedMappingOutputValue,
-    feedMappingInputValue, 
-    feedMappingStateValue, 
-    feedMappingStaticValue, 
-    feedMappingOriginal, 
+    feedMappingInputValue,
+    feedMappingStateValue,
+    feedMappingStaticValue,
+    feedMappingOriginal,
 ]
 
     

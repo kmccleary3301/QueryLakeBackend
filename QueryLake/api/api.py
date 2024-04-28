@@ -128,7 +128,8 @@ exposed_api = [
     "toolchain_file_upload_event_call",
     "toolchain_session_notification",
     "toolchain_stream_node_propagation_call",
-    "upload_document"
+    "upload_document",
+    "web_search"
 ]
 
 all_function_names = [

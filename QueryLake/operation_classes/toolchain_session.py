@@ -147,7 +147,7 @@ class ToolchainSession():
                     "v": value
                 }, ws)
                 for route_direct in new_routes:
-                    self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=True)
+                    self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=(feed_map.stream_type == "append"))
             
             # Use the first route index as the id
             # Assuming only top-level results are streamed.
