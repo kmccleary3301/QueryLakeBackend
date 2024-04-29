@@ -11,8 +11,7 @@
         "mappings": [
             {
                 "display_route": [
-                    "chat_history",
-                    -1
+                    "chat_history"
                 ],
                 "display_as": "chat"
             },

@@ -45,6 +45,8 @@ async def embed_urls(database : Session,
     embedding_coroutines = []
     
     for i, (url, content) in enumerate(pairs):
+        if len(content) > (600 * 400):
+            continue
         website_content_bytes : bytes = content.encode("utf-8")
         new_document = sql_db_tables.document_raw(
             hash_id=random_hash(),
@@ -91,7 +93,7 @@ async def web_search(database : Session,
     assert "Serper.dev" in user_providers_dict, "User does not have SERP API key set"
     serp_key = user_providers_dict["Serper.dev"]
     url = "https://google.serper.dev/search"
-    
+
     payload = json.dumps({
         "q": query,
         "num": results

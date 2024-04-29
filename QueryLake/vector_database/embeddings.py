@@ -442,6 +442,7 @@ def expand_source(database : Session,
     
     return DocumentEmbeddingDictionary(
         id=chunk_range[0].id,
+        creation_timestamp=chunk_range[0].creation_timestamp,
         document_id=chunk_range[0].document_id,
         document_chunk_number=chunk_range[0].document_chunk_number,
         document_integrity=chunk_range[0].document_integrity,
