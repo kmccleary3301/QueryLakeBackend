@@ -91,7 +91,7 @@ async def web_search(database : Session,
     assert "Serper.dev" in user_providers_dict, "User does not have SERP API key set"
     serp_key = user_providers_dict["Serper.dev"]
     url = "https://google.serper.dev/search"
-
+    
     payload = json.dumps({
         "q": query,
         "num": results

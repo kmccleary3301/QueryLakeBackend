@@ -191,8 +191,8 @@ class ToolchainSession():
             
             # print("CREATING NODE INPUT ARG", [node_input_arg.key])
             
-            if not node_input_arg.initialValue is None:
-                node_inputs[node_input_arg.key] = node_input_arg.initialValue
+            if not node_input_arg.value is None:
+                node_inputs[node_input_arg.key] = node_input_arg.value
                 self.log_event("SET INITIAL VALUE", {
                     "value": node_inputs[node_input_arg.key]
                 })
@@ -451,7 +451,6 @@ class ToolchainSession():
         TODO
         This has to collect the arguments for the node, then run the node and/or forward them.
         It also has to manage forwarding in the firing queue.
-        
         
         # IMPORTANT CAVEATS
         

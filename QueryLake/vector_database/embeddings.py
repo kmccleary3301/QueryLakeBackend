@@ -87,7 +87,7 @@ async def create_text_embeddings(database : Session,
     """
 
     chunk_size = 600
-    chunk_overlap = 120
+    chunk_overlap = 80
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )

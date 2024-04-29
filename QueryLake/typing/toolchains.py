@@ -282,7 +282,7 @@ class nodeInputArgument(BaseModel):
     """
     key: str
     
-    initialValue: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
+    value: Optional[Any] = None # If None, then we use the given value and perform sequence on it.
     from_user: Optional[bool] = False # If True, then we use the key value from user args on the propagation call, sequence and initialValue are ignored.
     from_server: Optional[bool] = False # If True, then we use the key value from server args, sequence and initialValue are ignored.
     from_state: Optional[stateValue] = None

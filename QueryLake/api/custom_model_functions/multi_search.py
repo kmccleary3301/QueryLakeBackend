@@ -75,15 +75,12 @@ async def llm_multistep_search(database : Session,
                                collection_ids: List[str],
                                model_choice : str = None,
                                max_searches : int = 5,
-                               search_web : bool = False,
-                               minimum_relevance : float = 0.5) -> str:
+                               search_web : bool = False) -> str:
     """
     Given a chat history with a most recent question, 
     perform iterative search using the LLM as an agent.
     """
     (_, _) = get_user(database, auth)
-    
-    print("GOT ARGS:", chat_history, collection_ids, model_choice, max_searches, search_web)
     
     assert max_searches > 0, "You must have at least one search."
     assert max_searches < 20, "You cannot perform more than 20 search steps."
@@ -250,7 +247,7 @@ async def llm_multistep_search(database : Session,
             return sources
         else:
             previous_commands.append(f"INVALID COMMAND: {current_response}")
-        
+    
     if len(sources) > 0:
         rerank_scores = await toolchain_function_caller("rerank")(
             auth,
@@ -259,10 +256,8 @@ async def llm_multistep_search(database : Session,
         for i in range(len(sources)):
             sources[i]["rerank_score"] = rerank_scores[i]
     
-    sources = [s for s in sources if s["rerank_score"] > minimum_relevance]
+    # sources = [s for s in sources if s["rerank_score"] > minimum_relevance]
     sources = sorted(sources, key=lambda x: x["rerank_score"], reverse=True)
-    
-    print("Primary Question:", primary_question)
     
     return {"sources": sources, "commands": previous_commands, "notes": notes}
     

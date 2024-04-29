@@ -15,6 +15,10 @@
                     -1
                 ],
                 "display_as": "chat"
+            },
+            {
+                "display_route": [],
+                "display_as": "running_event_display"
             }
         ],
         "footer": {
@@ -133,6 +137,10 @@
                 },
                 {
                     "key": "collection_ids"
+                },
+                {
+                    "key": "search_web",
+                    "value": true
                 }
             ],
             "feed_mappings": [

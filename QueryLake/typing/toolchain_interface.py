@@ -26,9 +26,10 @@ from pydantic import BaseModel, Field
 DISPLAY_COMPONENTS = ["chat", "markdown", "text", "graph"]
 INPUT_COMPONENTS = ["file_upload", "chat_input"]
 
-DisplayComponents = Literal["chat", "markdown", "text", "graph"]
-InputComponenets = Literal["file_upload", "chat_input"]
-
+# DisplayComponents = Literal["chat", "markdown", "text", "graph"]
+DisplayComponents = str
+# InputComponenets = Literal["file_upload", "chat_input"]
+InputComponenents = str
 
 
 class DisplayMapping(BaseModel):
