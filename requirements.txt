@@ -27,5 +27,7 @@ google-search-results
 sentence-transformers
 lm-format-enforcer
 vllm
+readability-lxml
+selenium
 # pluggy
 # rich

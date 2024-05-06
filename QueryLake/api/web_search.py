@@ -38,19 +38,28 @@ async def embed_urls(database : Session,
     """
     (_, user_auth) = get_user(database, auth)
     # results = list(map(parse_url, urls))
-    results = await gather(*[parse_url(e) for e in urls])
-    pairs = [(urls[i], results[i]) for i in range(len(urls)) if not results[i] is None]
+    
+    web_scrape_call = toolchain_function_caller("web_scrape")
+    
+    results = await web_scrape_call(auth, urls)
     
     document_entries : List[Tuple[sql_db_tables.document_raw, str]] = []
     embedding_coroutines = []
     
-    for i, (url, content) in enumerate(pairs):
+    for i, result_dictionary in enumerate(results):
+        url = urls[i]
+        if result_dictionary is None:
+            print(f"Failed to scrape {url}")
+            continue
+        
+        content = result_dictionary["text"]
         if len(content) > (600 * 400):
             continue
+        
         website_content_bytes : bytes = content.encode("utf-8")
         new_document = sql_db_tables.document_raw(
             hash_id=random_hash(),
-            file_name=url if titles is None else titles[i],
+            file_name=result_dictionary["metadata"]["title"],
             author_user_name=user_auth.username,
             organization_hash_id=None,
             creation_timestamp=time.time(),
@@ -74,8 +83,10 @@ async def embed_urls(database : Session,
     
     await gather(*embedding_coroutines)
     
+    
+    print("Finished web url embeddings")
     # return {"success": True}
-    return {"content": [content for (_, content) in pairs]}
+    return {"content": results}
 
 async def web_search(database : Session,
                      toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],

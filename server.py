@@ -39,6 +39,7 @@ from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
+from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -129,7 +130,8 @@ class UmbrellaClass:
                  toolchains: Dict[str, ToolChain],
                  llm_handles: Dict[str, DeploymentHandle],
                  embedding_handle: DeploymentHandle,
-                 rerank_handle: DeploymentHandle):
+                 rerank_handle: DeploymentHandle,
+                 web_scraper_handle: DeploymentHandle):
         
         self.config : Config = configuration
         self.toolchain_configs : Dict[str, ToolChain] = toolchains
@@ -146,6 +148,7 @@ class UmbrellaClass:
         
         self.embedding_handle = embedding_handle
         self.rerank_handle = rerank_handle
+        self.web_scraper_handle = web_scraper_handle
         
         self.engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
         
@@ -189,7 +192,12 @@ class UmbrellaClass:
         (user, user_auth) = api.get_user(self.database, auth)
         return await self.rerank_handle.run.remote({"text": inputs})
     
-    # @fastapi_app.post("/direct/{rest_of_path:path}")
+    async def web_scrape_call(self, 
+                              auth : AuthType,
+                              inputs : Union[str, List[str]]):
+        (_, _) = api.get_user(self.database, auth)
+        return await self.web_scraper_handle.run.remote(inputs)
+    
     async def text_models_callback(self, request_dict: dict, model_choice: Literal["embedding", "rerank"]):
         assert model_choice in ["embedding", "rerank"]
         if model_choice == "embedding":
@@ -284,6 +292,8 @@ class UmbrellaClass:
             return self.embedding_call
         elif function_name == "rerank":
             return self.rerank_call
+        elif function_name == "web_scrape":
+            return self.web_scrape_call
         
         assert function_name in API_FUNCTIONS, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
@@ -619,8 +629,9 @@ deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,
     toolchains=TOOLCHAINS,
     llm_handles=LOCAL_MODEL_BINDINGS,
-    embedding_handle=EmbeddingDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-large-en-v1.5"),
-    rerank_handle=RerankerDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-reranker-large")
+    embedding_handle=EmbeddingDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-m3"),
+    rerank_handle=RerankerDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-reranker-v2-m3"),
+    web_scraper_handle=WebScraperDeployment.bind(),
 )
 
 if __name__ == "__main__":

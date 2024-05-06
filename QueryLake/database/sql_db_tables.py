@@ -103,6 +103,8 @@ def search_embeddings_lexical(database: Session,
                                     float,  # rank
                                     str,    # headline
                               ]]:
+    print("Collection IDs:", collection_ids)
+                                  
     try:                     
         if isinstance(search_string, list):
             search_string = " ".join(search_string)
@@ -121,6 +123,8 @@ def search_embeddings_lexical(database: Session,
             where_clause = where_clause = "WHERE ts_content @@ query AND (parent_collection_hash_id = ANY(:collection_ids) OR website_url IS NOT NULL)"
         else:
             where_clause = "WHERE ts_content @@ query AND parent_collection_hash_id = ANY(:collection_ids)"
+        
+        print("Arguments for query:", [search_string, collection_ids, limit, where_clause])
         
         stmt = text(f"""
             SELECT id,

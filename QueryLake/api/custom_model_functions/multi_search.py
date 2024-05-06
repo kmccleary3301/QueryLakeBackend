@@ -62,6 +62,7 @@ Follow the examples as closely as possible.
     Example: (EXIT)
 
 Only these five commands are available. Do not make up your own commands.
+If the question doesn't require any information, call EXIT immediately.
 Your response must be formatted exactly like the examples, meaning it must be written as
 (ACTION: "ARGUMENT1", "ARGUMENT2", ...) if you are providing arguments.
 Try not to include anything else.
@@ -81,6 +82,9 @@ async def llm_multistep_search(database : Session,
     perform iterative search using the LLM as an agent.
     """
     (_, _) = get_user(database, auth)
+    
+    if (not search_web) and len(collection_ids) == 0:
+        return []
     
     assert max_searches > 0, "You must have at least one search."
     assert max_searches < 20, "You cannot perform more than 20 search steps."
@@ -145,7 +149,7 @@ async def llm_multistep_search(database : Session,
         )
         current_response = current_response["output"]
         
-        # print("RESPONSE:", current_response)
+        print("RESPONSE:", current_response)
         
         if "SEARCH" in current_response:
             search_count += 1

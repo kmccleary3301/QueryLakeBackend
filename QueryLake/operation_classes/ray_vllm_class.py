@@ -77,7 +77,7 @@ class VLLMDeploymentClass:
             chat_history = request_dict.pop("chat_history")
             if len(sources) > 0:
                 chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
-                    '\n\n'.join(['SOURCE_%d\n\n%s' % (i, e['text']) for i, e in enumerate(sources)]) +
+                    '\n\n'.join(['[%d] Source %d\n\n%s' % (i, i, e['text']) for i, e in enumerate(sources)]) +
                     f"\n</SOURCES>\n END SYSTEM MESSAGE\n{chat_history[-1]['content']}")
             
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] + 2)

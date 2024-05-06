@@ -238,10 +238,29 @@ async def query_database(database : Session ,
     
     (_, _) = get_user(database, auth)
     
+    print("QUERY ARGUMENTS:", json.dumps({
+        "query": query,
+        "collection_ids": collection_ids,
+        "k": k,
+        "use_lexical": use_lexical,
+        "use_embeddings": use_embeddings,
+        "use_rerank": use_rerank,
+        "use_web": use_web,
+        "rerank_question": rerank_question,
+        "ratio": ratio,
+        "minimum_relevance": minimum_relevance,
+    }, indent=4))
+    
     assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
     assert k > 0, "k must be greater than 0."
     assert k <= 1000, "k cannot be more than 1000."
     assert any([use_lexical, use_embeddings]), "At least one of use_lexical or use_embeddings must be True."
+    assert any([use_web, (len(collection_ids) > 0)]), "At least one collection must be specified or use_web must be enabled"
+    
+    # This is a hack to allow the web search to work and avoid locking up the code below.
+    if use_web and len(collection_ids) == 0:
+        collection_ids = ["fake_collection_id"] 
+        
     
     first_pass_k = min(1000, 3*k if use_rerank else k)
     first_pass_k_lexical = int(first_pass_k*ratio) if (use_lexical and use_embeddings) else first_pass_k
