@@ -520,7 +520,11 @@ class ToolchainSession():
                 "inputs": node_inputs,
             })
             
-            node_outputs = await run_function_safe(get_function, {**node_inputs, "stream_callables": stream_callables})
+            node_outputs = await run_function_safe(get_function, {
+                **pop_files_in_dict(self.get_file_bytes, node_inputs), 
+                "stream_callables": stream_callables
+            })
+            
             early_state_reference = deepcopy(self.state)
             
             self.log_event("NODE INPUTS AFTER API FUNCTION CALL", {

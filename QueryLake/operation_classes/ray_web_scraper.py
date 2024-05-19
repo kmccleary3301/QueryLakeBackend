@@ -815,15 +815,6 @@ class WebScraperDeployment:
         if decrement_current_tab_index:
             previous_tab_index = (previous_tab_index - 1) % len(self.tab_urls)
         self.navigate_to_tab(tab_index=previous_tab_index)
-    
-    def take_screenshot(self, url : str, save_path : str):
-        self.open_new_tab(url)
-        self.wait_for_full_page_load()
-        
-        self.dv.save_screenshot(save_path)
-        return_val = self.dv.get_screenshot_as_png()
-        
-        return return_val
 
     async def get_page(self, 
                        url : str, 
@@ -917,29 +908,56 @@ class WebScraperDeployment:
         return final_result
     
     
-    async def process_url(self, url : str):
+    async def process_url(self, 
+                          url : str,
+                          timeout : float = 10,
+                          markdown : bool = True,
+                          summary : bool = False):
         m_1 = time.time()
-        result = await self.get_text(url, markdown=True, summary=True) 
+        result = await self.get_text(url, markdown=markdown, summary=summary, timeout=timeout) 
         m_2 = time.time()
         print("Time to get webpage: %.2fs %s" % (m_2 - m_1, url))
         
         return result
     
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, inputs: List[str]) -> List[List[float]]:
+    async def handle_batch(self, 
+                           inputs: List[str],
+                           timeout : List[float],
+                           markdown : List[bool],
+                           summary : List[bool]) -> List[dict]:
         results = await gather(*[self.process_url(
-            url,
-            # markdown=False,
-            # summary=True,
-        ) for url in inputs])
+            inputs[i],
+            timeout=timeout[i],
+            markdown=markdown[i],
+            summary=summary[i]
+        ) for i in range(len(inputs))])
         return results
     
-    async def run(self, inputs : Union[str, List[str]]) -> List[List[float]]:
-        if isinstance(inputs, str):
-            return await self.handle_batch(inputs)
+    async def run(self, 
+                  inputs : Union[str, List[str]],
+                  timeout : Union[float, List[float]] = 10,
+                  markdown : Union[bool, List[bool]] = True,
+                  summary: Union[bool, List[bool]] = False) -> List[List[float]]:
+        if isinstance(inputs, list):
+            if not isinstance(timeout, list):
+                timeout = [timeout for _ in range(len(inputs))]
+            if not isinstance(markdown, list):
+                markdown = [markdown for _ in range(len(inputs))]
+            if not isinstance(summary, list):
+                summary = [summary for _ in range(len(inputs))]
+            
+            assert all([len(timeout) == len(inputs), len(markdown) == len(inputs), len(summary) == len(inputs)]), \
+                "All input lists must be the same length"   
+            
+            return await gather(*[self.handle_batch(
+                inputs[i],
+                timeout=timeout[i],
+                markdown=markdown[i],
+                summary=summary[i]
+            ) for i in range(len(inputs))])
         else:
-            return await gather(*[self.handle_batch(e) for e in inputs])
-    
+            return await self.handle_batch(inputs, timeout, markdown, summary)
     
     def close(self):
         self.dv.quit()

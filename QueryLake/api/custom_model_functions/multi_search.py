@@ -73,10 +73,11 @@ async def llm_multistep_search(database : Session,
                                auth : AuthType,
                                toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                chat_history: List[dict],
-                               collection_ids: List[str],
+                               collection_ids: List[str] = [],
                                model_choice : str = None,
                                max_searches : int = 5,
-                               search_web : bool = False) -> str:
+                               search_web : bool = False,
+                               web_timeout : float = 10) -> str:
     """
     Given a chat history with a most recent question, 
     perform iterative search using the LLM as an agent.
@@ -90,7 +91,7 @@ async def llm_multistep_search(database : Session,
     assert max_searches < 20, "You cannot perform more than 20 search steps."
     
     if len(collection_ids) == 0 and search_web is False:
-        return []
+        return {"sources": [], "commands": [], "notes": "No collections provided and web search is disabled."}
     
     if search_web:
         search_web = "Serper.dev" in get_user_external_providers_dict(database, auth)
@@ -111,8 +112,7 @@ async def llm_multistep_search(database : Session,
     print("GOT STANDALONE QUESTION:", standalone_question)
     
     if standalone_question is False:
-        return []
-    
+        return {"sources": [], "commands": [], "notes": "Not a question or request."}
     
     primary_question : str = standalone_question["output"]
     
@@ -162,7 +162,7 @@ async def llm_multistep_search(database : Session,
             queries = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
             if len(queries) == 1:
                 if search_web:
-                    await web_search(database, toolchain_function_caller, auth, queries[0], 10)
+                    await web_search(database, toolchain_function_caller, auth, queries[0], 10, web_timeout=web_timeout)
                 
                 search_results = await query_database(database,
                                                       auth,

@@ -135,11 +135,16 @@
                     "key": "auth"
                 },
                 {
-                    "key": "collection_ids"
+                    "key": "collection_ids",
+                    "optional": true
                 },
                 {
                     "key": "search_web",
                     "value": true
+                },
+                {
+                    "key": "web_timeout",
+                    "value": 6
                 }
             ],
             "feed_mappings": [

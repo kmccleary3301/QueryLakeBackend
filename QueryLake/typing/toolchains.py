@@ -403,6 +403,7 @@ class ToolChainSessionFile(BaseModel):
     """
     This is effectively a pointer to a file in the database so that it can be retrieved.
     """
+    type: Optional[Literal["<<||TOOLCHAIN_SESSION_FILE||>>"]] = "<<||TOOLCHAIN_SESSION_FILE||>>"
     name: str
     document_hash_id: str
 

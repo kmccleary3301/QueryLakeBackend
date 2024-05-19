@@ -194,9 +194,13 @@ class UmbrellaClass:
     
     async def web_scrape_call(self, 
                               auth : AuthType,
-                              inputs : Union[str, List[str]]):
+                              inputs : Union[str, List[str]],
+                              timeout : Union[float, List[float]] = 10,
+                              markdown : Union[bool, List[bool]] = True,
+                              summary: Union[bool, List[bool]] = False):
+        
         (_, _) = api.get_user(self.database, auth)
-        return await self.web_scraper_handle.run.remote(inputs)
+        return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
     
     async def text_models_callback(self, request_dict: dict, model_choice: Literal["embedding", "rerank"]):
         assert model_choice in ["embedding", "rerank"]
@@ -265,6 +269,13 @@ class UmbrellaClass:
             gen: DeploymentResponseGenerator = (
                 llm_handle.get_result_loop.remote(model_parameters_true, sources=sources)
             )
+        
+        if "n" in model_parameters and model_parameters["n"] > 1:
+            results = []
+            async for result in gen:
+                results = result
+            # print(results)
+            return [e.text for e in results.outputs]
         
         if return_stream_response:
             return StreamingResponse(
@@ -535,7 +546,9 @@ class UmbrellaClass:
                         toolchain_session : ToolchainSession = api.fetch_toolchain_session(**true_args)
                         result = {
                             "success": True,
+                            "loaded": True,
                             "toolchain_session_id": toolchain_session.session_hash,
+                            "toolchain_id": toolchain_session.toolchain_id,
                             "state": toolchain_session.state,
                         }
                     

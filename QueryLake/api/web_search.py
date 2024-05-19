@@ -31,7 +31,8 @@ async def embed_urls(database : Session,
                      toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                      auth : AuthType,
                      urls : List[str],
-                     titles : List[str] = None):
+                     titles : List[str] = None,
+                     web_timeout : float = 10):
     """
     Download Urls, convert them to markdown, and
     chunk them into the database.
@@ -41,7 +42,7 @@ async def embed_urls(database : Session,
     
     web_scrape_call = toolchain_function_caller("web_scrape")
     
-    results = await web_scrape_call(auth, urls)
+    results = await web_scrape_call(auth, urls, timeout=web_timeout)
     
     document_entries : List[Tuple[sql_db_tables.document_raw, str]] = []
     embedding_coroutines = []
@@ -92,7 +93,8 @@ async def web_search(database : Session,
                      toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                      auth : AuthType,
                      query : str,
-                     results : int = 10):
+                     results : int = 10,
+                     web_timeout : float = 10):
     """
     Perform a search query and embed URLs into database.
     """
@@ -115,7 +117,7 @@ async def web_search(database : Session,
     }
     response = requests.request("POST", url, headers=headers, data=payload)
     result = response.json().get("organic", [])
-    await embed_urls(database, toolchain_function_caller, auth, [e["link"] for e in result], [e["title"] for e in result])
+    await embed_urls(database, toolchain_function_caller, auth, [e["link"] for e in result], [e["title"] for e in result], web_timeout)
     
     return True
     

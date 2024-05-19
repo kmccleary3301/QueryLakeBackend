@@ -2,7 +2,10 @@ import os, json
 from copy import deepcopy, copy
 from typing import Callable, Any, List, Dict, Union, Awaitable
 from ..typing.toolchains import *
+from ..typing.config import AuthInputType
+from ..api.single_user_auth import get_user
 from io import BytesIO
+from sqlmodel import Session
 
 getFilesCallableType = Callable[[ToolChainSessionFile], Union[bytes, BytesIO, str]]
 
@@ -676,3 +679,27 @@ def recursive_shallow_copy(input_dict : dict):
         new_dict[key] = value_copy(value)
         
     return new_dict
+
+
+def pop_files_in_dict(get_files_callable : getFilesCallableType,
+                      object : Union[dict, list]) -> Union[dict, list]:
+    """
+    Find Toolchain File Pointers in object and convert them to files bytes.
+    """
+    
+    if isinstance(object, dict) and "type" in object and object["type"] == "<<||TOOLCHAIN_SESSION_FILE||>>":
+        return get_files_callable(ToolChainSessionFile(**object))
+    
+    for key, value in (object.items() if isinstance(object, dict) else enumerate(object)):
+        
+        if isinstance(value, dict):
+            if "type" in value and value["type"] == "<<||TOOLCHAIN_SESSION_FILE||>>":
+                object[key] = get_files_callable(ToolChainSessionFile(**value))
+            else:
+                object[key] = pop_files_in_dict(get_files_callable, value)
+        
+        elif isinstance(value, list):
+            object[key] = pop_files_in_dict(get_files_callable, value)
+    
+    return object
+                    

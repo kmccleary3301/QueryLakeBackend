@@ -23,7 +23,8 @@ class EmbeddingDeployment:
     async def handle_batch(self, inputs: List[str]) -> List[List[float]]:
         sentence_embeddings = self.model.encode(
             inputs,
-            max_length=8192,
+            # max_length=8192,
+            max_length=4096,
         )['dense_vecs']
         embed_list = sentence_embeddings.tolist()
         
