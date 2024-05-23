@@ -50,12 +50,22 @@ class LoaderParameters(BaseModel):
     beams: Dict
     beam_length: Dict
 
+class LocalModel(BaseModel):
+    name: str
+    source: str
+    default: Optional[bool] = False
+
+class OtherLocalModelsField(BaseModel):
+    rerank_models: List[LocalModel]
+    embedding_models: List[LocalModel]
+
 class Config(BaseModel):
     default_toolchain: str
     default_model: str
     models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
     providers: Optional[List[str]] = []
+    other_local_models: OtherLocalModelsField
     
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]

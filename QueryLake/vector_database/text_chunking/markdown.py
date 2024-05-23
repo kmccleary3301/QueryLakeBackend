@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple, TypedDict
 
-from langchain_core.documents import Document
-
+# from langchain_core.documents import Document
+from .document_class import Document
 from .base import Language
 from .character import RecursiveCharacterTextSplitter
 

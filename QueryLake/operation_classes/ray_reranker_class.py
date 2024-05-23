@@ -43,13 +43,15 @@ def F(x):
 
     return result
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.2}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 2}, max_replicas_per_node=1)
 class RerankerDeployment:
     def __init__(self, model_key: str):
+        print("INITIALIZING RERANKER DEPLOYMENT")
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         self.model = AutoModelForSequenceClassification.from_pretrained(model_key).to(self.device)
-        
+        print("DONE INITIALIZING RERANKER DEPLOYMENT")
         # self.model = FlagReranker(model_key, use_fp16=True)
     
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)

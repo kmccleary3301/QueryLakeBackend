@@ -31,7 +31,7 @@
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
             "quantization": "awq",
             "max_model_len": 8192,
-            "system_path": "/home/kyle_m/QueryLake_Development/llm_models/llama-3-8b-instruct-awq",
+            "system_path": "/home/kmccleary/projects/AI_models/llama-3-8b-instruct-awq",
             "default_parameters": {
                 "max_tokens": 4096, 
                 "temperature": 0.5, 
@@ -69,5 +69,21 @@
         "OpenAI",
         "Anthropic",
         "Serper.dev"
-    ]
+    ],
+    "other_local_models": {
+        "rerank_models": [
+            {
+                "name": "BAAI M2 Reranker",
+                "source": "/home/kmccleary/projects/AI_models/bge-reranker-v2-m3",
+                "default": true
+            }
+        ],
+        "embedding_models": [
+            {
+                "name": "BAAI M2 Embedding",
+                "source": "/home/kmccleary/projects/AI_models/bge-m3",
+                "default": true
+            }
+        ]
+    }
 }

@@ -10,14 +10,16 @@ from asyncio import gather
 from FlagEmbedding import BGEM3FlagModel
 import time
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.1, "num_cpus": 2}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 2}, max_replicas_per_node=1)
 class EmbeddingDeployment:
     def __init__(self, model_key: str):
+        print("INITIALIZING EMBEDDING DEPLOYMENT")
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        # self.device = "cpu"
+        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         # self.model = AutoModel.from_pretrained(model_key).to(self.device)
         self.model = BGEM3FlagModel(model_key, use_fp16=True, device=self.device) 
+        print("DONE INITIALIZING EMBEDDING DEPLOYMENT")
 
     @serve.batch(max_batch_size=128, batch_wait_timeout_s=0.2)
     async def handle_batch(self, inputs: List[str]) -> List[List[float]]:

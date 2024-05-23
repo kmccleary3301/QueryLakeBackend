@@ -1,4 +1,4 @@
-langchain
+# langchain
 # llama-cpp-python
 uvicorn
 fastapi
@@ -29,5 +29,12 @@ lm-format-enforcer
 vllm
 readability-lxml
 selenium
+psycopg2
+fastapi-login
+FlagEmbedding
+pgvector
+python-jose
+passlib
+lxml_html_clean
 # pluggy
 # rich

@@ -16,7 +16,7 @@ from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from typing import List
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.7}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 1}, max_replicas_per_node=1)
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
@@ -61,14 +61,17 @@ class VLLMDeploymentClass:
         args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
         self.context_size = args.max_model_len
         
+        print("INITIALIZING VLLM DEPLOYMENT")
         self.engine = AsyncLLMEngine.from_engine_args(args)
-        tokenizer_tmp = self.engine.engine.tokenizer
-        self.special_token_ids = tokenizer_tmp.all_special_ids
-        self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
+        self.tokenizer = self.engine.engine.get_tokenizer()
+        # tokenizer_tmp = self.engine.engine.tokenizer
+        # self.special_token_ids = tokenizer_tmp.all_special_ids
+        # self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
         self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine)
+        print("DONE INITIALIZING VLLM DEPLOYMENT")
     
     def count_tokens(self, input_string : str):
-        return len(self.engine.engine.tokenizer(input_string)["input_ids"])
+        return len(self.tokenizer(input_string)["input_ids"])
     
     def get_result_loop(self, request_dict : dict, sources : List[dict] = []):
         if "prompt" in request_dict:
@@ -91,8 +94,8 @@ class VLLMDeploymentClass:
         logits_processor_local = get_logits_processor_from_grammar_options(
             grammar_options,
             self.tokenizer_data, 
-            space_tokens=self.space_tokens, 
-            special_ids=self.special_token_ids,
+            # space_tokens=self.space_tokens, 
+            # special_ids=self.special_token_ids,
         ) if not grammar_options is None else None
         
         # print("Got logits processor", logits_processor_local)

@@ -133,6 +133,7 @@ class UmbrellaClass:
                  rerank_handle: DeploymentHandle,
                  web_scraper_handle: DeploymentHandle):
         
+        print("INITIALIZING UMBRELLA CLASS")
         self.config : Config = configuration
         self.toolchain_configs : Dict[str, ToolChain] = toolchains
         # self.llm_handle = llm_handle.options(
@@ -158,6 +159,7 @@ class UmbrellaClass:
         database_admin_operations.add_models_to_database(self.database, self.config.models)
         database_admin_operations.add_toolchains_to_database(self.database, self.toolchain_configs)
         
+        print("DONE INITIALIZING UMBRELLA CLASS")
         # all_users = self.database.exec(select(sql_db_tables.user)).all()
         # print("All users:")
         # print(all_users)
@@ -622,7 +624,12 @@ for toolchain_file in toolchain_files_list:
     with open("toolchains/"+toolchain_file, 'r', encoding='utf-8') as f:
         toolchain_retrieved = json.loads(f.read())
         f.close()
-    TOOLCHAINS[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
+    try:
+        TOOLCHAINS[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
+    except Exception as e:
+        print("Toolchain error:", json.dumps(toolchain_retrieved, indent=4))
+        raise e
+        
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 for model_entry in GLOBAL_CONFIG.models:
@@ -637,13 +644,24 @@ for model_entry in GLOBAL_CONFIG.models:
         quantization=model_entry.quantization
     )
 
+default_embedding_model = GLOBAL_CONFIG.other_local_models.embedding_models[0]
+for embedding_model in GLOBAL_CONFIG.other_local_models.embedding_models:
+    if embedding_model.default:
+        default_embedding_model = embedding_model
+        break
+
+default_rerank_model = GLOBAL_CONFIG.other_local_models.rerank_models[0]
+for rerank_model in GLOBAL_CONFIG.other_local_models.rerank_models:
+    if rerank_model.default:
+        default_rerank_model = rerank_model
+        break
 
 deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,
     toolchains=TOOLCHAINS,
     llm_handles=LOCAL_MODEL_BINDINGS,
-    embedding_handle=EmbeddingDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-m3"),
-    rerank_handle=RerankerDeployment.bind(model_key="/home/kyle_m/QueryLake_Development/alt_ai_models/bge-reranker-v2-m3"),
+    embedding_handle=EmbeddingDeployment.bind(model_key=default_embedding_model.source),
+    rerank_handle=RerankerDeployment.bind(model_key=default_rerank_model.source),
     web_scraper_handle=WebScraperDeployment.bind(),
 )
 

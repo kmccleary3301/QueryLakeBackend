@@ -1,7 +1,8 @@
-from langchain.docstore.document import Document
+# from langchain.docstore.document import Document
+from .text_chunking.document_class import Document
 from typing import List, Tuple, Union
 # from langchain.document_loaders import PyPDFium2Loader
-from langchain.document_loaders.blob_loaders import Blob
+# from langchain.document_loaders.blob_loaders import Blob
 # import PyPDF2
 from PyPDF2 import PdfReader
 from io import BytesIO

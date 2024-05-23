@@ -103,8 +103,8 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
 def get_logits_processor_from_grammar_options(
         grammar_options : Tuple[Literal["regex", "type"], str], 
         tokenizer_data,
-        space_tokens : List[int],
-        special_ids : List[int]
+        # space_tokens : List[int],
+        # special_ids : List[int]
     ) -> VLLMLogitsProcessor:
     """
     Create a logits processor from a grammar option provided by the user.
@@ -120,7 +120,8 @@ def get_logits_processor_from_grammar_options(
         logits_processor = build_vllm_logits_processor(
             tokenizer_data, 
             schema_parser, 
-            banned_tokens=space_tokens
+            # banned_tokens=space_tokens
+            banned_tokens=[]
         )
         return logits_processor
     

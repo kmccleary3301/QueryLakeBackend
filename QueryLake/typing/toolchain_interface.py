@@ -82,16 +82,14 @@ class ContentSection(BaseModel):
     align: str
     tailwind: Optional[str] = ""
     mappings: List[ContentMapping]
-    header: Optional[HeaderSection]
-    footer: Optional[HeaderSection]
+    header: Optional[HeaderSection] = None
+    footer: Optional[HeaderSection] = None
 
 class DivisionSection(BaseModel):
     split: str
     size: float
     sections: List[ContentSection]
-    header: Optional[HeaderSection]
-    footer: Optional[HeaderSection]
-
-
+    header: Optional[HeaderSection] = None
+    footer: Optional[HeaderSection] = None
 
 DisplaySection = Union[ContentSection, DivisionSection]

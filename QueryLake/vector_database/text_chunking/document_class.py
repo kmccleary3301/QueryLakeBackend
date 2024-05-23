@@ -53,7 +53,6 @@ class Document(Serializable):
         """Get the namespace of the langchain object."""
         return ["langchain", "schema", "document"]
     
-from langchain_core.runnables.config import run_in_executor
 
 P = ParamSpec("P")
 T = TypeVar("T")

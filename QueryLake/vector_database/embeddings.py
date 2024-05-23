@@ -1,7 +1,9 @@
 # from sentence_transformers import SentenceTransformer
 # from sentence_transformers import CrossEncoder
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain.docstore.document import Document
+from .text_chunking.character import RecursiveCharacterTextSplitter
+from .text_chunking.document_class import Document
 # from chromadb.api import ClientAPI
 from ..database.sql_db_tables import document_raw, DocumentEmbedding, search_embeddings_lexical, DocumentEmbeddingDictionary
 from ..api.hashing import random_hash, hash_function
