@@ -89,7 +89,7 @@ def add_toolchains_to_database(database : Session,
         if len(find_existing_toolchain) > 0:
             find_existing_toolchain[0].title = toolchain_content.name
             find_existing_toolchain[0].category = toolchain_content.category
-            find_existing_toolchain[0].content = json.dumps(toolchain_content.dict(), indent=4)
+            find_existing_toolchain[0].content = json.dumps(toolchain_content.model_dump(exclude_unset=True), indent=4)
             database.commit()
         else:
             new_toolchain = sql_db_tables.toolchain(

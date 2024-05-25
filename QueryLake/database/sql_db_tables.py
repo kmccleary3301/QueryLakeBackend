@@ -104,11 +104,15 @@ def search_embeddings_lexical(database: Session,
                                     str,    # headline
                               ]]:
     print("Collection IDs:", collection_ids)
-                                  
+    
     try:                     
         if isinstance(search_string, list):
             search_string = " ".join(search_string)
-
+        
+        # Safeguards for the input, preventing SQL injection
+        assert isinstance(limit, int), "Limit must be an integer."
+        collection_ids = [re.sub(r'[^a-zA-Z0-9]', '', e) for e in collection_ids]
+        
         # Replace any characters other than letters, numbers, or spaces with a space
         search_string = re.sub(r'[^a-zA-Z0-9]', ' ', search_string)
         search_string = re.sub(r'\s+', ' ', search_string)
