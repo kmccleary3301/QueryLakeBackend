@@ -25,25 +25,55 @@
             "tailwind": "pb-2",
             "mappings": [
                 {
-                    "display_as": "chat_input",
-                    "hooks": [
+                    "type": "div",
+                    "align": "center",
+                    "tailwind": "min-w-[20px] min-h-[20px]",
+                    "mappings": [
                         {
-                            "hook": "on_submit",
-                            "target_event": "user_question_event",
-                            "fire_index": 1,
-                            "target_route": "question",
-                            "store": false
+                            "type": "div",
+                            "align": "left",
+                            "tailwind": "pb-2 min-w-[20px] min-h-[20px]",
+                            "mappings": [
+                                {
+                                    "display_as": "switch",
+                                    "hooks": [],
+                                    "config": [
+                                        {
+                                            "name": "Label",
+                                            "value": "Search Web"
+                                        }
+                                    ],
+                                    "tailwind": ""
+                                }
+                            ]
                         },
                         {
-                            "hook": "selected_collections",
-                            "target_event": "user_question_event",
-                            "fire_index": 1,
-                            "target_route": "collection_hash_ids",
-                            "store": false
+                            "display_as": "chat_input",
+                            "hooks": [
+                                {
+                                    "hook": "on_submit",
+                                    "target_event": "user_question_event",
+                                    "fire_index": 1,
+                                    "target_route": "question",
+                                    "store": false
+                                },
+                                {
+                                    "hook": "selected_collections",
+                                    "target_event": "user_question_event",
+                                    "fire_index": 1,
+                                    "target_route": "collection_hash_ids",
+                                    "store": false
+                                }
+                            ],
+                            "config": [
+                                {
+                                    "name": "test_7_long_string",
+                                    "value": "6ix"
+                                }
+                            ],
+                            "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
                         }
-                    ],
-                    "config": [],
-                    "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
+                    ]
                 }
             ]
         }

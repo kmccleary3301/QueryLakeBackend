@@ -31,7 +31,32 @@
                             "store": false
                         }
                     ],
-                    "config": [],
+                    "config": [
+                        {
+                            "name": "test_1_boolean",
+                            "value": false
+                        },
+                        {
+                            "name": "test_2_boolean",
+                            "value": true
+                        },
+                        {
+                            "name": "test_3_number",
+                            "value": 3
+                        },
+                        {
+                            "name": "test_4_number",
+                            "value": 4
+                        },
+                        {
+                            "name": "test_5_string",
+                            "value": ""
+                        },
+                        {
+                            "name": "test_6_string",
+                            "value": "6ix"
+                        }
+                    ],
                     "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
                 }
             ]

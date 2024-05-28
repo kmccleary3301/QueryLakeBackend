@@ -39,7 +39,7 @@ class VLLMLogitsProcessor:
         self.mask[allowed_tokens] = 0
         scores = scores + self.mask
         
-        if not self.banned_tokens is None:
+        if not self.banned_tokens is None and len(self.banned_tokens) > 0:
             scores[self.banned_tokens] = -math.inf
         
         return scores

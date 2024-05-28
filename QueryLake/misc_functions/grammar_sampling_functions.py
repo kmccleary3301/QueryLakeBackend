@@ -110,8 +110,8 @@ def get_logits_processor_from_grammar_options(
     Create a logits processor from a grammar option provided by the user.
     """
     if grammar_options[0] == "regex":
-        regex_pattern = re.compile(grammar_options[1])
-        parser_tmp = RegexParser(regex_pattern)
+        # regex_pattern = re.compile(grammar_options[1])
+        parser_tmp = RegexParser(grammar_options[1])
         logits_processor = build_vllm_logits_processor(tokenizer_data, parser_tmp, analyze=True)
         return logits_processor
     elif grammar_options[0] == "typescript":

@@ -60,7 +60,14 @@ class FileUploadMapping(InputMappingProto):
 class ChatInputMapping(InputMappingProto):
     display_as: str = "chat_input"
 
-InputMapping = Union[FileUploadMapping, ChatInputMapping]
+# InputMapping = Union[FileUploadMapping, ChatInputMapping]
+
+class InputMapping(BaseModel):
+    display_as: str
+    hooks: List[InputEvent]
+    config: List[ConfigEntry]
+    tailwind: Optional[str] = ""
+
 ContentMapping = Union[DisplayMapping, InputMapping]
 
 
@@ -71,17 +78,30 @@ ContentMapping = Union[DisplayMapping, InputMapping]
 
 
 
+# export type contentDiv = {
+#   type: "div",
+#   align: alignType,
+#   tailwind: string,
+#   mappings: (contentMapping | contentDiv)[]
+# }
+
+class ContentDiv(BaseModel):
+    type: str = "div"
+    align: str
+    tailwind: Optional[str] = ""
+    mappings: List[Union[ContentMapping, "ContentDiv"]]
+
 class HeaderSection(BaseModel):
     align: str
     tailwind: Optional[str] = ""
-    mappings: List[ContentMapping]
+    mappings: List[Union[ContentMapping, ContentDiv]]
 
 class ContentSection(BaseModel):
     split: str = "none"
     size: float
     align: str
     tailwind: Optional[str] = ""
-    mappings: List[ContentMapping]
+    mappings: List[Union[ContentMapping, ContentDiv]]
     header: Optional[HeaderSection] = None
     footer: Optional[HeaderSection] = None
 
@@ -91,5 +111,7 @@ class DivisionSection(BaseModel):
     sections: List[ContentSection]
     header: Optional[HeaderSection] = None
     footer: Optional[HeaderSection] = None
+
+ContentDiv.model_rebuild()
 
 DisplaySection = Union[ContentSection, DivisionSection]

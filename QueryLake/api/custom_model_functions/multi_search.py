@@ -145,6 +145,7 @@ async def llm_multistep_search(database : Session,
             question=question_make,
             model_parameters={
                 "model_choice": model_choice,
+                "max_tokens": 200,
             }
         )
         current_response = current_response["output"]

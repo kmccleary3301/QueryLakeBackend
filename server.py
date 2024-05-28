@@ -417,7 +417,7 @@ class UmbrellaClass:
                     print(API_FUNCTION_HELP_GUIDE)
                     return {"success": True, "note": API_FUNCTION_HELP_GUIDE}
             else:
-                function_actual = self.api_function_getter(rest_of_path)
+                function_actual = self.api_function_getter(rest_of_path.split("/")[0])
                 true_args = clean_function_arguments_for_api({
                     "database": self.database,
                     "text_models_callback": self.text_models_callback,

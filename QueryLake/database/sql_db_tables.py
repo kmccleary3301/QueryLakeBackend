@@ -89,8 +89,8 @@ class DocumentEmbeddingDictionary(BaseModel):
     website_url : Optional[Union[str, Literal[None]]]
     private : bool
     text : str
-    headline : Optional[str]
-    cover_density_rank : Optional[float]
+    headline : Optional[str] = None
+    cover_density_rank : Optional[float] = None
     creation_timestamp : float
 
 def search_embeddings_lexical(database: Session,
