@@ -343,6 +343,7 @@ def create_api_key(
         "id": new_api_key.id,
         "title": new_api_key.title,
         "created": new_api_key.creation_timestamp,
+        "last_used": new_api_key.last_used,
         "key_preview": new_api_key.key_preview
     }
 
@@ -387,7 +388,7 @@ def fetch_api_keys(
         "id": e.id, 
         "title": e.title,
         "created": e.creation_timestamp,
-        # "last_used": e.
+        "last_used": e.last_used,
         "key_preview": e.key_preview
     } for e in api_keys]
     
