@@ -28,7 +28,7 @@
                 },
                 {
                     "key": "question_list",
-                    "initialValue": [
+                    "value": [
                         "Who is Magic Johnson?",
                         "Who is Michael Jordan?",
                         "Who is Kobe Bryant?",

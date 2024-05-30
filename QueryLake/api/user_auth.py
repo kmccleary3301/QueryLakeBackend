@@ -338,7 +338,13 @@ def create_api_key(
     
     database.add(new_api_key)
     database.commit()
-    return {"api_key": api_key_actual, "api_key_id": new_api_key.id}
+    return {
+        "api_key": api_key_actual, 
+        "id": new_api_key.id,
+        "title": new_api_key.title,
+        "created": new_api_key.creation_timestamp,
+        "key_preview": new_api_key.key_preview
+    }
 
 def delete_api_key(
     database : Session, 
@@ -379,7 +385,9 @@ def fetch_api_keys(
     
     api_keys = [{
         "id": e.id, 
-        "title": e.title, 
+        "title": e.title,
+        "created": e.creation_timestamp,
+        # "last_used": e.
         "key_preview": e.key_preview
     } for e in api_keys]
     

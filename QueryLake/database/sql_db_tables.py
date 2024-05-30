@@ -28,6 +28,7 @@ class ApiKey(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     key_hash: str = Field(index=True, unique=True)
     creation_timestamp: float
+    last_used: float = Field(default=None)
     author: str = Field(foreign_key="user.name", index=True)
     
     title: Optional[str] = Field(default="API Key")

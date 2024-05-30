@@ -16,7 +16,7 @@ from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from typing import List
 
-@serve.deployment(ray_actor_options={"num_gpus": 1}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.9}, max_replicas_per_node=1)
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
@@ -100,7 +100,30 @@ class VLLMDeploymentClass:
         
         # print("Got logits processor", logits_processor_local)
         
-        keys = ['n', 'best_of', 'presence_penalty', 'frequency_penalty', 'repetition_penalty', 'temperature', 'top_p', 'top_k', 'min_p', 'use_beam_search', 'length_penalty', 'early_stopping', 'stop', 'stop_token_ids', 'include_stop_str_in_output', 'ignore_eos', 'max_tokens', 'logprobs', 'prompt_logprobs', 'skip_special_tokens', 'spaces_between_special_tokens', 'logits_processors']
+        keys = [
+            'n', 
+            'best_of', 
+            'presence_penalty', 
+            'frequency_penalty', 
+            'repetition_penalty', 
+            'temperature', 
+            'top_p', 
+            'top_k', 
+            'min_p', 
+            'use_beam_search', 
+            'length_penalty', 
+            'early_stopping', 
+            'stop', 
+            'stop_token_ids', 
+            'include_stop_str_in_output', 
+            'ignore_eos', 
+            'max_tokens', 
+            'logprobs', 
+            'prompt_logprobs', 
+            'skip_special_tokens', 
+            'spaces_between_special_tokens', 
+            'logits_processors'
+        ]
         filtered_dict = {k: request_dict[k] for k in keys if k in request_dict}
         sampling_params = SamplingParams(**filtered_dict)
         

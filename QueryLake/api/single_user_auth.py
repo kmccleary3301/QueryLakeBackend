@@ -6,6 +6,7 @@ from ..database.encryption import aes_decrypt_string, ecc_generate_public_privat
 from typing import Union, Tuple
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
+from time import time
 
 
 global_public_key, global_private_key = ecc_generate_public_private_key()
@@ -68,6 +69,9 @@ def get_user(database : Session,
         retrieved = database.exec(statement).first()
         
         assert retrieved is not None, "API Key Not Found"
+        
+        retrieved.last_used = time()
+        database.commit()
         
         user_password_prehash = aes_decrypt_string(auth.api_key, retrieved.user_password_prehash_encrypted)
         
