@@ -171,6 +171,7 @@ def fetch_collection(database : Session,
             "title": document.file_name,
             "hash_id": document.hash_id,
             "size": file_size_as_string(document.size_bytes),
+            "finished_processing": document.finished_processing,
         })
     # return {"success": True, "result": data}
     return data

@@ -164,9 +164,9 @@ async def upload_document(database : Session,
 
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
-        return {"hash_id": new_db_file.hash_id, "file_name": file.filename}
+        return {"hash_id": new_db_file.hash_id, "file_name": file.filename, "finished_processing": new_db_file.finished_processing}
 
-    return {"hash_id": new_db_file.hash_id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes))}
+    return {"hash_id": new_db_file.hash_id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes)), "finished_processing": new_db_file.finished_processing}
     
 def delete_document(database : Session, 
                     auth : AuthType,
@@ -295,7 +295,7 @@ def craft_document_access_token(database : Session,
     new_document_access_token = sql_db_tables.document_access_token(
         hash_id=token_hash,
         expiration_timestamp=time.time()+validity_window
-    ) 
+    )
 
     database.add(new_document_access_token)
     database.commit()

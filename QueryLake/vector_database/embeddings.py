@@ -3,6 +3,7 @@
 # from langchain.text_splitter import RecursiveCharacterTextSplitter
 # from langchain.docstore.document import Document
 from .text_chunking.character import RecursiveCharacterTextSplitter
+from .text_chunking.markdown import MarkdownTextSplitter
 from .text_chunking.document_class import Document
 # from chromadb.api import ClientAPI
 from ..database.sql_db_tables import document_raw, DocumentEmbedding, search_embeddings_lexical, DocumentEmbeddingDictionary
@@ -77,8 +78,8 @@ async def create_text_embeddings(database : Session,
                                  document_name: str):
     """
     Given a set of text chunks, possibly pairs with metadata, create embeddings for the
-    entries. Craft an entry in the chroma db, using the collection relevant to the
-    model used. Each entry into the chroma db will have the following metadata:
+    entries. Craft an entry in the vector db, using the collection relevant to the
+    model used. Each entry into the vector db will have the following metadata:
 
     collection_type - whether the parent collection is an org, user, or global collection.
     public - bool for if this is public or not.
@@ -88,9 +89,12 @@ async def create_text_embeddings(database : Session,
     document_name - name of the original document.
     """
 
-    chunk_size = 600
-    chunk_overlap = 80
-    text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size = 1200
+    chunk_overlap = 100
+    # text_splitter = RecursiveCharacterTextSplitter(
+    #     chunk_size=chunk_size, chunk_overlap=chunk_overlap
+    # )
+    text_splitter = MarkdownTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
 
@@ -116,19 +120,31 @@ async def create_text_embeddings(database : Session,
     # We do this to keep track of location/ordering metadata such as page number.
     # This code concatenates the text and allows us to recover the minimum location index
     # After splitting for embedding.
-    
-    print("Concatenating text")
+    m_1 = time()
+    print("Concatenating text with %d segments..." % (len(text_segments)))
     for chunk_i, chunk in enumerate(text_segments):
+        
+        if (chunk_i % max(1, int(len(text_segments) / 100))) == 0:
+            progress = (chunk_i+1)/len(text_segments)
+            progress_bar = f"\r[{'='*int(20 * progress)}>{' '*(20 - int(20 * progress))}] " + "%3.2f%%" % (progress*100)
+            print(progress_bar, end="\r")
+        
         chunk_combined_strip = sub(r"[\s]+", "", chunk[0]).lower()
         text_combined_strip += chunk_combined_strip
         text_combined += chunk[0] + " "
         text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
-
+    m_2 = time()
+    print("Done in %3.2fs" % (m_2 - m_1))
+    
+    
     splits = text_splitter.split_documents([Document(page_content=text_combined, metadata={"type": "document"})])
     
     splits_text = [doc.page_content for doc in splits]
     splits_metadata = []
     text_size_iterator = 0
+    
+    m_1 = time()
+    print("Finding minimum metadata for each chunk with %d splits..." % (len(splits)))
     for doc in splits:
         text_stripped = sub(r"[\s]+", "", doc.page_content).lower()
         index = text_combined_strip.find(text_stripped)
@@ -142,6 +158,8 @@ async def create_text_embeddings(database : Session,
             splits_metadata.append(metadata)
         except:
             splits_metadata.append(metadata[-1])
+    m_2 = time()
+    print("Done in %3.2fs" % (m_2 - m_1))
 
     del text_combined_chunk_assignments
     
@@ -163,7 +181,7 @@ async def create_text_embeddings(database : Session,
             **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
         )
         database.add(embedding_db_entry)
-    document_raw.finished_processing = True
+    document_sql_entry.finished_processing = True
     database.commit()
 
     pass
