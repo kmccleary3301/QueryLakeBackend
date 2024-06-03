@@ -289,7 +289,7 @@ def craft_document_access_token(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
     
-    document = get_document_secure(database, auth, hash_id, return_document=True)
+    document : sql_db_tables.document_raw = get_document_secure(database, auth, hash_id, return_document=True)
     token_hash = random_hash()
     
     new_document_access_token = sql_db_tables.document_access_token(
