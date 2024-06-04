@@ -296,7 +296,7 @@ def craft_document_access_token(database : Session,
         hash_id=token_hash,
         expiration_timestamp=time.time()+validity_window
     )
-
+    
     database.add(new_document_access_token)
     database.commit()
 
