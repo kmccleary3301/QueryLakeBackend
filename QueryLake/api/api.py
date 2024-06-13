@@ -22,7 +22,10 @@ excluded_member_function_descriptions = [
     "prune_inactive_toolchain_sessions",
     
     # Imported Builtins
-    "deepcopy"
+    "get",
+    "copy",
+    "deepcopy",
+    "gather",
     
     # SQLModel functions
     "and_", 
@@ -53,8 +56,6 @@ excluded_member_function_descriptions = [
     "aes_decrypt_zip_file",
     "aes_encrypt_zip_file",
 ]
-
-
 
 exposed_api = [
     "add_user",
@@ -263,6 +264,4 @@ upload_document
 """.split("\n")
 
 remaining_independent_api_functions = [x.strip() for x in remaining_independent_api_functions if x.strip() != ""]
-
-
 

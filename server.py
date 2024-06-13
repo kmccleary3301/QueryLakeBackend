@@ -40,7 +40,7 @@ from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
-from QueryLake.misc_functions.function_run_clean import get_function_call_preview
+from QueryLake.misc_functions.function_run_clean import get_function_call_preview, get_function_specs
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware import Middleware
@@ -82,8 +82,11 @@ fastapi_app = FastAPI(
     middleware=middleware
 )
 
-API_FUNCTIONS = [pair[0] for pair in inspect.getmembers(api, inspect.isfunction)]
-API_FUNCTIONS = [func for func in API_FUNCTIONS if (not re.match(r"__.*?__", func) and func not in api.excluded_member_function_descriptions)]
+API_FUNCTIONS = [str(pair[0]) for pair in inspect.getmembers(api, inspect.isfunction)]
+API_FUNCTIONS_ALLOWED = list(set(API_FUNCTIONS) - set(api.excluded_member_function_descriptions))
+API_FUNCTIONS_ALLOWED = [func for func in API_FUNCTIONS_ALLOWED if (not re.match(r"__.*?__", func))]
+
+API_FUNCTIONS = [func for func in API_FUNCTIONS_ALLOWED]
 API_FUNCTION_HELP_DICTIONARY, API_FUNCTION_HELP_GUIDE = {}, ""
 for func in API_FUNCTIONS:
     if not hasattr(api, func):
@@ -159,6 +162,40 @@ class UmbrellaClass:
         database_admin_operations.add_models_to_database(self.database, self.config.models)
         database_admin_operations.add_toolchains_to_database(self.database, self.toolchain_configs)
         
+        self.default_function_arguments = {
+            "database": self.database,
+            "text_models_callback": self.text_models_callback,
+            "toolchains_available": self.toolchain_configs,
+            "public_key": global_public_key,
+            "server_private_key": global_private_key,
+            "toolchain_function_caller": self.api_function_getter,
+            "global_config": self.config,
+        }
+        
+        self.special_function_table = {
+            "llm": self.llm_call,
+            "llm_count_tokens": self.llm_count_tokens,
+            "text_models_callback": self.text_models_callback,
+            "embedding": self.embedding_call,
+            "rerank": self.rerank_call,
+            "web_scrape": self.web_scrape_call,
+            "function_help": self.get_all_function_descriptions,
+        }
+        
+        self.all_functions = API_FUNCTIONS_ALLOWED+list(self.special_function_table.keys())
+        self.all_function_descriptions = [
+            {
+                "endpoint": f"/api/{func_name}",
+                "api_function_id": func_name,
+                **get_function_specs(
+                    self.api_function_getter(func_name),
+                    excluded_arguments=list(self.default_function_arguments.keys()),
+                    querylake_auth_sub=True
+                )
+            }
+            for func_name in self.all_functions
+        ]
+        
         print("DONE INITIALIZING UMBRELLA CLASS")
         # all_users = self.database.exec(select(sql_db_tables.user)).all()
         # print("All users:")
@@ -169,11 +206,11 @@ class UmbrellaClass:
         try:
             arguments = {"username": form_data.username, "password": form_data.password}
             
-            true_args = clean_function_arguments_for_api({
-                "database": self.database,
-                "toolchain_function_caller": self.api_function_getter,
-                "server_private_key": global_private_key,
-            }, arguments, function_object=api.create_oauth2_token)
+            true_args = clean_function_arguments_for_api(
+                self.default_function_arguments, 
+                arguments, 
+                function_object=api.create_oauth2_token
+            )
             return api.create_oauth2_token(**true_args)
         except Exception as e:
             if isinstance(e, InFailedSqlTransaction):
@@ -292,23 +329,17 @@ class UmbrellaClass:
         
         return {"output": text_outputs, "token_count": len(results)}
     
+    def get_all_function_descriptions(self):
+        """
+        Return a list of all available API functions with their specifications.
+        """
+        return self.all_function_descriptions
+
     def api_function_getter(self, function_name):
+        if function_name in self.special_function_table:
+            return self.special_function_table[function_name]
         
-        if function_name == "llm":
-            # return self.run_llm_new
-            return self.llm_call
-        elif function_name == "llm_count_tokens":
-            return self.llm_count_tokens
-        elif function_name == "text_models_callback":
-            return self.text_models_callback
-        elif function_name == "embedding":
-            return self.embedding_call
-        elif function_name == "rerank":
-            return self.rerank_call
-        elif function_name == "web_scrape":
-            return self.web_scrape_call
-        
-        assert function_name in API_FUNCTIONS, f"Invalid API Function '{function_name}' Called"
+        assert function_name in API_FUNCTIONS_ALLOWED, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
     
     @fastapi_app.post("/upload_document/{rest_of_path:path}")
@@ -326,8 +357,7 @@ class UmbrellaClass:
             # arguments = await req.json()
             # arguments = json.loads(data) if data else {}
             true_arguments = clean_function_arguments_for_api({
-                "database": self.database,
-                "toolchain_function_caller": self.api_function_getter,
+                **self.default_function_arguments,
                 "file": file,
             }, arguments, "upload_document")
 
@@ -348,14 +378,11 @@ class UmbrellaClass:
                 arguments = await req.json()
             
             function_actual = getattr(api, "fetch_document")
-            true_args = clean_function_arguments_for_api({
-                "database": self.database,
-                "text_models_callback": self.text_models_callback,
-                "public_key": global_public_key,
-                "server_private_key": global_private_key,
-                "toolchain_function_caller": self.api_function_getter,
-                "global_config": self.config,
-            }, arguments, "fetch_document")
+            true_args = clean_function_arguments_for_api(
+                self.default_function_arguments, 
+                arguments, 
+                "fetch_document"
+            )
             
             print("Created args:", true_args)
             
@@ -418,15 +445,11 @@ class UmbrellaClass:
                     return {"success": True, "note": API_FUNCTION_HELP_GUIDE}
             else:
                 function_actual = self.api_function_getter(rest_of_path.split("/")[0])
-                true_args = clean_function_arguments_for_api({
-                    "database": self.database,
-                    "text_models_callback": self.text_models_callback,
-                    "toolchains_available": self.toolchain_configs,
-                    "public_key": global_public_key,
-                    "server_private_key": global_private_key,
-                    "toolchain_function_caller": self.api_function_getter,
-                    "global_config": self.config,
-                }, arguments, function_object=function_actual)
+                true_args = clean_function_arguments_for_api(
+                    self.default_function_arguments, 
+                    arguments, 
+                    function_object=function_actual
+                )
                 
                 if inspect.iscoroutinefunction(function_actual):
                     args_get = await function_actual(**true_args)
@@ -498,13 +521,7 @@ class UmbrellaClass:
         """
         
         system_args = {
-            "database": self.database,
-            "toolchains_available": self.toolchain_configs,
-            "text_models_callback": self.text_models_callback,
-            "public_key": global_public_key,
-            "server_private_key": global_private_key,
-            "toolchain_function_caller": self.api_function_getter,
-            "global_config": self.config,
+            **self.default_function_arguments,
             "ws": ws,
         }
         

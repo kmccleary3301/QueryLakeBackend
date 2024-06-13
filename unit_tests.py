@@ -3,7 +3,10 @@ from copy import deepcopy
 from typing import Callable, Any, List, Dict, Union, Awaitable
 from QueryLake.typing.toolchains import *
 import time
+import re
+import inspect
 
+from QueryLake.api import api
 from QueryLake.misc_functions.toolchain_state_management import *
 # from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from QueryLake.typing.config import Config, Model
@@ -11,6 +14,18 @@ from QueryLake.typing.config import Config, Model
 
 
 if __name__ == "__main__":
+    
+    API_FUNCTIONS = [str(pair[0]) for pair in inspect.getmembers(api, inspect.isfunction)]
+    print(json.dumps(API_FUNCTIONS, indent=4))
+    print("\nEXCLUDED\n")
+    print(json.dumps(api.excluded_member_function_descriptions, indent=4))
+    
+    API_FUNCTIONS_ALLOWED = list(set(API_FUNCTIONS) - set(api.excluded_member_function_descriptions))
+    API_FUNCTIONS_ALLOWED = [func for func in API_FUNCTIONS_ALLOWED if (not re.match(r"__.*?__", func))]
+    
+    print("\nFINAL\n")
+    print(json.dumps(API_FUNCTIONS_ALLOWED, indent=4))
+    
     # test_toolchain_state = {
     #     "dir_1": {
     #         "dir_2": {

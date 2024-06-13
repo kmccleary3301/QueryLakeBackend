@@ -21,7 +21,7 @@
             "tailwind": "pb-2",
             "mappings": [
                 {
-                    "display_as": "chat_input",
+                    "display_as": "chat-input",
                     "hooks": [
                         {
                             "hook": "on_submit",

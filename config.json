@@ -13,7 +13,7 @@
                 "max_tokens": 1000, 
                 "temperature": 0.5, 
                 "top_k": 20,
-                "top_p": 0.9, 
+                "top_p": 0.9,
                 "repetition_penalty": 1.15,
                 "stop": [ "<|im_end|>" ]
             },
@@ -47,6 +47,29 @@
                 "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
             },
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and try to format your math equations, symbols, etc with latex in mathjax enclosures, i.e. \\[ ... \\] or \\( ... \\) for newline expressions and $$...$$ for inline expressions."
+        },
+        {
+            "name": "Mistral 7B Instruct (v0.3)",
+            "id": "mistral-7b-instruct-v0.3",
+            "modelcard": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3",
+            "quantization": "awq",
+            "max_model_len": 16384,
+            "system_path": "/home/kmccleary/projects/AI_models/Mistral-7B-v0.3-AWQ",
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9, 
+                "repetition_penalty": 1.15,
+                "stop": [ "<|im_end|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<s>[INST] <<SYS>>\n{system_instruction}\n<</SYS>>\n\n<s>[INST]  [/INST]  </s>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<s>[INST] {question} [/INST] ",
+                "response_wrap": "{response} </s>"
+            },
+            "default_system_instruction": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
         }
     ],
     "external_model_providers": {
