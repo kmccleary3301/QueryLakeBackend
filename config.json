@@ -39,14 +39,14 @@
                 "top_p": 0.9,
                 "repetition_penalty": 1.15,
                 "stop": [ "<|eot_id|>" ]
-            },
+            },  
             "padding": {
                 "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
                 "context_wrap": "<<context>>{context}<</context>>",
                 "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
                 "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
             },
-            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and try to format your math equations, symbols, etc with latex in mathjax enclosures, i.e. \\[ ... \\] or \\( ... \\) for newline expressions and $$...$$ for inline expressions."
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
         {
             "name": "Mistral 7B Instruct (v0.3)",

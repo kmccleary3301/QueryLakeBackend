@@ -24,6 +24,15 @@ def data_dict(db_entry : SQLModel):
 
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
+class UsageTally(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    start_timestamp: float = Field(index=True)
+    window: str # "hour" | "day" | "week" | "month"
+    organization_id: Optional[str] = Field(foreign_key="organization.id", index=True)
+    api_key_id: Optional[str] = Field(foreign_key="apikey.id", index=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", index=True)
+    value : str # JSON of tallies.
+
 class ApiKey(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     key_hash: str = Field(index=True, unique=True)
