@@ -690,7 +690,7 @@ class Document:
 # It would allow us to skip everything but html and js.
 # See: https://stackoverflow.com/questions/49031428/how-to-disable-css-in-python-selenium-using-chromedriver-using-chromeoptions
 
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=2)
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=1)
 class WebScraperDeployment:
     def __init__(self):
         chrome_options = webdriver.ChromeOptions()
@@ -706,6 +706,11 @@ class WebScraperDeployment:
         chrome_options.add_argument("--disable-extensions")
         
         prefs = {
+            "download.open_pdf_in_system_reader": False,                # Prevent unwanted downloads
+            "download.prompt_for_download": True,
+            "download.default_directory": "/dev/null",
+            "plugins.always_open_pdf_externally": False,
+            
             "profile.managed_default_content_settings.images": 2,       # Disable images
             "profile.managed_default_content_settings.stylesheets": 2,  # Disable CSS
             "profile.managed_default_content_settings.fonts": 2,        # Disable fonts
@@ -729,7 +734,7 @@ class WebScraperDeployment:
         self.dv = webdriver.Chrome(
             options=chrome_options
         )
-        self.wait = WebDriverWait(self.dv, 10)
+        # self.wait = WebDriverWait(self.dv, 1)
         self.current_tab_index = 0
         self.tab_urls = [""]
         
@@ -903,7 +908,6 @@ class WebScraperDeployment:
             #     continue
             # ready_state = self.dv.execute_script('return document.readyState;')
             
-            print("Ready state: %s with strategy %s" % (ready_state, load))
             if (ready_state in ["complete", "interactive"] and load == "eager") or \
                 (ready_state == "complete" and load == "full"):
                     
@@ -978,7 +982,7 @@ class WebScraperDeployment:
         m_1 = time.time()
         result = await self.get_text(url, markdown=markdown, summary=summary, timeout=timeout, load=load_strategy) 
         m_2 = time.time()
-        print("Time to get webpage: %.2fs %s" % (m_2 - m_1, url))
+        # print("Time to get webpage: %.2fs %s" % (m_2 - m_1, url))
         
         return result
     
@@ -1025,9 +1029,10 @@ class WebScraperDeployment:
                   input,
                   timeout : float = 10,
                   markdown : bool = True,
+                  load_strategy : Literal["full", "eager", "none"] = "full",
                   summary: bool = False) -> dict:
         
-        return await self.handle_batch(input, timeout, markdown, summary)
+        return await self.handle_batch(input, timeout, markdown, load_strategy, summary)
     
     def close(self):
         self.dv.quit()

@@ -238,6 +238,7 @@ class UmbrellaClass:
                               inputs : Union[str, List[str]],
                               timeout : Union[float, List[float]] = 10,
                               markdown : Union[bool, List[bool]] = True,
+                              load_strategy : Union[Literal["full", "eager", "none"], list] = "full",
                               summary: Union[bool, List[bool]] = False) -> List[List[float]]:
         
         (_, _) = api.get_user(self.database, auth)
@@ -249,6 +250,8 @@ class UmbrellaClass:
                 markdown = [markdown for _ in range(len(inputs))]
             if not isinstance(summary, list):
                 summary = [summary for _ in range(len(inputs))]
+            if not isinstance(load_strategy, list):
+                load_strategy = [load_strategy for _ in range(len(inputs))]
             
             assert all([len(timeout) == len(inputs), len(markdown) == len(inputs), len(summary) == len(inputs)]), \
                 "All input lists must be the same length"   
