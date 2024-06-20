@@ -3,6 +3,7 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 
 from typing import Literal, List, Union
 import time
@@ -685,22 +686,38 @@ class Document:
         return self.get_clean_html()
 
 
+# TODO: Let's try pyppeteer at some point instead of selenium for web scraping.
+# It would allow us to skip everything but html and js.
+# See: https://stackoverflow.com/questions/49031428/how-to-disable-css-in-python-selenium-using-chromedriver-using-chromeoptions
 
-
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=5)
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=2)
 class WebScraperDeployment:
     def __init__(self):
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("log-level=3")
+        # chrome_options.add_argument("log-level=3")
         chrome_options.add_argument("--lang=en")
+        chrome_options.add_argument('--blink-settings=imagesEnabled=false')
+        
+        # chrome_options.headless = True  # running in headless mode
+        # chrome_options.add_argument("--disable-blink-features")
+        # chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("disable-infobars")
+        chrome_options.add_argument("--disable-extensions")
         
         prefs = {
             "profile.managed_default_content_settings.images": 2,       # Disable images
             "profile.managed_default_content_settings.stylesheets": 2,  # Disable CSS
             "profile.managed_default_content_settings.fonts": 2,        # Disable fonts
             "profile.managed_default_content_settings.media_stream": 2, # Disable media
-            "profile.default_content_setting_values.notifications": 2   # Disable notifications
+            "profile.default_content_setting_values.notifications": 2,  # Disable notifications
+            'profile.default_content_setting_values': {
+                'images': 2, 
+                'stylesheets': 2, 
+                'media_stream': 2, 
+                'notifications': 2, 
+                'fonts': 2
+            },
         }
         
         chrome_options.add_experimental_option(
@@ -754,16 +771,35 @@ class WebScraperDeployment:
         This is a manual timer equivelent to the selenium
         PageLoadStrategy 'Eager', which waits for page to be interactive.
         """
-        while self.dv.execute_script('return document.readyState;') not in ["complete", "loaded", "interactive"]:
-            time.sleep(0.1)
-
+        # script_result = None
+        while self.dv.execute_script('return document.readyState;') not in ["complete", "interactive"]:
+            # script_result = self.dv.execute_script('return document.readyState;')
+            # try:
+            #     WebDriverWait(self.dv, 0.1).until(
+            #         EC.presence_of_element_located((By.JAVASCRIPT, 'return document.readyState;'))
+            #     )
+            # except:
+            #     continue
+            
+            time.sleep(0.05)
+    
     def wait_for_full_page_load(self) -> None: #DONE
         """
         This is a manual timer equivelent to the selenium
         PageLoadStrategy 'Full', which waits for page to fully load.
         """
+        
+        # script_result = None
         while self.dv.execute_script('return document.readyState;') != "complete":
-            time.sleep(0.1)
+            # script_result = self.dv.execute_script('return document.readyState;')
+            # try:
+            #     WebDriverWait(self.dv, 0.1).until(
+            #         EC.presence_of_element_located((By.JAVASCRIPT, 'return document.readyState;'))
+            #     )
+            # except:
+            #     continue
+            
+            time.sleep(0.05)
     
     def open_new_tab(self, 
                      link : str = None, 
@@ -812,7 +848,8 @@ class WebScraperDeployment:
         previous_tab_index = self.current_tab_index
         self.navigate_to_tab(tab_index=tab_index)
         self.dv.close()
-        self.tab_urls = [self.tab_urls[i] for i in range(len(self.tab_urls)) if i != self.current_tab_index]
+        # self.tab_urls = [self.tab_urls[i] for i in range(len(self.tab_urls)) if i != self.current_tab_index]
+        del self.tab_urls[tab_index]
         
         for element in self.tab_lookup_index[tab_index+1:]:
             old_url, old_index = self.tab_lookup_id[element]
@@ -846,19 +883,35 @@ class WebScraperDeployment:
         time_start = time.time()
         
         while True:
-            await sleep(0.01)
+            await sleep(0.05)
             (_, tab_index) = self.tab_lookup_id.get(assigned_id, (None, None))
             
-            self.navigate_to_tab(tab_index)
-            ready_state = self.dv.execute_script('return document.readyState;')
+            if tab_index is None:
+                return 2, None # 2 is a tab index error
             
-            if (ready_state in ["complete", "loaded", "interactive"] and load == "eager") or \
+            # self.navigate_to_tab(tab_index)
+            self.dv.switch_to.window(self.dv.window_handles[tab_index])
+            
+            
+            
+            ready_state = self.dv.execute_script('return document.readyState;')
+            # try:
+            #     WebDriverWait(self.dv, 0.1).until(
+            #         EC.presence_of_element_located((By.JAVASCRIPT, 'return document.readyState;'))
+            #     )
+            # except:
+            #     continue
+            # ready_state = self.dv.execute_script('return document.readyState;')
+            
+            print("Ready state: %s with strategy %s" % (ready_state, load))
+            if (ready_state in ["complete", "interactive"] and load == "eager") or \
                 (ready_state == "complete" and load == "full"):
+                    
                     title = self.dv.title
                     break
             
             if (time.time() - time_start) > timeout:
-                return None, None
+                return 1, None # 1 is a timeout error
             
         html_string = self.dv.find_element(
             By.XPATH,
@@ -881,8 +934,8 @@ class WebScraperDeployment:
         
         html_content, title = await self.get_page(url, load, timeout)
         
-        if html_content is None:
-            return None
+        if html_content is None or isinstance(html_content, (int, float)):
+            return html_content
 
         if summary:
             new_readability = Document(
@@ -920,26 +973,52 @@ class WebScraperDeployment:
                           url : str,
                           timeout : float = 10,
                           markdown : bool = True,
+                          load_strategy : Literal["full", "eager", "none"] = "full",
                           summary : bool = False):
         m_1 = time.time()
-        result = await self.get_text(url, markdown=markdown, summary=summary, timeout=timeout) 
+        result = await self.get_text(url, markdown=markdown, summary=summary, timeout=timeout, load=load_strategy) 
         m_2 = time.time()
         print("Time to get webpage: %.2fs %s" % (m_2 - m_1, url))
         
         return result
     
-    @serve.batch(max_batch_size=16, batch_wait_timeout_s=0.1)
+    def close_all_tabs_except_first(self):
+        """
+        Closes all tabs except the first one.
+        """
+        while len(self.dv.window_handles) > 1:
+            # Switch to the last tab
+            self.dv.switch_to.window(self.dv.window_handles[-1])
+            # Close the current tab
+            self.dv.close()
+        # Switch back to the first tab
+        self.dv.switch_to.window(self.dv.window_handles[0])
+        self.current_tab_index = 0
+    
+    @serve.batch(max_batch_size=12, batch_wait_timeout_s=0.5)
     async def handle_batch(self, 
                            inputs: List[str],
                            timeout : List[float],
                            markdown : List[bool],
+                           load_strategy : List[Literal["full", "eager", "none"]],
                            summary : List[bool]) -> List[dict]:
-        results = await gather(*[self.process_url(
-            inputs[i],
-            timeout=timeout[i],
-            markdown=markdown[i],
-            summary=summary[i]
-        ) for i in range(len(inputs))])
+        coroutine_list = []
+        for i in range(len(inputs)):
+            coroutine_list.append(self.process_url(
+                inputs[i],
+                timeout=timeout[i],
+                markdown=markdown[i],
+                load_strategy=load_strategy[i],
+                summary=summary[i]
+            ))
+            time.sleep(0.02)
+        
+        results = await gather(*coroutine_list)
+        
+        self.close_all_tabs_except_first()
+        self.tab_lookup_id = {}
+        self.tab_lookup_index = []
+        
         return results
     
     async def run(self, 
