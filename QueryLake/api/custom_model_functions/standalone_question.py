@@ -38,7 +38,7 @@ async def llm_isolate_question(database : Session,
     (_, _) = get_user(database, auth)
     
     if model_choice is None:
-        model_choice = global_config.default_model
+        model_choice = global_config.default_models.llm
     
     llm_call = toolchain_function_caller("llm")
     

@@ -31,7 +31,7 @@ async def llm_make_conversation_title(global_config : Config,
     """
     
     if model_choice is None:
-        model_choice = global_config.default_model
+        model_choice = global_config.default_models.llm
     
     llm_call = toolchain_function_caller("llm")
     

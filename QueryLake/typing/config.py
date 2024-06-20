@@ -52,16 +52,27 @@ class LoaderParameters(BaseModel):
 
 class LocalModel(BaseModel):
     name: str
+    id: str
     source: str
-    default: Optional[bool] = False
 
 class OtherLocalModelsField(BaseModel):
     rerank_models: List[LocalModel]
     embedding_models: List[LocalModel]
 
+class ConfigDefaultModels(BaseModel):
+    llm: str
+    rerank: str
+    embedding: str
+
+class ConfigEnabledModelClasses(BaseModel):
+    llm: bool
+    rerank: bool
+    embedding: bool
+
 class Config(BaseModel):
     default_toolchain: str
-    default_model: str
+    default_models: ConfigDefaultModels
+    enabled_model_classes: ConfigEnabledModelClasses
     models: List[Model]
     external_model_providers: Dict[str, List[ExternalModelProviders]]
     providers: Optional[List[str]] = []

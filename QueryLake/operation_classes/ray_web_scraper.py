@@ -687,7 +687,7 @@ class Document:
 
 
 
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1})
+@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=5)
 class WebScraperDeployment:
     def __init__(self):
         chrome_options = webdriver.ChromeOptions()
@@ -916,7 +916,6 @@ class WebScraperDeployment:
         
         return final_result
     
-    
     async def process_url(self, 
                           url : str,
                           timeout : float = 10,
@@ -929,7 +928,7 @@ class WebScraperDeployment:
         
         return result
     
-    @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
+    @serve.batch(max_batch_size=16, batch_wait_timeout_s=0.1)
     async def handle_batch(self, 
                            inputs: List[str],
                            timeout : List[float],
@@ -944,29 +943,12 @@ class WebScraperDeployment:
         return results
     
     async def run(self, 
-                  inputs : Union[str, List[str]],
-                  timeout : Union[float, List[float]] = 10,
-                  markdown : Union[bool, List[bool]] = True,
-                  summary: Union[bool, List[bool]] = False) -> List[List[float]]:
-        if isinstance(inputs, list):
-            if not isinstance(timeout, list):
-                timeout = [timeout for _ in range(len(inputs))]
-            if not isinstance(markdown, list):
-                markdown = [markdown for _ in range(len(inputs))]
-            if not isinstance(summary, list):
-                summary = [summary for _ in range(len(inputs))]
-            
-            assert all([len(timeout) == len(inputs), len(markdown) == len(inputs), len(summary) == len(inputs)]), \
-                "All input lists must be the same length"   
-            
-            return await gather(*[self.handle_batch(
-                inputs[i],
-                timeout=timeout[i],
-                markdown=markdown[i],
-                summary=summary[i]
-            ) for i in range(len(inputs))])
-        else:
-            return await self.handle_batch(inputs, timeout, markdown, summary)
+                  input,
+                  timeout : float = 10,
+                  markdown : bool = True,
+                  summary: bool = False) -> dict:
+        
+        return await self.handle_batch(input, timeout, markdown, summary)
     
     def close(self):
         self.dv.quit()

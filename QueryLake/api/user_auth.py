@@ -224,8 +224,9 @@ def get_available_models(
     external_models = {
         "openai": global_config.external_model_providers["openai"]
     }
+    
     results = {
-        "default_model": global_config.default_model,
+        "default_models": global_config.default_models,
         # "local_models": [{k : e[k] for k in ["name", "modelcard", "max_model_len"]} for e in global_config.models],
         "local_models": [{k:v for k,v in e.dict().items() if k in ["name", "id", "modelcard"]} for e in global_config.models],
         "external_models": external_models

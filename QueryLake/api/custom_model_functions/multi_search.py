@@ -97,7 +97,7 @@ async def llm_multistep_search(database : Session,
         search_web = "Serper.dev" in get_user_external_providers_dict(database, auth)
     
     if model_choice is None:
-        model_choice = global_config.default_model
+        model_choice = global_config.default_models.llm
         
     max_actions = max_searches * 4
     llm_call = toolchain_function_caller("llm")

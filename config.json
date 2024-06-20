@@ -1,6 +1,15 @@
 {
     "default_toolchain": "test_chat_session_normal_streaming",
-    "default_model": "llama-3-8b-instruct",
+    "default_models": {
+        "llm": "llama-3-8b-instruct",
+        "embedding": "bge-m3",
+        "rerank": "bge-reranker-v2-m3"
+    },
+    "enabled_model_classes": {
+        "llm": true,
+        "embedding": true,
+        "rerank": true
+    },
     "models": [
         {
             "name": "Mistral 7B Instruct",
@@ -97,15 +106,15 @@
         "rerank_models": [
             {
                 "name": "BAAI M2 Reranker",
-                "source": "/home/kmccleary/projects/AI_models/bge-reranker-v2-m3",
-                "default": true
+                "id": "bge-reranker-v2-m3",
+                "source": "/home/kmccleary/projects/AI_models/bge-reranker-v2-m3"
             }
         ],
         "embedding_models": [
             {
                 "name": "BAAI M2 Embedding",
-                "source": "/home/kmccleary/projects/AI_models/bge-m3",
-                "default": true
+                "id": "bge-m3",
+                "source": "/home/kmccleary/projects/AI_models/bge-m3"
             }
         ]
     }

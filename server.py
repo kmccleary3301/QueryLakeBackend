@@ -60,6 +60,8 @@ from QueryLake.api.single_user_auth import global_public_key, global_private_key
 from QueryLake.misc_functions.external_providers import external_llm_generator
 from QueryLake.misc_functions.server_class_functions import stream_results_tokens, consume_deployment_response
 
+from asyncio import gather
+
 
 origins = [
     "http://localhost:3001",
@@ -131,24 +133,21 @@ class UmbrellaClass:
     def __init__(self,
                  configuration: Config,
                  toolchains: Dict[str, ToolChain],
-                 llm_handles: Dict[str, DeploymentHandle],
-                 embedding_handle: DeploymentHandle,
-                 rerank_handle: DeploymentHandle,
-                 web_scraper_handle: DeploymentHandle):
+                 web_scraper_handle: DeploymentHandle,
+                 llm_handles: Dict[str, DeploymentHandle] = {},
+                 embedding_handle: DeploymentHandle = None,
+                 rerank_handle: DeploymentHandle = None,
+                 ):
         
         print("INITIALIZING UMBRELLA CLASS")
         self.config : Config = configuration
         self.toolchain_configs : Dict[str, ToolChain] = toolchains
-        # self.llm_handle = llm_handle.options(
-        #     # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
-        #     stream=True,
-        # )
         
         self.llm_handles_no_stream = llm_handles
         self.llm_handles : Dict[str, DeploymentHandle] = { k : handle.options(
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
             stream=True,
-        ) for k, handle in llm_handles.items()}
+        ) for k, handle in llm_handles.items()} if self.config.enabled_model_classes.llm else {}
         
         self.embedding_handle = embedding_handle
         self.rerank_handle = rerank_handle
@@ -197,6 +196,7 @@ class UmbrellaClass:
         ]
         
         print("DONE INITIALIZING UMBRELLA CLASS")
+        print("CONFIG ENABLED MODELS:", self.config.enabled_model_classes)
         # all_users = self.database.exec(select(sql_db_tables.user)).all()
         # print("All users:")
         # print(all_users)
@@ -222,12 +222,14 @@ class UmbrellaClass:
     async def embedding_call(self, 
                              auth : AuthType,
                              inputs : List[str]):
+        assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
         (user, user_auth) = api.get_user(self.database, auth)
         return await self.embedding_handle.run.remote({"text": inputs})
     
     async def rerank_call(self, 
                           auth : AuthType,
                           inputs : List[Tuple[str, str]]):
+        assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
         (user, user_auth) = api.get_user(self.database, auth)
         return await self.rerank_handle.run.remote({"text": inputs})
     
@@ -236,10 +238,29 @@ class UmbrellaClass:
                               inputs : Union[str, List[str]],
                               timeout : Union[float, List[float]] = 10,
                               markdown : Union[bool, List[bool]] = True,
-                              summary: Union[bool, List[bool]] = False):
+                              summary: Union[bool, List[bool]] = False) -> List[List[float]]:
         
         (_, _) = api.get_user(self.database, auth)
-        return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
+        
+        if isinstance(inputs, list):
+            if not isinstance(timeout, list):
+                timeout = [timeout for _ in range(len(inputs))]
+            if not isinstance(markdown, list):
+                markdown = [markdown for _ in range(len(inputs))]
+            if not isinstance(summary, list):
+                summary = [summary for _ in range(len(inputs))]
+            
+            assert all([len(timeout) == len(inputs), len(markdown) == len(inputs), len(summary) == len(inputs)]), \
+                "All input lists must be the same length"   
+            
+            return await gather(*[self.web_scraper_handle.run.remote(
+                inputs[i],
+                timeout=timeout[i],
+                markdown=markdown[i],
+                summary=summary[i]
+            ) for i in range(len(inputs))])
+        else:
+            return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
     
     async def text_models_callback(self, request_dict: dict, model_choice: Literal["embedding", "rerank"]):
         assert model_choice in ["embedding", "rerank"]
@@ -278,11 +299,11 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        model_choice = model_parameters.pop("model_choice", self.config.default_model)
+        model_choice = model_parameters.pop("model_choice", self.config.default_models.llm)
         assert model_choice in self.llm_handles, "Model choice not available"
         
         model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
-                                            .where(sql_db_tables.model.id == self.config.default_model)).first()
+                                            .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
         
         model_parameters_true = {
             **json.loads(model_entry.default_settings)
@@ -299,11 +320,15 @@ class UmbrellaClass:
         
         
         if len(model_specified) > 1:
+            # External LLM provider (OpenAI, Anthropic, etc)
+            
             gen = external_llm_generator(self.database, 
                                          auth, 
                                          *model_specified,
                                          model_parameters_true)
         else:
+            assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
+            
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen: DeploymentResponseGenerator = (
                 llm_handle.get_result_loop.remote(model_parameters_true, sources=sources)
@@ -649,37 +674,41 @@ for toolchain_file in toolchain_files_list:
         
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
-for model_entry in GLOBAL_CONFIG.models:
-    # TODO: This will all be deprecated once we switch to ray clusters.
-    if not model_entry.id == GLOBAL_CONFIG.default_model:
-        continue
-    
-    LOCAL_MODEL_BINDINGS[model_entry.id] = VLLMDeploymentClass.bind(
-        model_config=model_entry,
-        model=model_entry.system_path, 
-        max_model_len=model_entry.max_model_len, 
-        quantization=model_entry.quantization
-    )
+
+if GLOBAL_CONFIG.enabled_model_classes.llm:
+    for model_entry in GLOBAL_CONFIG.models:
+        
+        # TODO: This will all be deprecated once we switch to ray clusters.
+        # Only deploy the default model.
+        if not model_entry.id == GLOBAL_CONFIG.default_models.llm:
+            continue
+        
+        LOCAL_MODEL_BINDINGS[model_entry.id] = VLLMDeploymentClass.bind(
+            model_config=model_entry,
+            model=model_entry.system_path, 
+            max_model_len=model_entry.max_model_len, 
+            quantization=model_entry.quantization
+        )
 
 default_embedding_model = GLOBAL_CONFIG.other_local_models.embedding_models[0]
 for embedding_model in GLOBAL_CONFIG.other_local_models.embedding_models:
-    if embedding_model.default:
+    if embedding_model.id == GLOBAL_CONFIG.default_models.embedding:
         default_embedding_model = embedding_model
         break
 
 default_rerank_model = GLOBAL_CONFIG.other_local_models.rerank_models[0]
 for rerank_model in GLOBAL_CONFIG.other_local_models.rerank_models:
-    if rerank_model.default:
+    if rerank_model.id == GLOBAL_CONFIG.default_models.rerank:
         default_rerank_model = rerank_model
         break
 
 deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,
     toolchains=TOOLCHAINS,
-    llm_handles=LOCAL_MODEL_BINDINGS,
-    embedding_handle=EmbeddingDeployment.bind(model_key=default_embedding_model.source),
-    rerank_handle=RerankerDeployment.bind(model_key=default_rerank_model.source),
     web_scraper_handle=WebScraperDeployment.bind(),
+    llm_handles=LOCAL_MODEL_BINDINGS,
+    embedding_handle=EmbeddingDeployment.bind(model_key=default_embedding_model.source) if GLOBAL_CONFIG.enabled_model_classes.embedding else None,
+    rerank_handle=RerankerDeployment.bind(model_key=default_rerank_model.source) if GLOBAL_CONFIG.enabled_model_classes.rerank else None,
 )
 
 if __name__ == "__main__":
