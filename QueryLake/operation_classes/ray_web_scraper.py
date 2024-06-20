@@ -694,8 +694,17 @@ class WebScraperDeployment:
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("log-level=3")
         chrome_options.add_argument("--lang=en")
+        
+        prefs = {
+            "profile.managed_default_content_settings.images": 2,       # Disable images
+            "profile.managed_default_content_settings.stylesheets": 2,  # Disable CSS
+            "profile.managed_default_content_settings.fonts": 2,        # Disable fonts
+            "profile.managed_default_content_settings.media_stream": 2, # Disable media
+            "profile.default_content_setting_values.notifications": 2   # Disable notifications
+        }
+        
         chrome_options.add_experimental_option(
-            "prefs", {"profile.default_content_setting_values.notifications": 2}
+            "prefs", prefs
         )
         chrome_options.page_load_strategy = "none"
         caps = DesiredCapabilities().CHROME
