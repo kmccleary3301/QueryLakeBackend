@@ -60,10 +60,10 @@ class RerankerDeployment:
         with torch.no_grad():
             start_time = time.time()
             tokenized_inputs = self.tokenizer(inputs, padding=True, truncation=True, return_tensors='pt', max_length=512).to(self.device)
-            # mid_time = time.time()
+            mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
-            time_taken = time.time() - start_time
-            print("Time taken for rerank inference:", time_taken)
+            time_taken_model, time_taken_tokens = time.time() - mid_time, mid_time - start_time
+            print("Time taken for rerank inference:", time_taken_model, time_taken_tokens)
         
         scores = torch.exp(torch.tensor(scores.clone().detach()))
         scores = F(scores)

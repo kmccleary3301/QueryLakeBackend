@@ -14,7 +14,9 @@ from QueryLake.misc_functions.grammar_sampling_functions import get_token_id, ge
 from QueryLake.typing.config import Padding, Model
 from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from typing import List
+from typing import List, Union
+from QueryLake.typing.function_calling import FunctionCallDefinition
+from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
 
 @serve.deployment(ray_actor_options={"num_gpus": 0.9}, max_replicas_per_node=1)
 class VLLMDeploymentClass:
@@ -73,7 +75,10 @@ class VLLMDeploymentClass:
     def count_tokens(self, input_string : str):
         return len(self.tokenizer(input_string)["input_ids"])
     
-    def get_result_loop(self, request_dict : dict, sources : List[dict] = []):
+    def get_result_loop(self, 
+                        request_dict : dict, 
+                        sources : List[dict] = [],
+                        functions_available: List[Union[FunctionCallDefinition, dict]] = None):
         if "prompt" in request_dict:
             prompt = request_dict.pop("prompt")
         else:
@@ -82,9 +87,17 @@ class VLLMDeploymentClass:
                 chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
                     '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
                     f"\n</SOURCES>\n END SYSTEM MESSAGE\n{chat_history[-1]['content']}")
+            if not functions_available is None:
+                chat_history[-1]["content"] = (
+                    f"SYSTEM MESSAGE - PROVIDED SOURCES\n{construct_functions_available_prompt(functions_available)}" + \
+                    f"\nEND SYSTEM MESSAGE\n\n{chat_history[-1]['content']}"
+                )    
+            
             
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] + 2)
-
+        
+        assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
+        
         request_id = random_uuid()
         
         grammar_options = request_dict.pop("grammar", None)

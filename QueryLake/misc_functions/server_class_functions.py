@@ -1,11 +1,101 @@
 from ray.serve.handle import DeploymentResponseGenerator
-from typing import Awaitable, Callable, AsyncGenerator, List
+from typing import Awaitable, Callable, AsyncGenerator, List, Optional, Union, Literal
 import json, inspect
+from pydantic import BaseModel
+from ..typing.function_calling import FunctionCallDefinition
+from copy import deepcopy
+from .function_run_clean import get_function_call_preview
+import re
+
+function_call_description_template = """
+You may call a python functions to execute an action.
+To do so, you must wrap it in the following template:
+
+&& > function_name(arg_1=value1, arg2=value2, ...) &&
+
+It can be any valid python code, as long as it is a function call,
+and it is wrapped as && > ... &&.
+
+Here are your available functions:
+
+{available_functions}
+"""
+
+
+def find_function_calls(text_in: str):
+    pattern = r"&& > ([^\n]*) &&"
+    function_calls = []
+    for match in re.finditer(pattern, text_in):
+        call = match.group(1)
+        arguments = {}
+        quote_segments = re.finditer(r"[^\\](\".*?[^\\]\"|\'.*?[^\\]\')", call)
+        for i, segment in enumerate(list(quote_segments)):
+            arguments[f"arg_{i}"] = segment.group(1)
+        
+        for key, value in arguments.items():
+            call = call.replace(key, f"%{key}")
+            call = call.replace(value, key)
+        
+        call = call.replace("=None", "=null")
+        
+        for match in re.finditer(r"([a-zA-Z_]+)=", call):
+            call = call.replace(match.group(0), f"\"{match.group(1)}\":")
+            
+        for key, value in arguments.items():
+            call = call.replace(key, value)
+            call = call.replace(f"%{key}", key)
+        
+        call = call.strip()
+        
+        call_split = re.search(r"^([a-zA-Z_]+)\((.*?)\)$", call)
+        
+        try:
+            arguments = json.loads(f"{{{call_split.group(2)}}}")
+        except json.decoder.JSONDecodeError:
+            print("Failed to JSON load:", f"{{{call_split.group(2)}}}")
+        
+        call_result = {
+			"function": call_split.group(1),
+			"arguments": arguments
+		}
+        
+        function_calls.append(call_result)
+
+    return function_calls
+        
+    
+
+def construct_functions_available_prompt(functions_available: List[Union[FunctionCallDefinition, dict]]) -> str:
+    
+    for i in range(len(functions_available)):
+        if isinstance(functions_available[i], dict):
+            functions_available[i] = FunctionCallDefinition(**functions_available[i])
+    
+    functions_available_strings = []
+    for func in functions_available:
+        function_args = []
+        for f_arg in func.parameters:
+            f_arg.description = f_arg.description.replace('\n', ' ')
+            
+            function_args.append(f"{f_arg.name}" + \
+                (f" : {f_arg.type}" if f_arg.type is not None else "") + \
+                (f" : {f_arg.default}" if f_arg.default is not None else "") + \
+                (f"\t # {f_arg.description}" if f_arg.description is not None else ""))
+            
+        function_args = "\n\t".join(function_args)
+        functions_available_strings.append(f"def {func.name}(\t\t{function_args}\n)\n\"\"\"\n{func.description}\n\"\"\"")
+    
+    prompt_make = deepcopy(function_call_description_template).format(
+        available_functions="\n\n".join(functions_available_strings)
+    )
+    
+    return prompt_make
 
 async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                                 encode_output : bool = False,
                                 on_new_token: Awaitable[Callable[[str], None]] = None,
-                                stop_sequences: List[str] = None) -> AsyncGenerator[bytes, None]:
+                                stop_sequences: List[str] = None,
+                                ) -> AsyncGenerator[bytes, None]:
     
     num_returned, tokens_returned, stop_queue, hold_queue = 0, [], [], False
     

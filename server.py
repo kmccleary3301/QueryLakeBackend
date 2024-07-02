@@ -41,6 +41,7 @@ from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview, get_function_specs
+from QueryLake.typing.function_calling import FunctionCallDefinition
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware import Middleware
@@ -58,10 +59,9 @@ from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
 from QueryLake.misc_functions.external_providers import external_llm_generator
-from QueryLake.misc_functions.server_class_functions import stream_results_tokens, consume_deployment_response
+from QueryLake.misc_functions.server_class_functions import stream_results_tokens, consume_deployment_response, find_function_calls
 
 from asyncio import gather
-
 
 origins = [
     "http://localhost:3001",
@@ -283,7 +283,8 @@ class UmbrellaClass:
                        model_parameters : dict = {},
                        sources : List[dict] = [],
                        chat_history : List[dict] = None,
-                       stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None):
+                       stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
+                       functions_available: List[Union[FunctionCallDefinition, dict]] = None):
         """
         Call an LLM model, possibly with parameters.
         
@@ -334,7 +335,7 @@ class UmbrellaClass:
             
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen: DeploymentResponseGenerator = (
-                llm_handle.get_result_loop.remote(model_parameters_true, sources=sources)
+                llm_handle.get_result_loop.remote(model_parameters_true, sources=sources, functions_available=functions_available)
             )
         
         if "n" in model_parameters and model_parameters["n"] > 1:
@@ -355,7 +356,18 @@ class UmbrellaClass:
         
         text_outputs = "".join(results)
         
-        return {"output": text_outputs, "token_count": len(results)}
+        call_results = {}
+        if not functions_available is None:
+            calls = find_function_calls(text_outputs)
+            calls_possible = [
+                e.name if isinstance(e, FunctionCallDefinition) else e["name"] 
+                for e in functions_available 
+            ]
+            calls = [e for e in calls if e["function"] in calls_possible]
+            call_results = {"function_calls": calls}
+            
+        
+        return {"output": text_outputs, "token_count": len(results), **call_results}
     
     def get_all_function_descriptions(self):
         """

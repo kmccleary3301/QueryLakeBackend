@@ -40,7 +40,6 @@ class EmbeddingDeployment:
     
     async def run(self, request_dict : Union[dict, List[str]]) -> List[List[float]]:
         
-        print("Running embedding class")
         if isinstance(request_dict, dict):
             inputs = request_dict["text"]
         else:

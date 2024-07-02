@@ -13,6 +13,67 @@ import re
 from ..web_search import web_search
 from ..user_auth import get_user_external_providers_dict
 
+search_func_def = {
+    "name": "search_database",
+    "description": "Perform a search of the database for information.",
+    "parameters": [
+        {
+            "name": "query",
+            "type": "str",
+            "description": "A topical search. Will be used to retrieve information from the database via term similarity. It's more effective to look up terms similar to a google search than an actual direct question.",
+        },
+        {
+            "name": "question",
+            "type": "str",
+            "description": "After retrieval using the query, results will be ranked by relevance to the true question using a reranker AI model. This is the question that will be used for reranking.",
+        }
+    ]
+}
+
+expand_source_func_def = {
+    "name": "expand_sources",
+    "description": "Expand a given source to include the text before and after the current content.",
+    "parameters": [
+        {
+            "name": "sources",
+            "type": "List[int]",
+            "description": "If you have sources listed as 'SOURCE_1', 'SOURCE_2', etc., you can expand them by providing a list of the source numbers. For example, 'SOURCE_1' would map to 1.",
+        }
+    ]
+}
+
+delete_sources_func_def = {
+    "name": "delete_sources",
+    "description": "Delete sources from the current working set of information to make room for new sources.",
+    "parameters": [
+        {
+            "name": "sources",
+            "type": "List[int]",
+            "description": "If you have sources listed as 'SOURCE_1', 'SOURCE_2', etc., you can delete them by providing a list of the source numbers. For example, 'SOURCE_1' would map to 1.",
+        }
+    ]
+}
+
+add_note_func_def = {
+    "name": "add_note",
+    "description": "If you've observed some type of pattern or information that could be useful for future searches relating to the current query, you can add a note.",
+    "parameters": [
+        {
+            "name": "note",
+            "type": "str",
+            "description": "Write your note down here. It will be stored for future reference.",
+        }
+    ]
+}
+
+exit_func_def = {
+    "name": "exit",
+    "description": "Exit the current search and return the current working set of information.",
+    "parameters": []
+}
+
+
+
 MULTI_STEP_SEARCH_PROMPT = """
 Your task is to compile information relevant to the question stated below.
 You are not to answer the question.
@@ -39,34 +100,12 @@ And here are the notes that have been made following previous commands.
 
 Your goal is to modify this information and currate new information to better answer the question.
 You cannot have more than 12 sources.
-You are to respond with a specific term to indicate your next action, and some arguments if applicable.
-Below are your options, written as the term you can use to respond and the effect it will have.
-Follow the examples as closely as possible.
 
-1.  SEARCH: Perform a search for information on the question. Arguments are required!
-    This requires two strings as inputs, a topical search similar to a Google search,
-    and a direct question for the search engine. This is because it works in two steps,
-    one with a lexical lookup and one that can evaluate the questions with the actual question in mind.
-    Example: (SEARCH: "1980s Soviet era video game design", "What was the influence of the Soviet Union on video game design in the 1980s?")
-   
-2.  EXPAND_SOURCE: If one of the provided sources seems relevant, expand the surrounding context.
-    Example: (EXPAND_SOURCE: "SOURCE_1")
-    
-3.  DELETE_SOURCES: If one of the provided sources seems irrelevant, delete it.
-    Example: (DELETE_SOURCES: "SOURCE_2", "SOURCE_3")
-    
-4.  NOTE: Add a note to the notes section to better guide future searches.
-    Example: (NOTE: "Soviet Union's influence on video game design in the 1980s centered on Tetris")
-    
-5.  EXIT: If you are satisfied with the information you have, respond with EXIT.
-    Example: (EXIT)
-
-Only these five commands are available. Do not make up your own commands.
-If the question doesn't require any information, call EXIT immediately.
-Your response must be formatted exactly like the examples, meaning it must be written as
-(ACTION: "ARGUMENT1", "ARGUMENT2", ...) if you are providing arguments.
-Try not to include anything else.
+Use the provided function calls to perform your actions.
+Do not do anything other than call the provided functions
 """
+
+all_functions_available = [search_func_def, expand_source_func_def, delete_sources_func_def, add_note_func_def, exit_func_def]
 
 async def llm_multistep_search(database : Session,
                                global_config : Config,
@@ -90,17 +129,19 @@ async def llm_multistep_search(database : Session,
     assert max_searches > 0, "You must have at least one search."
     assert max_searches < 20, "You cannot perform more than 20 search steps."
     
-    if len(collection_ids) == 0 and search_web is False:
-        return {"sources": [], "commands": [], "notes": "No collections provided and web search is disabled."}
-    
     if search_web:
         search_web = "Serper.dev" in get_user_external_providers_dict(database, auth)
+    
+    if len(collection_ids) == 0 and search_web is False:
+        return {"sources": [], "commands": [], "notes": "No collections provided and web search is disabled."}
     
     if model_choice is None:
         model_choice = global_config.default_models.llm
         
     max_actions = max_searches * 4
     llm_call = toolchain_function_caller("llm")
+    
+    logs = []
     
     standalone_question = await llm_isolate_question(database, 
                                                      global_config, 
@@ -109,23 +150,76 @@ async def llm_multistep_search(database : Session,
                                                      chat_history, 
                                                      model_choice)
     
-    print("GOT STANDALONE QUESTION:", standalone_question)
+    # print("GOT STANDALONE QUESTION:", standalone_question)
     
     if standalone_question is False:
         return {"sources": [], "commands": [], "notes": "Not a question or request."}
+    else:
+        logs.append({"action": "make_standalone_question", "content": standalone_question})
     
     primary_question : str = standalone_question["output"]
     
     notes, previous_commands, chunk_sizes = [], [], []
-    sources : List[DocumentEmbeddingDictionary] = []
+    sources_bank : List[DocumentEmbeddingDictionary] = []
     source_ids = []
     action_count, search_count = 0, 0
+    
+    
+    async def search_database(query: str, question: str):
+        nonlocal sources_bank, source_ids, chunk_sizes, logs, database
+        if search_web:
+            await web_search(database, toolchain_function_caller, auth, query, 10, web_timeout=web_timeout)
+        
+        search_results = await query_database(database,
+                                              auth,
+                                              toolchain_function_caller,
+                                              query,
+                                              collection_ids=collection_ids,
+                                              use_lexical=True,
+                                              use_embeddings=True,
+                                              use_web=search_web,
+                                              k=5)
+        
+        logs.append({"action": "search", "content": question})
+        new_sources = [source for source in search_results if source["id"] not in source_ids]
+        sources_bank += new_sources
+        source_ids += [source["id"] for source in new_sources]
+        chunk_sizes += [1 for _ in range(len(search_results))]
+        
+    async def expand_sources(sources):
+        nonlocal sources_bank, source_ids, chunk_sizes, logs, database
+        for source_number in sources:
+            sources_bank[source_number-1] = expand_source(database,
+                                                          auth,
+                                                          sources_bank[source_number-1]["id"],
+                                                          (-1, chunk_sizes[source_number-1]))
+    
+    async def delete_sources(sources):
+        nonlocal sources_bank, source_ids, chunk_sizes, logs, database
+        for source_number in sorted(sources, reverse=True):
+            sources_bank.pop(source_number-1)
+            source_ids.pop(source_number-1)
+            chunk_sizes.pop(source_number-1)
+            
+    async def add_note(note):
+        nonlocal notes, logs
+        notes.append(note)
+        
+    
+    function_map = {
+        "search_database": search_database,
+        "expand_sources": expand_sources,
+        "delete_sources": delete_sources,
+        "add_note": add_note,
+    }
+            
+        
     
     while (action_count < max_actions and search_count < max_searches):
         action_count += 1
         
-        sources_formatted = "\n\n".join(["SOURCE_%d\n\n%s" % (i+1, source["text"]) for i, source in enumerate(sources)]).strip() \
-            if len(sources) > 0 else "No sources have been provided."
+        sources_formatted = "\n\n".join(["SOURCE_%d\n\n%s" % (i+1, source["text"]) for i, source in enumerate(sources_bank)]).strip() \
+            if len(sources_bank) > 0 else "No sources have been provided."
         
         previous_searches_formatted = "\n".join(previous_commands).strip() \
             if len(previous_commands) > 0 else "No previous searches have been made."
@@ -142,128 +236,42 @@ async def llm_multistep_search(database : Session,
         
         current_response = await llm_call(
             auth=auth,
-            question=question_make,
+            chat_history= [
+                {"role": "system", "content": "You are a helpful search assistant. You only respond by making function calls using the provided functions."},
+                {"role": "user", "content": question_make}
+            ],
+            functions_available= all_functions_available,
             model_parameters={
                 "model_choice": model_choice,
                 "max_tokens": 200,
             }
         )
-        current_response = current_response["output"]
+        # current_response = current_response["output"]
+        print("GOT MULTISEARCH RESPONSE:", current_response)
         
-        print("RESPONSE:", current_response)
-        
-        if "SEARCH" in current_response:
-            search_count += 1
-            response_call : re.Match = re.search(r'SEARCH\:\s*(\"(.*?)\"\,?\s*)+', current_response)
-            if response_call is None:
-                previous_commands.append(f"INVALID COMMAND: {current_response}")
-                continue
-            response_string = response_call.group(0)
-            previous_commands.append(response_string)
-            queries = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
-            if len(queries) == 1:
-                if search_web:
-                    await web_search(database, toolchain_function_caller, auth, queries[0], 10, web_timeout=web_timeout)
-                
-                search_results = await query_database(database,
-                                                      auth,
-                                                      toolchain_function_caller,
-                                                      queries[0],
-                                                      collection_ids=collection_ids,
-                                                      use_lexical=True,
-                                                      use_embeddings=True,
-                                                      use_web=True,
-                                                      k=5)
-            elif len(queries) == 2:
-                if search_web:
-                    await web_search(database, toolchain_function_caller, auth, queries[1], 10)
-                search_results = await query_database(database,
-                                                      auth,
-                                                      toolchain_function_caller,
-                                                      queries[0],
-                                                      use_lexical=True,
-                                                      use_embeddings=True,
-                                                      use_web=True,
-                                                      collection_ids=collection_ids,
-                                                      k=5,
-                                                      use_rerank=True,
-                                                      minimum_relevance=1,
-                                                      rerank_question=queries[1])
-            else:
-                previous_commands.append(f"INVALID COMMAND: {current_response}")
-                continue
-            
-            new_sources = [source for source in search_results if source["id"] not in source_ids]
-            sources += new_sources
-            source_ids += [source["id"] for source in new_sources]
-            chunk_sizes += [1 for _ in range(len(search_results))]
-        elif "EXPAND_SOURCE" in current_response:
-            response_call : re.Match = re.search(r'EXPAND_SOURCE\:\s*(\"(.*?)\"\,?\s*)+', current_response)
-            if response_call is None:
-                previous_commands.append(f"INVALID COMMAND: {current_response}")
-                continue
-            response_string = response_call.group(1)
-            previous_commands.append(response_call.group(0))
-            search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
-            
-            for search_string in search_strings:
-                if re.search(r'SOURCE_\d+', search_string):
-                    source_number = int(search_string.replace("SOURCE_", "").strip(r"\"|\'|\s"))
-                    # print("SOURCE NUMBER:", source_number)
-                    sources[source_number-1] = expand_source(database,
-                                                            auth,
-                                                            sources[source_number-1]["id"],
-                                                            (-1, chunk_sizes[source_number-1]))
-                    chunk_sizes[source_number-1] += 2
-            
-        elif "DELETE_SOURCES" in current_response:
-            deletions = []
-            response_call : re.Match = re.search(r'DELETE_SOURCES\:\s*(\"(.*?)\"\,?\s*)+', current_response)
-            if response_call is None:
-                previous_commands.append(f"INVALID COMMAND: {current_response}")
-                continue
-            response_string = response_call.group(0)
-            previous_commands.append(response_string)
-            search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
-            for search_string in search_strings:
-                if re.search(r'SOURCE_\d+', search_string):
-                    source_number = int(search_string.replace("SOURCE_", "").strip(r"\"|\'|\s"))
-                    # print("SOURCE NUMBER:", source_number)
-                    deletions.push(source_number)
-                    
-            deletions = sorted(deletions, reverse=True)
-            for deletion in deletions:
-                sources.pop(deletion-1)
-                chunk_sizes.pop(deletion-1)
-        
-        elif "NOTE" in current_response:
-            response_call : re.Match = re.search(r'NOTE\:\s*(\"(.*?)\"\,?\s*)+', current_response)
-            if response_call is None:
-                previous_commands.append(f"INVALID COMMAND: {current_response}")
-                continue
-            response_string = response_call.group(0)
-            previous_commands.append(response_string)
-            search_strings = [e.group(0).strip("\"") for e in list(re.finditer(r'\"(.*?)\"', response_string))]
-            if len(search_strings) > 0:
-                notes.append(search_strings[0])
-                # print(search_strings[0])
-        
-        elif "EXIT" in current_response:
-            return sources
+        if "function_calls" in current_response and len(current_response["function_calls"]) > 0:
+            call = current_response["function_calls"][0]
+            function_name = call["function"]
+            if function_name == "exit":
+                break
+            await function_map[function_name](**call["arguments"])
+            if function_name == "search_database":
+                search_count += 1
         else:
-            previous_commands.append(f"INVALID COMMAND: {current_response}")
+            assert False, "No function calls were made by the model."
     
-    if len(sources) > 0:
+    
+    if len(sources_bank) > 0:
         rerank_scores = await toolchain_function_caller("rerank")(
             auth,
-            [(primary_question, source["text"]) for source in sources]
+            [(primary_question, source["text"]) for source in sources_bank]
         )
-        for i in range(len(sources)):
-            sources[i]["rerank_score"] = rerank_scores[i]
+        for i in range(len(sources_bank)):
+            sources_bank[i]["rerank_score"] = rerank_scores[i]
     
     # sources = [s for s in sources if s["rerank_score"] > minimum_relevance]
-    sources = sorted(sources, key=lambda x: x["rerank_score"], reverse=True)
+    sources_bank = sorted(sources_bank, key=lambda x: x["rerank_score"], reverse=True)
     
-    return {"sources": sources, "commands": previous_commands, "notes": notes}
+    return {"sources": sources_bank, "commands": previous_commands, "logs": logs, "notes": notes}
     
     
