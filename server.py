@@ -14,6 +14,7 @@ from copy import deepcopy
 
 from QueryLake.api import api
 from QueryLake.database import database_admin_operations, encryption, sql_db_tables
+from QueryLake.database.create_db_session import initialize_database_engine
 from threading import Timer
 
 from contextlib import asynccontextmanager
@@ -153,10 +154,7 @@ class UmbrellaClass:
         self.rerank_handle = rerank_handle
         self.web_scraper_handle = web_scraper_handle
         
-        self.engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
-        
-        SQLModel.metadata.create_all(self.engine)
-        self.database = Session(self.engine)
+        self.database = initialize_database_engine()
         
         database_admin_operations.add_models_to_database(self.database, self.config.models)
         database_admin_operations.add_toolchains_to_database(self.database, self.toolchain_configs)
