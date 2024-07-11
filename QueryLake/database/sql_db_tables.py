@@ -2,7 +2,7 @@ from typing import Optional, List, Literal, Tuple, Union
 from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON, LargeBinary
 
 from sqlalchemy.sql.schema import Column
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
 from sqlalchemy import event, text
 
 from sqlalchemy.sql import func
@@ -18,6 +18,7 @@ import re
 from psycopg2.errors import InFailedSqlTransaction
 from functools import partial
 from time import time
+import inspect
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
@@ -46,7 +47,7 @@ class ApiKey(SQLModel, table=True):
     # This will be the password prehash encrypted with the api key.
     user_password_prehash_encrypted: str
 
-class DocumentEmbedding(SQLModel, table=True):
+class DocumentChunk(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
     creation_timestamp: Optional[float] = Field(default_factory=time)
     collection_type: Optional[str] = Field(index=True, default=None)
@@ -59,16 +60,32 @@ class DocumentEmbedding(SQLModel, table=True):
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
     private: bool = Field(default=False)
     
+    md: dict = Field(sa_column=Column(JSONB), default={})
     text: str = Field()
     # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
     ts_content: str = Field(sa_column=Column(TSVECTOR))
 
+CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
 
+CREATE_BM25_INDEX_SQL = """
+CALL paradedb.create_bm25(
+	index_name => 'search_&CHUNK_CLASS_NAME&_idx',
+	table_name => '&CHUNK_CLASS_NAME&',
+	key_field => 'id',
+	text_fields => '{
+		text: {tokenizer: {type: "en_stem"}},
+        document_id: {},
+        website_url: {},
+        parent_collection_hash_id: {}
+	}',
+    json_fields => '{"md": {}}'
+);
+""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
 # You never need to pass ts_content to DocumentEmbedding, as this will automatically
 # derive it from `text` using a trigger.
 # It also adds an index on ts_content for faster searching.
-trigger = DDL("""
+trigger = DDL(f"""
 CREATE OR REPLACE FUNCTION update_ts_content()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -77,15 +94,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS update_ts_content_trigger ON documentembedding;
+DROP TRIGGER IF EXISTS update_ts_content_trigger ON {CHUNK_CLASS_NAME};
 
 CREATE TRIGGER update_ts_content_trigger
-BEFORE INSERT OR UPDATE ON documentembedding
+BEFORE INSERT OR UPDATE ON {CHUNK_CLASS_NAME}
 FOR EACH ROW EXECUTE FUNCTION update_ts_content();
 
-CREATE INDEX IF NOT EXISTS ts_content_gin ON documentembedding USING gin(ts_content);
+CREATE INDEX IF NOT EXISTS ts_content_gin ON {CHUNK_CLASS_NAME} USING gin(ts_content);
 """)
-event.listen(DocumentEmbedding.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
+event.listen(DocumentChunk.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
 
 
 class DocumentEmbeddingDictionary(BaseModel):
@@ -154,7 +171,7 @@ def search_embeddings_lexical(database: Session,
                 ts_rank_cd(ts_content, query) AS rank,
                 ts_headline(text, query) AS headline,
                 creation_timestamp
-            FROM documentembedding,
+            FROM {CHUNK_CLASS_NAME},
                 to_tsquery(:search_string) query
             {where_clause}
             ORDER BY rank DESC

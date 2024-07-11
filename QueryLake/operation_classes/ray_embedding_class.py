@@ -28,8 +28,9 @@ class EmbeddingDeployment:
         print("Handling batch of size", len(inputs))
         sentence_embeddings = self.model.encode(
             inputs,
+            batch_size=4,
             # max_length=8192,
-            max_length=4096,
+            max_length=1024
         )['dense_vecs']
         embed_list = sentence_embeddings.tolist()
         print("Done handling batch of size", len(inputs))

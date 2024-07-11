@@ -16,34 +16,20 @@ SELECT EXISTS (
     SELECT 1
     FROM   pg_class c
     JOIN   pg_namespace n ON n.oid = c.relnamespace
-    WHERE  c.relname = 'documentembedding_vector_cos_idx'
+    WHERE  c.relname = '&CHUNK_CLASS_NAME&_vector_cos_idx'
     AND    n.nspname = 'public'  -- or your schema name here
 );
-"""
+""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
 CREATE_VECTOR_INDEX_SQL = """
 DO $$
 BEGIN
-	EXECUTE 'CREATE INDEX documentembedding_vector_cos_idx ON documentembedding
+	EXECUTE 'CREATE INDEX &CHUNK_CLASS_NAME&_vector_cos_idx ON &CHUNK_CLASS_NAME&
 				USING hnsw (embedding vector_cosine_ops)
 				WITH (m = 16, ef_construction = 64);';
 END
 $$;
-"""
-
-CREATE_BM25_INDEX_SQL = """
-CALL paradedb.create_bm25(
-	index_name => 'ql_search_idx',
-	table_name => 'documentembedding',
-	key_field => 'id',
-	text_fields => '{
-		text: {tokenizer: {type: "en_stem"}},
-        document_id: {},
-        website_url: {},
-        parent_collection_hash_id: {}
-	}'
-);
-"""
+""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
 def check_index_created(database: Session):
     result = database.exec(text(CHECK_INDEX_EXISTS_SQL))

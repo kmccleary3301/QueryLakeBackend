@@ -6,7 +6,7 @@ from .text_chunking.character import RecursiveCharacterTextSplitter
 from .text_chunking.markdown import MarkdownTextSplitter
 from .text_chunking.document_class import Document
 # from chromadb.api import ClientAPI
-from ..database.sql_db_tables import document_raw, DocumentEmbedding, search_embeddings_lexical, DocumentEmbeddingDictionary
+from ..database.sql_db_tables import document_raw, DocumentChunk, search_embeddings_lexical, DocumentEmbeddingDictionary
 from ..api.hashing import random_hash, hash_function
 from ..api.single_user_auth import get_user
 from typing import List, Callable, Any, Union, Awaitable, Tuple
@@ -169,7 +169,7 @@ async def create_text_embeddings(database : Session,
     embeddings = await embedding_call(auth, splits_text)
 
     for i, vec in enumerate(embeddings):
-        embedding_db_entry = DocumentEmbedding(
+        embedding_db_entry = DocumentChunk(
             collection_type=collection_type,
             document_id=document_sql_entry.hash_id,
             document_chunk_number=i,
@@ -227,7 +227,7 @@ async def create_website_embeddings(database : Session,
 
     for i in range(len(embeddings)):
         
-        document_db_entry = DocumentEmbedding(
+        document_db_entry = DocumentChunk(
             document_name=splits_metadata[i]["website_short"],
             website_url=splits_metadata[i]["url"],
             embedding=embeddings[i],
@@ -302,10 +302,10 @@ async def query_database(database : Session ,
     
     if isinstance(query, str):
         query_embeddings = await embedding_call(auth, [query])
-        ordering = DocumentEmbedding.embedding.cosine_distance(query_embeddings[0])
+        ordering = DocumentChunk.embedding.cosine_distance(query_embeddings[0])
     else:
         query_embeddings = await embedding_call(auth, query)
-        cosine_distances = [DocumentEmbedding.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
+        cosine_distances = [DocumentChunk.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
         ordering = func.greatest(*cosine_distances)
     
     
@@ -313,15 +313,15 @@ async def query_database(database : Session ,
     
     if len(collection_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_ids)
+            *(DocumentChunk.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_ids)
         )
     else:
-        lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_ids[0])
+        lookup_sql_condition = (DocumentChunk.parent_collection_hash_id == collection_ids[0])
         
     if use_web:
         lookup_sql_condition = or_(
             lookup_sql_condition,
-            not_(DocumentEmbedding.website_url == None)
+            not_(DocumentChunk.website_url == None)
         )    
     
     
@@ -332,7 +332,7 @@ async def query_database(database : Session ,
         # The embedding search will now exclude our results from lexical search.
         lookup_sql_condition = and_(
             lookup_sql_condition,
-            not_(or_(*[(DocumentEmbedding.id == e.id) for (e, _, _) in results_lexical]))
+            not_(or_(*[(DocumentChunk.id == e.id) for (e, _, _) in results_lexical]))
         ) if len(results_lexical) > 0 else lookup_sql_condition
         first_lookup_results.extend([e for (e, _, _) in results_lexical])
     
@@ -346,13 +346,13 @@ async def query_database(database : Session ,
     if not use_embeddings:
         first_pass_results = first_lookup_results
     else:
-        selection = select(DocumentEmbedding).where(lookup_sql_condition) \
+        selection = select(DocumentChunk).where(lookup_sql_condition) \
                                     .order_by(
                                         ordering
                                     ) \
                                     .limit(first_pass_k_embedding)
         
-        first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+        first_pass_results : List[DocumentChunk] = database.exec(selection)
         
         first_pass_results : List[DocumentEmbeddingDictionary] = list(map(
             lambda x: DocumentEmbeddingDictionary(**{
@@ -418,15 +418,15 @@ async def keyword_query(database : Session ,
     
     if len(collection_hash_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentEmbedding.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
+            *(DocumentChunk.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
         )
     else:
         
-        lookup_sql_condition = (DocumentEmbedding.parent_collection_hash_id == collection_hash_ids[0])
+        lookup_sql_condition = (DocumentChunk.parent_collection_hash_id == collection_hash_ids[0])
 
-    selection = select(DocumentEmbedding).where(lookup_sql_condition).limit(k)
+    selection = select(DocumentChunk).where(lookup_sql_condition).limit(k)
     
-    first_pass_results : List[DocumentEmbedding] = database.exec(selection)
+    first_pass_results : List[DocumentChunk] = database.exec(selection)
     
     new_docs_dict = {} # Remove duplicates
     for i, doc in enumerate(first_pass_results):
@@ -462,18 +462,18 @@ def expand_source(database : Session,
     assert range[0] < 0, "Range start must be less than 0."
     assert range[1] > 0, "Range end must be greater than 0."
     
-    main_chunk = database.exec(select(DocumentEmbedding).where(DocumentEmbedding.id == chunk_id)).first()
+    main_chunk = database.exec(select(DocumentChunk).where(DocumentChunk.id == chunk_id)).first()
     
     assert not main_chunk is None, "Chunk not found"
     main_chunk_index = main_chunk.document_chunk_number
     
-    chunk_range : List[DocumentEmbedding] = database.exec(select(DocumentEmbedding).where(and_(
-        DocumentEmbedding.document_id == main_chunk.document_id,
-        DocumentEmbedding.document_chunk_number >= main_chunk_index + range[0],
-        DocumentEmbedding.document_chunk_number <= main_chunk_index + range[1],
+    chunk_range : List[DocumentChunk] = database.exec(select(DocumentChunk).where(and_(
+        DocumentChunk.document_id == main_chunk.document_id,
+        DocumentChunk.document_chunk_number >= main_chunk_index + range[0],
+        DocumentChunk.document_chunk_number <= main_chunk_index + range[1],
     ))).all()
     
-    chunk_range : List[DocumentEmbedding] = sorted(chunk_range, key=lambda x: x.document_chunk_number)
+    chunk_range : List[DocumentChunk] = sorted(chunk_range, key=lambda x: x.document_chunk_number)
     
     chunks_of_text = [chunk.text for chunk in chunk_range]
     

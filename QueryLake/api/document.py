@@ -191,7 +191,7 @@ def delete_document(database : Session,
         
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
 
-    document_embeddings = database.exec(select(sql_db_tables.DocumentEmbedding).where(sql_db_tables.DocumentEmbedding.document_id == hash_id)).all()
+    document_embeddings = database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id)).all()
     for e in document_embeddings:
         database.delete(e)
     database.commit()
