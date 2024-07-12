@@ -226,10 +226,22 @@ class UmbrellaClass:
     
     async def rerank_call(self, 
                           auth : AuthType,
-                          inputs : List[Tuple[str, str]]):
+                          inputs : Union[List[Tuple[str, str]], Tuple[str, str]],
+                          normalize : Union[bool, List[bool]] = True):
         assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
         (user, user_auth) = api.get_user(self.database, auth)
-        return await self.rerank_handle.run.remote({"text": inputs})
+        
+        if isinstance(inputs, list):
+            if not isinstance(normalize, list):
+                normalize = [normalize for _ in range(len(inputs))]
+            assert len(normalize) == len(inputs), \
+                "All input lists must be the same length"
+            return await gather(*[self.rerank_handle.run.remote(
+                inputs[i],
+                normalize=normalize[i]
+            ) for i in range(len(inputs))])
+        else:
+            return await self.rerank_handle.run.remote(inputs, normalize=normalize)
     
     async def web_scrape_call(self, 
                               auth : AuthType,

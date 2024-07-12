@@ -16,23 +16,34 @@ from ..database.sql_db_tables import CHUNK_CLASS_NAME
 class DocumentChunkDictionary(BaseModel):
     id: str
     creation_timestamp: float
-    collection_type: Optional[str]
-    document_id: Optional[str]
-    document_chunk_number: Optional[int]
-    document_integrity: Optional[str]
-    parent_collection_hash_id: Optional[str]
+    collection_type: Optional[Union[str, None]]
+    document_id: Optional[Union[str, None]]
+    document_chunk_number: Optional[Union[int, None]]
+    document_integrity: Optional[Union[str, None]]
+    parent_collection_hash_id: Optional[Union[str, None]]
     document_name: str
-    website_url : Optional[str]
-    embedding: List[float]
+    website_url : Optional[Union[str, None]]
     private: bool
     md: dict
     text: str
 
+chunk_dict_arguments = ["id", "creation_timestamp", "collection_type", 
+                        "document_id", "document_chunk_number", "document_integrity", 
+                        "parent_collection_hash_id", "document_name", "website_url", 
+                        "private", "md", "text"]
+    
+
 def convert_query_result(query_results: tuple):
-    return DocumentChunkDictionary(*query_results)
+    wrapped_args = {k: v for k, v in zip(chunk_dict_arguments, query_results)}
+    try:
+        return DocumentChunkDictionary(**wrapped_args)
+    except Exception as e:
+        print("Error with result tuple:", query_results)
+        print("Error with wrapped args:", wrapped_args)
+        raise e
 
 def search_hybrid(database: Session,
-                  search_query: Union[str, List[str]],
+                  query: Union[str, List[str]],
                   embedding: List[float],
                   collection_ids: List[str] = [],
                   limit_bm25: int = 10,
@@ -56,19 +67,23 @@ def search_hybrid(database: Session,
         "limit_similarity must be an int between 0 and 200"
     
     # Prevent SQL injection with the collection ids.
-    collection_ids = list(map(lambda x: re.sub(r"(^[a-zA-Z0-9]+)", "", x), collection_ids))
+    collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
     
     if web_search:
         collection_ids.append(["WEB"])
     
-    formatted_query = parse_search(search_query)
+    formatted_query = parse_search(query, catch_all_fields=["text"])
+    
+    print("Formatted query:", formatted_query)
     
     STMT = text(f"""
-	SELECT m.*
+	SELECT m.id, m.creation_timestamp, m.collection_type, m.document_id, 
+           m.document_chunk_number, m.document_integrity, m.parent_collection_hash_id, 
+           m.document_name, m.website_url, m.private, m.md, m.text
 	FROM {CHUNK_CLASS_NAME} m
 	RIGHT JOIN (
-		SELECT * FROM search_chunk_collection_idx.rank_hybrid(
-			bm25_query => paradedb.parse('parent_collection:IN {str(collection_ids).replace("'", "")} AND ({formatted_query})'),
+		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.rank_hybrid(
+			bm25_query => paradedb.parse('parent_collection_hash_id:IN {str(collection_ids).replace("'", "")} AND ({formatted_query})'),
 			similarity_query => '':embedding_in' <=> embedding',
 			bm25_weight => :bm25_weight,
 			similarity_weight => :similarity_weight,
@@ -86,11 +101,71 @@ def search_hybrid(database: Session,
     )
     
     if return_statement:
-        return STMT.compile(compile_kwargs={"literal_binds": True})
+        return str(STMT.compile(compile_kwargs={"literal_binds": True}))
 
     try:
         results = database.exec(STMT)
-        results = list(map(lambda x: convert_query_result(x[1:]), list(results)))
+        results = list(map(lambda x: convert_query_result(x), list(results)))
+        database.rollback()
+        return results
+    except Exception as e:
+        database.rollback()
+        raise e
+    
+def search_bm25(database: Session,
+                query: str,
+                collection_ids: List[str] = [],
+                limit: int = 10,
+                offset: int = 0,
+                web_search : bool = False,
+                ) -> List[DocumentChunkDictionary]:
+    
+    assert (len(collection_ids) > 0 or web_search), \
+        "Either web search must be enabled or at least one collection must be specified"
+    
+    assert (isinstance(limit, int) and limit >= 0 and limit <= 200), \
+        "limit must be an int between 0 and 200"
+    
+    assert (isinstance(offset, int) and offset >= 0), \
+        "offset must be an int greater than 0"
+    
+    # Prevent SQL injection with the collection ids.
+    collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
+    
+    if web_search:
+        collection_ids.append(["WEB"])
+    
+    collection_string = str(collection_ids).replace("'", "")
+    
+    formatted_query = parse_search(query, catch_all_fields=["text"])
+    unique_alias = "temp_alias"
+    
+    print("Formatted query:", formatted_query)
+    print(f'parent_collection_hash_id:IN {collection_string} AND {formatted_query}')
+    
+    STMT = text(f"""
+	SELECT id, creation_timestamp, collection_type, document_id, 
+           document_chunk_number, document_integrity, parent_collection_hash_id, 
+           document_name, website_url, private, md, text, 
+           paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
+	FROM search_documentchunk_idx.search(
+     	query => paradedb.parse('parent_collection_hash_id:IN {collection_string} AND {formatted_query}'),
+		offset_rows => :offset,
+		limit_rows => :limit,
+		alias => '{unique_alias}'
+    )
+ 	LIMIT :limit;
+	""").bindparams(
+        limit=limit,
+        offset=offset,
+    )
+    
+    try:
+        results = database.exec(STMT)
+        results = list(results)
+        for e in results:
+            print(e)
+        results = list(map(lambda x: convert_query_result(x[:-2]), results))
         database.rollback()
         return results
     except Exception as e:

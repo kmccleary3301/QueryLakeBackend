@@ -63,7 +63,6 @@ def create_document_collection(database : Session,
 
         new_collection = sql_db_tables.organization_document_collection(
             name=name,
-            hash_id=hash_id,
             author_organization_id=organization_id,
             creation_timestamp=time.time(),
             public=public,
@@ -72,7 +71,6 @@ def create_document_collection(database : Session,
     else:
         new_collection = sql_db_tables.user_document_collection(
             name=name,
-            hash_id=hash_id,
             author_user_name=user_auth.username,
             creation_timestamp=time.time(),
             public=public,
@@ -82,7 +80,7 @@ def create_document_collection(database : Session,
     database.commit()
     database.flush()
     # return {"success": True, "hash_id": new_collection.hash_id}
-    return {"hash_id": new_collection.hash_id}
+    return {"hash_id": new_collection.id}
 
 def fetch_all_collections(database : Session, 
                           auth : AuthType):
@@ -106,7 +104,7 @@ def fetch_all_collections(database : Session,
         organization_collections[organization.id] = {"name": organization.name, "collections": []}
         for collection in collections:
             organization_collections[organization.id]["collections"].append({
-                "hash_id": collection.hash_id,
+                "hash_id": collection.id,
                 "name": collection.name,
                 "document_count": collection.document_count,
                 "type": "organization",
@@ -116,7 +114,7 @@ def fetch_all_collections(database : Session,
     for collection in global_collections:
         return_value["global_collections"].append({
             "name": collection.name,
-            "hash_id": collection.hash_id,
+            "hash_id": collection.id,
             "document_count": collection.document_count,
             "type": "global"
         })
@@ -124,7 +122,7 @@ def fetch_all_collections(database : Session,
     for collection in user_collections:
         return_value["user_collections"].append({
             "name": collection.name,
-            "hash_id": collection.hash_id,
+            "hash_id": collection.id,
             "document_count": collection.document_count,
             "type" : "user"
         })
@@ -143,13 +141,13 @@ def fetch_collection(database : Session,
     assert collection_type in ["user", "organization", "global"], "Invalid collection type"
     (user, user_auth) = get_user(database, auth)
     if collection_type == "user":
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.hash_id == collection_hash_id))).first()
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.id == collection_hash_id))).first()
         if collection.public == False:
             assert collection.author_user_name == user_auth.username, "User not authorized to view collection"
         documents = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.user_document_collection_hash_id == collection_hash_id)).all()
         owner = "personal"
     else:
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
         user_membership = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization_id,
                                                                                           sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(user_membership) > 0 or collection.public == True, "User not authorized to view collection"
@@ -192,17 +190,17 @@ def modify_document_collection(database : Session,
     (user, user_auth) = get_user(database, auth)
 
     if collection_type == "user":
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.hash_id == collection_hash_id))).first()
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.id == collection_hash_id))).first()
         if collection.public == False:
             assert collection.author_user_name == user_auth.username, "User not authorized to modify collection"
     elif collection_type == "organization":
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization_id,
                                                                                           sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 or collection.public == True, "User not authorized to modify collection"
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized to modify collection"
     else:
-        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.hash_id == collection_hash_id)).first()
+        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized to modify collection"
 
     if not title is None:

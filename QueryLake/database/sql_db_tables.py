@@ -23,10 +23,13 @@ import inspect
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
 
+def random_hash_32():
+    return random_hash(32, 62)
+
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
 class UsageTally(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     start_timestamp: float = Field(index=True)
     window: str # "hour" | "day" | "week" | "month"
     organization_id: Optional[str] = Field(foreign_key="organization.id", index=True)
@@ -35,7 +38,7 @@ class UsageTally(SQLModel, table=True):
     value : str # JSON of tallies.
 
 class ApiKey(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     key_hash: str = Field(index=True, unique=True)
     creation_timestamp: float
     last_used: Optional[float] = Field(default=None)
@@ -48,7 +51,7 @@ class ApiKey(SQLModel, table=True):
     user_password_prehash_encrypted: str
 
 class DocumentChunk(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     creation_timestamp: Optional[float] = Field(default_factory=time)
     collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None, index=True)
@@ -66,6 +69,7 @@ class DocumentChunk(SQLModel, table=True):
     ts_content: str = Field(sa_column=Column(TSVECTOR))
 
 CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
+CHUNK_INDEXED_COLUMNS = ["text", "document_id", "website_url", "parent_collection_hash_id", "md"]
 
 CREATE_BM25_INDEX_SQL = """
 CALL paradedb.create_bm25(
@@ -205,7 +209,7 @@ def search_embeddings_lexical(database: Session,
         raise Exception("Database transaction failed. Please try again.")
 
 class ToolchainSessionFileOutput(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     creation_timestamp: float
     file_name: Optional[str] = Field(default=None)
     file_data: bytes = Field(sa_column=Column(LargeBinary))
@@ -224,19 +228,19 @@ class toolchain_session(SQLModel, table=True):
     first_event_fired: Optional[bool] = Field(default=False, index=True)
 
 class toolchain(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     toolchain_id: str = Field(index=True, unique=True)
     title: str
     category: str
     content: str #JSON loads this portion.
 
 class document_access_token(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     hash_id: str = Field(index=True, unique=True)
     expiration_timestamp: float
 
 class model(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     name: str = Field(index=True, unique=True)
     path_on_server: str
     quantization: Optional[str] = Field(default=None) # Only qunatization supported by vLLM, "awq" | "gptq" | "squeezellm"
@@ -307,7 +311,7 @@ class user(SQLModel, table=True):
     but it is critical for decrypting user data since it is used to encrypt the user's private key.
     """
     
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     name: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default="", index=True)
     password_hash: str
@@ -320,7 +324,7 @@ class user(SQLModel, table=True):
     external_providers_encrypted: Optional[str] = Field(default=None)   # Encrypted with salt(password_prehash, encryption_salt), is a JSON string.
 
 class organization(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     hash_id: str = Field(index=True, unique=True)
     name: str
     creation_timestamp: float
@@ -359,16 +363,16 @@ class model_query_raw(SQLModel, table=True):
     organization_id: Optional[str] = Field(default=None, foreign_key="organization.id", index=True)
 
 class document_raw(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     hash_id: str = Field(index=True, unique=True)
     file_name: str
     creation_timestamp: float
     integrity_sha256: str = Field(index=True)
     size_bytes: int
     encryption_key_secure: Optional[str] = Field(default=None)
-    organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.hash_id", index=True)
-    user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.hash_id", index=True)
-    global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.hash_id", index=True)
+    organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.id", index=True)
+    user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.id", index=True)
+    global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.id", index=True)
     toolchain_session_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.id", index=True)
     
     website_url: Optional[str] = Field(default=None)
@@ -379,8 +383,8 @@ class document_raw(SQLModel, table=True):
 
 
 class organization_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    hash_id: str = Field(index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    # hash_id: Optional[str] = Field(index=True, unique=True, default_factory=random_hash_20)
     name: str
     author_organization_id: str = Field(foreign_key="organization.id", index=True)
     creation_timestamp: float
@@ -389,8 +393,8 @@ class organization_document_collection(SQLModel, table=True):
     document_count: int = Field(default=0)
 
 class user_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    hash_id: str = Field(index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    # hash_id: Optional[str] = Field(index=True, unique=True, default_factory=random_hash_20)
     name: str
     author_user_name: str = Field(foreign_key="user.name", index=True)
     creation_timestamp: float
@@ -399,14 +403,14 @@ class user_document_collection(SQLModel, table=True):
     document_count: int = Field(default=0)
 
 class global_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
-    hash_id: str = Field(index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    # hash_id: str = Field(index=True, unique=True)
     name: str
     description: Optional[str] = Field(default="")
     document_count: int = Field(default=0)
 
 class organization_membership(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     role: str # "owner" | "admin" | "member" | "viewer"
     organization_id: str = Field(foreign_key="organization.id", index=True)
     user_name: str = Field(foreign_key="user.name", index=True)
@@ -420,12 +424,12 @@ class organization_membership(SQLModel, table=True):
     invite_still_open: Optional[bool] = Field(default=True)
 
 class view_priviledge(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     user_document_collection_id: str = Field(foreign_key="user_document_collection.id", index=True)
     added_user_name: str = Field(foreign_key="user.name", index=True)
 
 class collaboration(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     organization_document_collection_id: str = Field(foreign_key="organization_document_collection.id", index=True)
     added_organization_id: str = Field(foreign_key="organization.id", index=True)
     write_priviledge: Optional[bool] = Field(default=False)

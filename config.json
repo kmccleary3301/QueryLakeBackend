@@ -40,7 +40,7 @@
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
             "quantization": "awq",
             "max_model_len": 8192,
-            "system_path": "/home/kmccleary/projects/AI_models/llama-3-8b-instruct-awq",
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/llama-3-8b-instruct-awq",
             "default_parameters": {
                 "max_tokens": 4096, 
                 "temperature": 0.5, 
@@ -107,14 +107,14 @@
             {
                 "name": "BAAI M2 Reranker",
                 "id": "bge-reranker-v2-m3",
-                "source": "/home/kmccleary/projects/AI_models/bge-reranker-v2-m3"
+                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-reranker-v2-m3"
             }
         ],
         "embedding_models": [
             {
                 "name": "BAAI M2 Embedding",
                 "id": "bge-m3",
-                "source": "/home/kmccleary/projects/AI_models/bge-m3"
+                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-m3"
             }
         ]
     }

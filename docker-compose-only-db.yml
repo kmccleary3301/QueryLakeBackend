@@ -1,15 +1,20 @@
 services:
   postgres_db:
-    image: ankane/pgvector
+    image: paradedb/paradedb:latest
     restart: always
+    # container_name: paradedb
     environment:
-      - POSTGRES_DB=server_database
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin # Doesn't matter, as the DB will only be accessible from the backend
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      POSTGRESQL_USERNAME: admin
+      POSTGRESQL_PASSWORD: admin
+      POSTGRESQL_DATABASE: server_database
+      POSTGRESQL_POSTGRES_PASSWORD: admin # Password for the superuser, required to install ParadeDB extensions
+      # PARADEDB_TELEMETRY: true # Set to 'false' (or remove) to disable anonymous telemetry
+    ports:
+      - "5432:5432"
     volumes:
-     - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-     - ./db_data:/var/lib/postgresql/data
-    # Uncomment if you want to access the DB from outside the docker network
-    ports: 
-      - 5432:5432
+      # - paradedb_data:/bitnami/postgresql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db_data:/var/lib/postgresql/data
+
+volumes:
+  paradedb_data:

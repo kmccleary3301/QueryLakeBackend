@@ -43,19 +43,19 @@ def F(x):
 
     return result
 
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 2}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.1, "num_cpus": 2}, max_replicas_per_node=1)
 class RerankerDeployment:
     def __init__(self, model_key: str):
         print("INITIALIZING RERANKER DEPLOYMENT")
         self.tokenizer = AutoTokenizer.from_pretrained(model_key)
-        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.device = "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
         self.model = AutoModelForSequenceClassification.from_pretrained(model_key).to(self.device)
         print("DONE INITIALIZING RERANKER DEPLOYMENT")
         # self.model = FlagReranker(model_key, use_fp16=True)
     
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, inputs: List[Tuple[str, str]]) -> List[float]:
+    async def handle_batch(self, inputs: List[Tuple[str, str]], normalize = List[bool]) -> List[float]:
         
         with torch.no_grad():
             start_time = time.time()
@@ -66,16 +66,11 @@ class RerankerDeployment:
             print("Time taken for rerank inference:", time_taken_model, time_taken_tokens)
         
         scores = torch.exp(torch.tensor(scores.clone().detach()))
-        scores = F(scores)
+        scores_normed = F(scores)
+        scores = list(map(lambda x: scores_normed[x] if x else scores[x], normalize))
         
-        return scores.tolist()
+        return scores
 
-    async def run(self, request : Union[dict, List[Tuple[str, str]]]) -> List[List[float]]:
-        
-        if isinstance(request, dict):
-            inputs = request["text"]
-        else:
-            inputs = request
-        
+    async def run(self, input: Tuple[str, str], normalize : bool = True) -> List[List[float]]:
         # Fire them all off at once and get the coroutines, but await them as a list.
-        return await gather(*[self.handle_batch(e) for e in inputs])
+        return await self.handle_batch(input, normalize)

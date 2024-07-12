@@ -1,6 +1,5 @@
 import time
 import random
-from faker import Faker
 from typing import Optional
 from sqlmodel import Field, SQLModel, Session, create_engine
 from sqlalchemy import Column, DDL, event, text, Index

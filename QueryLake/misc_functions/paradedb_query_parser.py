@@ -1,14 +1,15 @@
 import re
 from typing import List
+from ..database.sql_db_tables import CHUNK_INDEXED_COLUMNS
 
-VALID_FIELDS = ["content", "parent_collection", "md"]
+VALID_FIELDS = CHUNK_INDEXED_COLUMNS
 
-def parse_search(text_in: str, catch_all_fields: List[str] = ["content"]):
+def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 	TWO_SEQUENCE_SLOP = 2
 	THREE_SEQUENCE_SLOP = 3
     
-	TWO_SEQUENCE_BOOST = 2
-	THREE_SEQUENCE_BOOST = 3
+	TWO_SEQUENCE_BOOST = 3
+	THREE_SEQUENCE_BOOST = 5
     
 	assert all([f in VALID_FIELDS for f in catch_all_fields]), f"Invalid field in catch_all_fields. Valid fields are: {VALID_FIELDS}"	
  
