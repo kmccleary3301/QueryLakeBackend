@@ -63,11 +63,12 @@ class RerankerDeployment:
             mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
             time_taken_model, time_taken_tokens = time.time() - mid_time, mid_time - start_time
-            print("Time taken for rerank inference:", time_taken_model, time_taken_tokens)
+            print("Time taken for rerank inference: %.2f s + %.2f s = %.2f s" % (time_taken_model, time_taken_tokens, time_taken_model + time_taken_tokens))
         
-        scores = torch.exp(torch.tensor(scores.clone().detach()))
+        scores = torch.exp(scores.clone().detach())
         scores_normed = F(scores)
-        scores = list(map(lambda x: scores_normed[x] if x else scores[x], normalize))
+        
+        scores = list(map(lambda x: float(scores_normed[x]) if normalize[x] else float(scores[x]), list(range(len(scores)))))
         
         return scores
 

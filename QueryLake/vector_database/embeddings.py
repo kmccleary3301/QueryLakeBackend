@@ -358,7 +358,7 @@ async def query_database(database : Session ,
             lambda x: DocumentEmbeddingDictionary(**{
                 key : v \
                 for key, v in x.__dict__.items() \
-                if key in DocumentEmbeddingDictionary.__fields__.keys()
+                if key in DocumentEmbeddingDictionary.model_fields.keys()
             }),
             first_pass_results
         ))
