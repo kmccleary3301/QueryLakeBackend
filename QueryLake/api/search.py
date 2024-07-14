@@ -63,6 +63,8 @@ async def search_hybrid(database: Session,
                         web_search : bool = False,
                         rerank : bool = False,
                         ) -> List[DocumentChunkDictionary]:
+    # TODO: Check permissions on specified collections.
+    
     
     (_, _) = get_user(database, auth)
     

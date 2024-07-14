@@ -105,7 +105,7 @@ def get_user(database : Session,
         pwd_hash : str = payload.get("pwd_hash")
         token_expiration : datetime = datetime.fromtimestamp(payload.get("exp"), timezone.utc)
         
-        print("Payload ->", payload)
+        # print("Payload ->", payload)
         
         if username is None or pwd_hash is None:
             raise Exception("Your OAuth2 token has incomplete information.")

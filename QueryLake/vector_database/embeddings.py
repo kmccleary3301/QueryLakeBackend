@@ -22,6 +22,17 @@ from io import BytesIO
 import re
 from itertools import chain
 import json
+import bisect
+
+def binary_search(sorted_list, target):
+	index = bisect.bisect_right(sorted_list, target)
+	index = min(max(0, index), len(sorted_list)-1)
+	value = sorted_list[index]
+	while value > target and index > 0:
+		if value > target:
+			index = max(0, index-1)
+		value = sorted_list[index]
+	return index
 # from sqlmodel import Session, SQLModel, create_engine, select
 
 
@@ -63,7 +74,8 @@ async def create_embeddings_in_database(
     if file_extension in ["pdf"]:
         text_chunks = parse_PDFs(document_bytes)
     elif file_extension in ["txt", "md", "json"]:
-        text_chunks = [(document_bytes.decode("utf-8"), {"page": 0})]
+        text = document_bytes.decode("utf-8").split("\n")
+        text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
     else:
         raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
     
@@ -95,7 +107,9 @@ async def create_text_embeddings(database : Session,
     #     chunk_size=chunk_size, chunk_overlap=chunk_overlap
     # )
     text_splitter = MarkdownTextSplitter(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap
+        chunk_size=chunk_size, 
+        chunk_overlap=chunk_overlap,
+        add_start_index=True
     )
 
     if not document_sql_entry.global_document_collection_hash_id is None:
@@ -116,57 +130,73 @@ async def create_text_embeddings(database : Session,
     text_combined, text_combined_strip = "", ""
     text_combined_chunk_assignments = np.array([], dtype=np.int32)
     
+    
+    
     # We are assuming an input of tuples with text and metadata.
     # We do this to keep track of location/ordering metadata such as page number.
     # This code concatenates the text and allows us to recover the minimum location index
     # After splitting for embedding.
-    m_1 = time()
-    print("Concatenating text with %d segments..." % (len(text_segments)))
-    for chunk_i, chunk in enumerate(text_segments):
-        
-        if (chunk_i % max(1, int(len(text_segments) / 100))) == 0:
-            progress = (chunk_i+1)/len(text_segments)
-            progress_bar = f"\r[{'='*int(20 * progress)}>{' '*(20 - int(20 * progress))}] " + "%3.2f%%" % (progress*100)
-            print(progress_bar, end="\r")
-        
-        chunk_combined_strip = sub(r"[\s]+", "", chunk[0]).lower()
-        text_combined_strip += chunk_combined_strip
-        text_combined += chunk[0] + " "
-        text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
-    m_2 = time()
-    print("Done in %3.2fs" % (m_2 - m_1))
     
-    
-    splits = text_splitter.split_documents([Document(page_content=text_combined, metadata={"type": "document"})])
-    
-    splits_text = [doc.page_content for doc in splits]
-    splits_metadata = []
-    text_size_iterator = 0
+    created_document = "\n".join([chunk[0] for chunk in text_segments])
     
     m_1 = time()
-    print("Finding minimum metadata for each chunk with %d splits..." % (len(splits)))
-    for doc in splits:
-        text_stripped = sub(r"[\s]+", "", doc.page_content).lower()
-        index = text_combined_strip.find(text_stripped)
-        try:
-            if index != -1:
-                metadata = text_segments[text_combined_chunk_assignments[index]][1]
-                text_size_iterator = index
-            else:
-                metadata = text_segments[text_combined_chunk_assignments[text_size_iterator+len(text_stripped)]][1]
-            # text_size_iterator += len(text_stripped)
-            splits_metadata.append(metadata)
-        except:
-            splits_metadata.append(metadata[-1])
+    doc_markers, current_sum = [], 0
+    for i in range(len(text_segments)):
+        doc_markers.append(current_sum)
+        current_sum += len(text_segments[i][0]) + 1
+    
+    splits = text_splitter.split_documents([Document(page_content=created_document, metadata={})])
+    splits = list(map(lambda x: Document(
+        page_content=x.page_content,
+        metadata={**text_segments[binary_search(doc_markers, x.metadata["start_index"])][1]}
+    ), splits))
     m_2 = time()
-    print("Done in %3.2fs" % (m_2 - m_1))
+    print("Split %10d segments in %5.2fs" % (len(text_segments), m_2 - m_1))
+ 
+    # print("Concatenating text with %d segments..." % (len(text_segments)))
+    # for chunk_i, chunk in enumerate(text_segments):
+        
+    #     if (chunk_i % max(1, int(len(text_segments) / 100))) == 0:
+    #         progress = (chunk_i+1)/len(text_segments)
+    #         progress_bar = f"\r[{'='*int(20 * progress)}>{' '*(20 - int(20 * progress))}] " + "%3.2f%%" % (progress*100)
+    #         print(progress_bar, end="\r")
+        
+    #     chunk_combined_strip = sub(r"[\s]+", "", chunk[0]).lower()
+    #     text_combined_strip += chunk_combined_strip
+    #     text_combined += chunk[0] + " "
+    #     text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
+    
+    
+    
+    
+    # splits_text = [doc.page_content for doc in splits]
+    # splits_metadata = []
+    # text_size_iterator = 0
+    
+    # m_1 = time()
+    # print("Finding minimum metadata for each chunk with %d splits..." % (len(splits)))
+    # for doc in splits:
+    #     text_stripped = sub(r"[\s]+", "", doc.page_content).lower()
+    #     index = text_combined_strip.find(text_stripped)
+    #     try:
+    #         if index != -1:
+    #             metadata = text_segments[text_combined_chunk_assignments[index]][1]
+    #             text_size_iterator = index
+    #         else:
+    #             metadata = text_segments[text_combined_chunk_assignments[text_size_iterator+len(text_stripped)]][1]
+    #         # text_size_iterator += len(text_stripped)
+    #         splits_metadata.append(metadata)
+    #     except:
+    #         splits_metadata.append(metadata[-1])
+    # m_2 = time()
+    # print("Done in %3.2fs" % (m_2 - m_1))
 
-    del text_combined_chunk_assignments
+    # del text_combined_chunk_assignments
     
     # print("Running embeddings")
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
-    embeddings = await embedding_call(auth, splits_text)
+    embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
 
     for i, vec in enumerate(embeddings):
         embedding_db_entry = DocumentChunk(
@@ -177,7 +207,8 @@ async def create_text_embeddings(database : Session,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
             embedding=vec,
-            text=splits_text[i],
+            md=splits[i].metadata,
+            text=splits[i].page_content,
             **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
         )
         database.add(embedding_db_entry)
