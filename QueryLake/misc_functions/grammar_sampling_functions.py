@@ -5,7 +5,7 @@
 from lmformatenforcer.integrations.vllm import VLLMLogitsProcessor
 import re
 from pydantic import BaseModel
-from typing import Optional, Literal, Tuple, List
+from typing import Optional, Literal, Tuple, List, Union
 from lmformatenforcer import JsonSchemaParser
 
 # from lmformatenforcer import CharacterLevelParser
@@ -48,6 +48,8 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
     
     required_fields = []
     for name, type_get in fields:
+        default_value = None
+        
         if "|" in type_get:
             # test_literal_process = [e.strip() for e in re.split(r'(?<!\\)\|', type_get.strip())]
             # print(test_literal_process)
@@ -58,11 +60,13 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
             literals_types = [literal for (literal, classification) in literals_rewrap if classification == "type"]
             literals_values = [literal for (literal, classification) in literals_rewrap if classification == "value"]
             if len(literals_values) > 0:
-                literals_values_string = f", Literal[{', '.join(literals_values)}]"
+                literals_values_string = f"Literal[{', '.join(literals_values)}]"
             else:
                 literals_values_string = ""
             
-            py_type = f"Union[{', '.join(literals_types)}{literals_values_string}]"
+            default_value = literals_values[0]
+            pre_string = [e for e in literals_types + [literals_values_string] if e.strip() != ""]
+            py_type = f"Union[{', '.join(pre_string)}]" if len(pre_string) > 1 else pre_string[0]
         else:
             py_type, _ = parse_literal(type_get)
         
@@ -78,7 +82,6 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
         # for name, type_get in fields:
         # ... existing code ...
 
-        default_value = 'None'
         if py_type == 'str':
             default_value = "''"
         elif py_type == 'int':
@@ -87,12 +90,14 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
             default_value = 'False'
         elif py_type == 'float':
             default_value = '0.0'
+        elif default_value is None:
+            default_value = 'None'
         # Add more types as needed
 
         pydantic_class += f"    {name}: {py_type} = {default_value}\n"
     
-    # print(pydantic_class)
-    exec_globals = {'BaseModel': BaseModel, 'Optional': Optional, 'Literal': Literal}
+    print(pydantic_class)
+    exec_globals = {'BaseModel': BaseModel, 'Optional': Optional, 'Literal': Literal, 'List': List, 'Union': Union}
     exec(pydantic_class, None, exec_globals)
     # return exec_globals[class_string.split('\n')[0].split(' ')[1]]
     pre_class = exec_globals["UserSpecifiedClass"]
