@@ -55,7 +55,7 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
             # print(test_literal_process)
             # literals = [re.split(r'(?<!\\)\|', literal.strip())[0] for literal in type_get.split("|")]
             literals = [e.strip() for e in re.split(r'(?<!\\)\|', type_get.strip())]
-            print(literals)
+            # print(literals)
             literals_rewrap = [parse_literal(e) for e in literals]
             literals_types = [literal for (literal, classification) in literals_rewrap if classification == "type"]
             literals_values = [literal for (literal, classification) in literals_rewrap if classification == "value"]
@@ -96,7 +96,7 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
 
         pydantic_class += f"    {name}: {py_type} = {default_value}\n"
     
-    print(pydantic_class)
+    # print(pydantic_class)
     exec_globals = {'BaseModel': BaseModel, 'Optional': Optional, 'Literal': Literal, 'List': List, 'Union': Union}
     exec(pydantic_class, None, exec_globals)
     # return exec_globals[class_string.split('\n')[0].split(' ')[1]]
