@@ -167,7 +167,7 @@ def fetch_collection(database : Session,
     for document in documents:
         data["document_list"].append({
             "title": document.file_name,
-            "hash_id": document.hash_id,
+            "hash_id": document.id,
             "size": file_size_as_string(document.size_bytes),
             "finished_processing": document.finished_processing,
         })

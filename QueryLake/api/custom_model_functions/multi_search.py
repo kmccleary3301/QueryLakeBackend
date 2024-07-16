@@ -185,7 +185,7 @@ async def llm_multistep_search(database : Session,
         sources_bank += new_sources
         source_ids += [source["id"] for source in new_sources]
         chunk_sizes += [1 for _ in range(len(search_results))]
-        
+    
     async def expand_sources(sources):
         nonlocal sources_bank, source_ids, chunk_sizes, logs, database
         for source_number in sources:
@@ -204,7 +204,7 @@ async def llm_multistep_search(database : Session,
     async def add_note(note):
         nonlocal notes, logs
         notes.append(note)
-        
+    
     
     function_map = {
         "search_database": search_database,
@@ -260,7 +260,6 @@ async def llm_multistep_search(database : Session,
         else:
             assert False, "No function calls were made by the model."
     
-    
     if len(sources_bank) > 0:
         rerank_scores = await toolchain_function_caller("rerank")(
             auth,
@@ -269,7 +268,6 @@ async def llm_multistep_search(database : Session,
         for i in range(len(sources_bank)):
             sources_bank[i]["rerank_score"] = rerank_scores[i]
     
-    # sources = [s for s in sources if s["rerank_score"] > minimum_relevance]
     sources_bank = sorted(sources_bank, key=lambda x: x["rerank_score"], reverse=True)
     
     return {"sources": sources_bank, "commands": previous_commands, "logs": logs, "notes": notes}

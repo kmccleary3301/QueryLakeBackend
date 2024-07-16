@@ -59,7 +59,6 @@ async def embed_urls(database : Session,
         
         website_content_bytes : bytes = content.encode("utf-8")
         new_document = sql_db_tables.document_raw(
-            hash_id=random_hash(),
             file_name=result_dictionary["metadata"]["title"],
             author_user_name=user_auth.username,
             organization_hash_id=None,

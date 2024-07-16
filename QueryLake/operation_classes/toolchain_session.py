@@ -96,7 +96,7 @@ class ToolchainSession():
         """
         Get the bytes of a file from the toolchain session.
         """
-        database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.hash_id == file_pointer.document_hash_id)).first()
+        database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.id == file_pointer.document_hash_id)).first()
         assert database_obj.toolchain_session_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
         
         # return database_obj.file_data
@@ -216,8 +216,8 @@ class ToolchainSession():
                     
                     # Special case for file uploads. Should only be used for `file_upload_event`, although this isn't enforced.
                     if node_input_arg.key == "<<FILE>>":
-                        db_file = self.database.exec(select(document_raw).where(document_raw.hash_id == user_provided_arguments[node_input_arg.key])).first()
-                        node_inputs[node_input_arg.key] = ToolChainSessionFile(name=db_file.file_name, document_hash_id=db_file.hash_id)
+                        db_file = self.database.exec(select(document_raw).where(document_raw.id == user_provided_arguments[node_input_arg.key])).first()
+                        node_inputs[node_input_arg.key] = ToolChainSessionFile(name=db_file.file_name, document_hash_id=db_file.id)
                     else:
                         node_inputs[node_input_arg.key] = user_provided_arguments[node_input_arg.key]
                     

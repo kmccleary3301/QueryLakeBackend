@@ -54,22 +54,25 @@ class DocumentChunk(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     creation_timestamp: Optional[float] = Field(default_factory=time)
     collection_type: Optional[str] = Field(index=True, default=None)
-    document_id: Optional[str] = Field(foreign_key="document_raw.hash_id", default=None, index=True)
+    document_id: Optional[str] = Field(foreign_key="document_raw.id", default=None, index=True)
     document_chunk_number: Optional[int] = Field(default=None, index=True)
     document_integrity: Optional[str] = Field(default=None, index=True)
-    parent_collection_hash_id: Optional[str] = Field(index=True, default=None)
+    collection_id: Optional[str] = Field(index=True, default=None)
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None, index=True)
     embedding: List[float] = Field(sa_column=Column(Vector(1024)))
     private: bool = Field(default=False)
     
+    document_md: dict = Field(sa_column=Column(JSONB), default={})
     md: dict = Field(sa_column=Column(JSONB), default={})
     text: str = Field()
     # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
     ts_content: str = Field(sa_column=Column(TSVECTOR))
+    
+    
 
 CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
-CHUNK_INDEXED_COLUMNS = ["text", "document_id", "website_url", "parent_collection_hash_id", "md"]
+CHUNK_INDEXED_COLUMNS = ["text", "document_id", "website_url", "collection_id", "md", "document_md"]
 
 CREATE_BM25_INDEX_SQL = """
 CALL paradedb.create_bm25(
@@ -80,9 +83,9 @@ CALL paradedb.create_bm25(
 		text: {tokenizer: {type: "en_stem"}},
         document_id: {},
         website_url: {},
-        parent_collection_hash_id: {}
+        collection_id: {}
 	}',
-    json_fields => '{"md": {}}'
+    json_fields => '{"md": {}, "document_md": {}}'
 );
 """.replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
@@ -109,13 +112,35 @@ CREATE INDEX IF NOT EXISTS ts_content_gin ON {CHUNK_CLASS_NAME} USING gin(ts_con
 event.listen(DocumentChunk.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
 
 
+
+# Add metadata trigger to document chunks that duplicates from parent document.
+trigger_md = DDL(f"""
+CREATE OR REPLACE FUNCTION set_document_chunk_md()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.document_md := (SELECT md FROM document_raw WHERE id = NEW.document_id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_document_chunk_md_trigger ON {DocumentChunk.__tablename__};
+
+CREATE TRIGGER set_document_chunk_md_trigger
+BEFORE INSERT OR UPDATE ON {DocumentChunk.__tablename__}
+FOR EACH ROW EXECUTE FUNCTION set_document_chunk_md();
+""")
+
+# Attach the trigger to the DocumentChunk table
+event.listen(DocumentChunk.__table__, 'after_create', trigger_md.execute_if(dialect='postgresql'))
+
+
 class DocumentEmbeddingDictionary(BaseModel):
     id: str
     collection_type: Union[str, Literal[None]]
     document_id: Union[str, Literal[None]]
     document_chunk_number: Optional[int]
     document_integrity: Union[str, Literal[None]]
-    parent_collection_hash_id: Union[str, Literal[None]]
+    collection_id: Union[str, Literal[None]]
     document_name : str
     website_url : Optional[Union[str, Literal[None]]]
     private : bool
@@ -134,8 +159,6 @@ def search_embeddings_lexical(database: Session,
                                     float,  # rank
                                     str,    # headline
                               ]]:
-    print("Collection IDs:", collection_ids)
-    
     try:                     
         if isinstance(search_string, list):
             search_string = " ".join(search_string)
@@ -155,9 +178,9 @@ def search_embeddings_lexical(database: Session,
         search_string = " | ".join(search_array).strip(" | ")
         
         if web_search:
-            where_clause = where_clause = "WHERE ts_content @@ query AND (parent_collection_hash_id = ANY(:collection_ids) OR website_url IS NOT NULL)"
+            where_clause = where_clause = "WHERE ts_content @@ query AND (collection_id = ANY(:collection_ids) OR website_url IS NOT NULL)"
         else:
-            where_clause = "WHERE ts_content @@ query AND parent_collection_hash_id = ANY(:collection_ids)"
+            where_clause = "WHERE ts_content @@ query AND collection_id = ANY(:collection_ids)"
         
         print("Arguments for query:", [search_string, collection_ids, limit, where_clause])
         
@@ -167,7 +190,7 @@ def search_embeddings_lexical(database: Session,
                 document_id,
                 document_chunk_number,
                 document_integrity,
-                parent_collection_hash_id,
+                collection_id,
                 document_name,
                 website_url,
                 private,
@@ -189,7 +212,7 @@ def search_embeddings_lexical(database: Session,
                 "document_id": value_in[2],
                 "document_chunk_number": value_in[3],
                 "document_integrity": value_in[4],
-                "parent_collection_hash_id": value_in[5],
+                "collection_id": value_in[5],
                 "document_name": value_in[6],
                 "website_url": value_in[7],
                 "private": value_in[8],
@@ -364,7 +387,7 @@ class model_query_raw(SQLModel, table=True):
 
 class document_raw(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
-    hash_id: str = Field(index=True, unique=True)
+    # hash_id: str = Field(index=True, unique=True)
     file_name: str
     creation_timestamp: float
     integrity_sha256: str = Field(index=True)
@@ -379,6 +402,7 @@ class document_raw(SQLModel, table=True):
     
     file_data: bytes = Field(sa_column=Column(LargeBinary))
     finished_processing: Optional[bool] = Field(default=False)
+    md: Optional[dict] = Field(sa_column=Column(JSONB), default={})
     
 
 

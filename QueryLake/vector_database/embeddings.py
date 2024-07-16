@@ -126,9 +126,6 @@ async def create_text_embeddings(database : Session,
         parent_collection_id = None
     else:
         return
-
-    text_combined, text_combined_strip = "", ""
-    text_combined_chunk_assignments = np.array([], dtype=np.int32)
     
     
     
@@ -201,9 +198,9 @@ async def create_text_embeddings(database : Session,
     for i, vec in enumerate(embeddings):
         embedding_db_entry = DocumentChunk(
             collection_type=collection_type,
-            document_id=document_sql_entry.hash_id,
+            document_id=document_sql_entry.id,
             document_chunk_number=i,
-            parent_collection_hash_id=parent_collection_id,
+            collection_id=parent_collection_id,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
             embedding=vec,
@@ -344,10 +341,10 @@ async def query_database(database : Session ,
     
     if len(collection_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentChunk.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_ids)
+            *(DocumentChunk.collection_id == collection_hash_id for collection_hash_id in collection_ids)
         )
     else:
-        lookup_sql_condition = (DocumentChunk.parent_collection_hash_id == collection_ids[0])
+        lookup_sql_condition = (DocumentChunk.collection_id == collection_ids[0])
         
     if use_web:
         lookup_sql_condition = or_(
@@ -449,11 +446,11 @@ async def keyword_query(database : Session ,
     
     if len(collection_hash_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentChunk.parent_collection_hash_id == collection_hash_id for collection_hash_id in collection_hash_ids)
+            *(DocumentChunk.collection_id == collection_hash_id for collection_hash_id in collection_hash_ids)
         )
     else:
         
-        lookup_sql_condition = (DocumentChunk.parent_collection_hash_id == collection_hash_ids[0])
+        lookup_sql_condition = (DocumentChunk.collection_id == collection_hash_ids[0])
 
     selection = select(DocumentChunk).where(lookup_sql_condition).limit(k)
     
@@ -516,10 +513,10 @@ def expand_source(database : Session,
         document_id=chunk_range[0].document_id,
         document_chunk_number=chunk_range[0].document_chunk_number,
         document_integrity=chunk_range[0].document_integrity,
-        parent_collection_hash_id=chunk_range[0].parent_collection_hash_id,
+        collection_id=chunk_range[0].collection_id,
         document_name=chunk_range[0].document_name,
         website_url=chunk_range[0].website_url,
         private=chunk_range[0].private,
         text=concat_without_overlap(chunks_of_text),
-    ).dict()
+    ).model_dump()
 

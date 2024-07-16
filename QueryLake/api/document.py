@@ -124,7 +124,6 @@ async def upload_document(database : Session,
     # zip_thread.start()
     
     new_db_file = sql_db_tables.document_raw(
-        hash_id=random_hash(),
         # server_zip_archive_path=file_zip_save_path,
         file_name=file.filename,
         integrity_sha256=file_integrity,
@@ -133,6 +132,7 @@ async def upload_document(database : Session,
         public=public,
         encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         file_data=encrypted_bytes,
+        md={"file_name": file.filename, "integrity_sha256": file_integrity, "size_bytes": len(file_data_bytes)},
         **collection_author_kwargs
     )
     
@@ -164,9 +164,9 @@ async def upload_document(database : Session,
 
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
-        return {"hash_id": new_db_file.hash_id, "file_name": file.filename, "finished_processing": new_db_file.finished_processing}
+        return {"hash_id": new_db_file.id, "file_name": file.filename, "finished_processing": new_db_file.finished_processing}
 
-    return {"hash_id": new_db_file.hash_id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes)), "finished_processing": new_db_file.finished_processing}
+    return {"hash_id": new_db_file.id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes)), "finished_processing": new_db_file.finished_processing}
     
 def delete_document(database : Session, 
                     auth : AuthType,
@@ -176,7 +176,7 @@ def delete_document(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
 
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == document.user_document_collection_hash_id)).first()
@@ -216,7 +216,7 @@ def get_document_secure(database : Session,
 
     (user, user_auth) = get_user(database, auth)
 
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
     
     if not document.user_document_collection_hash_id is None:
         
@@ -254,7 +254,7 @@ def get_document_secure(database : Session,
     
     if return_document:
         return document
-    return {"password": document_password, "hash_id": document.hash_id}
+    return {"password": document_password, "hash_id": document.id}
 
 # async def query_vector_db(database : Session,
 #                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -314,14 +314,14 @@ def get_file_bytes(database : Session,
                    hash_id : str,
                    encryption_key : str):
     
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.hash_id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
     print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
 
     file = encryption.aes_decrypt_zip_file(
         database,
         encryption_key, 
-        document.hash_id
+        document.id
     )
     keys = list(file.keys())
     file_name = keys[0]

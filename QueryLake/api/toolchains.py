@@ -268,7 +268,7 @@ def retrieve_files_for_session(database : Session,
     # session = retrieve_toolchain_from_db(database, toolchain_function_caller, toolchains_available, auth, session_id)
     assert session.author == user.name, "User not authorized"
     file_db_entries = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.toolchain_session_id == session.session_hash)).all()
-    return [get_file_bytes(database, doc.hash_id, get_user_private_key(database, auth)["private_key"]) for doc in file_db_entries]
+    return [get_file_bytes(database, doc.id, get_user_private_key(database, auth)["private_key"]) for doc in file_db_entries]
 
 async def toolchain_file_upload_event_call(database : Session,
                                            session : ToolchainSession,
@@ -292,9 +292,9 @@ async def toolchain_file_upload_event_call(database : Session,
 
 
     file_db_entry = database.exec(select(sql_db_tables.document_raw).where(and_(sql_db_tables.document_raw.toolchain_session_id == session_id,
-                                                                                sql_db_tables.document_raw.hash_id == document_hash_id
+                                                                                sql_db_tables.document_raw.id == document_hash_id
                                                                                 ))).first()
-    file_bytes = get_file_bytes(database, file_db_entry.hash_id, get_user_private_key(database, auth)["private_key"])
+    file_bytes = get_file_bytes(database, file_db_entry.id, get_user_private_key(database, auth)["private_key"])
     
     event_parameters.update({
         "user_file": file_bytes,

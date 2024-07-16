@@ -129,7 +129,7 @@ def aes_decrypt_zip_file(database: Session,
     if toolchain_file:
         statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
     else:
-        statement = select(document_raw).where(document_raw.hash_id == document_id)
+        statement = select(document_raw).where(document_raw.id == document_id)
     file_model = database.exec(statement).first()
     if file_model is None:
         raise FileNotFoundError("Document id not found in database.")

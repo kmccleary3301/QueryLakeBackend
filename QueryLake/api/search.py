@@ -22,11 +22,12 @@ class DocumentChunkDictionary(BaseModel):
     document_id: Optional[Union[str, None]]
     document_chunk_number: Optional[Union[int, None]]
     document_integrity: Optional[Union[str, None]]
-    parent_collection_hash_id: Optional[Union[str, None]]
+    collection_id: Optional[Union[str, None]]
     document_name: str
     website_url : Optional[Union[str, None]]
     private: bool
     md: dict
+    document_md: dict
     text: str
     
 class DocumentChunkDictionaryReranked(DocumentChunkDictionary):
@@ -34,8 +35,8 @@ class DocumentChunkDictionaryReranked(DocumentChunkDictionary):
 
 chunk_dict_arguments = ["id", "creation_timestamp", "collection_type", 
                         "document_id", "document_chunk_number", "document_integrity", 
-                        "parent_collection_hash_id", "document_name", "website_url", 
-                        "private", "md", "text", "rerank_score"]
+                        "collection_id", "document_name", "website_url", 
+                        "private", "md", "document_md", "text", "rerank_score"]
     
 
 def convert_query_result(query_results: tuple, rerank: bool = False, return_wrapped : bool = False):
@@ -64,7 +65,6 @@ async def search_hybrid(database: Session,
                         rerank : bool = False,
                         ) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
-    
     
     (_, _) = get_user(database, auth)
     
@@ -110,12 +110,12 @@ async def search_hybrid(database: Session,
     
     STMT = text(f"""
 	SELECT m.id, m.creation_timestamp, m.collection_type, m.document_id, 
-           m.document_chunk_number, m.document_integrity, m.parent_collection_hash_id, 
-           m.document_name, m.website_url, m.private, m.md, m.text
+           m.document_chunk_number, m.document_integrity, m.collection_id, 
+           m.document_name, m.website_url, m.private, m.md, m.document_md, m.text
 	FROM {CHUNK_CLASS_NAME} m
 	RIGHT JOIN (
 		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.rank_hybrid(
-			bm25_query => paradedb.parse('parent_collection_hash_id:IN {str(collection_ids).replace("'", "")} AND ({formatted_query})'),
+			bm25_query => paradedb.parse('collection_id:IN {str(collection_ids).replace("'", "")} AND ({formatted_query})'),
 			similarity_query => '':embedding_in' <=> embedding',
 			bm25_weight => :bm25_weight,
 			similarity_weight => :similarity_weight,
@@ -139,7 +139,7 @@ async def search_hybrid(database: Session,
         results = database.exec(STMT)
         results = list(results)
         results = list(filter(lambda x: not x[0] is None, results))
-        results : List[DocumentChunkDictionary] = list(map(lambda x: convert_query_result(x, return_wrapped=True), results))
+        results : List[dict] = list(map(lambda x: convert_query_result(x, return_wrapped=True), results))
         database.rollback()
         
         results 
@@ -200,15 +200,15 @@ def search_bm25(database: Session,
     unique_alias = "temp_alias"
     
     print("Formatted query:", formatted_query)
-    print(f'parent_collection_hash_id:IN {collection_string} AND {formatted_query}')
+    print(f'collection_id:IN {collection_string} AND {formatted_query}')
     
     STMT = text(f"""
 	SELECT id, creation_timestamp, collection_type, document_id, 
-           document_chunk_number, document_integrity, parent_collection_hash_id, 
-           document_name, website_url, private, md, text, 
+           document_chunk_number, document_integrity, collection_id, 
+           document_name, website_url, private, md, document_md, text, 
            paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
 	FROM search_documentchunk_idx.search(
-     	query => paradedb.parse('parent_collection_hash_id:IN {collection_string} AND {formatted_query}'),
+     	query => paradedb.parse('collection_id:IN {collection_string} AND {formatted_query}'),
 		offset_rows => :offset,
 		limit_rows => :limit,
 		alias => '{unique_alias}'
