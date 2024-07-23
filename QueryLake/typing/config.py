@@ -24,7 +24,7 @@ class Padding(BaseModel):
 class Model(BaseModel):
     name: str
     id : str
-    quantization: Optional[Literal["awq", "gptq", "squeezellm"]]
+    quantization: Optional[Literal["awq", "gptq", "squeezellm", "awq_marlin"]]
     modelcard: str
     system_path: str
     default_parameters: ModelArgs

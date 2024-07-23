@@ -30,9 +30,14 @@ class EmbeddingDeployment:
             inputs,
             batch_size=4,
             # max_length=8192,
+            return_sparse=True,
             max_length=1024
-        )['dense_vecs']
-        embed_list = sentence_embeddings.tolist()
+        )
+        # sparse_vecs = sentence_embeddings['sparse_vecs']
+        
+        # print("Sparse Vector:", sparse_vecs)
+        
+        embed_list = sentence_embeddings['dense_vecs'].tolist()
         print("Done handling batch of size", len(inputs))
         m_2 = time.time()
         print("Time taken for batch:", m_2 - m_1)

@@ -18,7 +18,7 @@ from typing import List, Union
 from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.8}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.4}, max_replicas_per_node=1)
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
@@ -60,7 +60,12 @@ class VLLMDeploymentClass:
         self.padding : Padding = model_config.padding
         self.default_model_args = self.model_config.default_parameters
         
-        args = AsyncEngineArgs(**kwargs, disable_log_requests=True) # Had to mute this thing because it was spamming the logs.
+        args = AsyncEngineArgs(
+            **kwargs,
+            enforce_eager=True, # Save VRAM by disabling CUDA graphs
+            gpu_memory_utilization=0.4, # This should match the ray GPU allocation
+            disable_log_requests=True # Had to mute this thing because it was spamming the logs.
+        )
         self.context_size = args.max_model_len
         
         print("INITIALIZING VLLM DEPLOYMENT")

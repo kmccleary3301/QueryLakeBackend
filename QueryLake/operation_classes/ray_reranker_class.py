@@ -43,7 +43,7 @@ def F(x):
 
     return result
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.1, "num_cpus": 2}, max_replicas_per_node=1)
+@serve.deployment(ray_actor_options={"num_gpus": 0.15, "num_cpus": 2}, num_replicas=1)
 class RerankerDeployment:
     def __init__(self, model_key: str):
         print("INITIALIZING RERANKER DEPLOYMENT")

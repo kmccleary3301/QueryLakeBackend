@@ -96,7 +96,7 @@ def add_toolchains_to_database(database : Session,
                 toolchain_id=toolchain_id,
                 title=toolchain_content.name,
                 category=toolchain_content.category,
-                content=json.dumps(toolchain_content.dict(), indent=4)
+                content=json.dumps(toolchain_content.model_dump(exclude_none=True), indent=4)
             )
             database.add(new_toolchain)
         database.commit()

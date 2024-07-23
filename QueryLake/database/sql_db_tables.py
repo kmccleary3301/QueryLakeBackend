@@ -264,7 +264,7 @@ class document_access_token(SQLModel, table=True):
 
 class model(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
-    name: str = Field(index=True, unique=True)
+    name: str = Field(index=True)
     path_on_server: str
     quantization: Optional[str] = Field(default=None) # Only qunatization supported by vLLM, "awq" | "gptq" | "squeezellm"
     default_settings: str #This will be a stringified JSON that will be parsed out kwargs on load.
@@ -279,36 +279,6 @@ class model(SQLModel, table=True):
     bot_response_wrapper: str
 
     default_system_instruction: str
-
-class chat_session_new(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-
-    title: Optional[str] = Field(default=None)
-    hash_id: str = Field(index=True, unique=True)
-    model: str = Field(foreign_key="model.name")
-
-    system_instruction: Optional[str] = Field(default=None)
-    
-    author_user_name: str = Field(foreign_key="user.name", index=True)
-    access_token_id: int = Field(foreign_key="access_token.id", index=True)
-    creation_timestamp: float
-    tool_used: Optional[str] = Field(default="chat")
-    currently_generating: Optional[bool] = Field(default=False)
-    hidden: Optional[bool] = Field(default=False)
-
-class chat_entry_user_question(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    chat_session_id: int = Field(foreign_key="chat_session_new.id", index=True)
-    timestamp: float
-    content: str
-
-class chat_entry_model_response(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    chat_entry_response_to: int = Field(foreign_key="chat_entry_user_question.id")
-    chat_session_id: int = Field(foreign_key="chat_session_new.id", index=True)
-    timestamp: float
-    content: str
-    sources: Optional[str] = Field(default=None)
 
 class web_search(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
