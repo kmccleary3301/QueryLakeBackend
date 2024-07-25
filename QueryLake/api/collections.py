@@ -144,15 +144,13 @@ def fetch_collection(database : Session,
         collection = database.exec(select(sql_db_tables.user_document_collection).where(and_(sql_db_tables.user_document_collection.id == collection_hash_id))).first()
         if collection.public == False:
             assert collection.author_user_name == user_auth.username, "User not authorized to view collection"
-        documents = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.user_document_collection_hash_id == collection_hash_id)).all()
+        
         owner = "personal"
     else:
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
         user_membership = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization_id,
                                                                                           sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(user_membership) > 0 or collection.public == True, "User not authorized to view collection"
-        documents = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.organization_document_collection_hash_id == collection_hash_id)).all()
-
         author_org = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
         owner = author_org.name()
 
@@ -162,17 +160,52 @@ def fetch_collection(database : Session,
         "type": collection_type,
         "owner": owner,
         "public": collection.public,
-        "document_list": []
+        "document_count": collection.document_count
     }
-    for document in documents:
-        data["document_list"].append({
-            "title": document.file_name,
-            "hash_id": document.id,
-            "size": file_size_as_string(document.size_bytes),
-            "finished_processing": document.finished_processing,
-        })
+    # for document in documents:
+    #     data["document_list"].append({
+    #         "title": document.file_name,
+    #         "hash_id": document.id,
+    #         "size": file_size_as_string(document.size_bytes),
+    #         "finished_processing": document.finished_processing,
+    #     })
     # return {"success": True, "result": data}
     return data
+
+def fetch_collection_documents(database : Session,
+                               auth : AuthType,
+                               collection_hash_id : str,
+                               collection_type : str = "user",
+                               limit : int = 100,
+                               offset : int = 0):
+    assert (limit > 0 and offset >= 0), "Invalid limit or offset, both must be ints >= 0"
+    assert (limit <= 500), "Limit must be <= 500"
+    collection_get = fetch_collection(database, auth, collection_hash_id, collection_type)
+    if collection_type == "user":
+        documents = database.exec(
+                        select(sql_db_tables.document_raw)
+                        .where(sql_db_tables.document_raw.user_document_collection_hash_id == collection_hash_id)
+                        .offset(offset)
+                        .limit(limit)
+                    ).all()
+    
+    elif collection_type == "organization":
+        documents = database.exec(
+                        select(sql_db_tables.document_raw)
+                        .where(sql_db_tables.document_raw.organization_document_collection_hash_id == collection_hash_id)
+                        .offset(offset)
+                        .limit(limit)
+                    ).all()
+    
+    results = list(map(lambda x: {
+        "title": x.file_name,
+        "hash_id": x.id,
+        "size": file_size_as_string(x.size_bytes),
+        "finished_processing": x.finished_processing,
+    }, list(documents)))
+    
+    return results
+    
 
 def modify_document_collection(database : Session,
                                 auth : AuthType,

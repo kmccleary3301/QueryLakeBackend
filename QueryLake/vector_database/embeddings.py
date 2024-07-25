@@ -49,9 +49,7 @@ def split_list(input_list : list, n : int) -> List[list]:
     k, m = divmod(len(input_list), n)
     return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
-async def create_embeddings_in_database(
-                                        # database : Session,
-                                        toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+async def create_embeddings_in_database(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                         auth : AuthType,
                                         document_bytes : bytes, 
                                         document_db_entry_id : str,

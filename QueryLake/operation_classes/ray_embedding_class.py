@@ -33,7 +33,7 @@ class EmbeddingDeployment:
             return_sparse=True,
             max_length=1024
         )
-        # sparse_vecs = sentence_embeddings['sparse_vecs']
+        # sparse_vecs = sentence_embeddings['lexical_weights']
         
         # print("Sparse Vector:", sparse_vecs)
         

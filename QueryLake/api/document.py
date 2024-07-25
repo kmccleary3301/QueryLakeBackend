@@ -145,7 +145,6 @@ async def upload_document(database : Session,
     database.add(new_db_file)
     database.commit()
     if add_to_vector_db:
-        
         if await_embedding:
             await create_embeddings_in_database(
                                                 toolchain_function_caller,
@@ -162,11 +161,19 @@ async def upload_document(database : Session,
     
     time_taken = time.time() - time_start
 
+    
+    database.refresh(new_db_file)
+    
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
         return {"hash_id": new_db_file.id, "file_name": file.filename, "finished_processing": new_db_file.finished_processing}
 
-    return {"hash_id": new_db_file.id, "title": file.filename, "size": file_size_as_string(len(file_data_bytes)), "finished_processing": new_db_file.finished_processing}
+    return {
+        "hash_id": new_db_file.id, 
+        "title": file.filename, 
+        "size": file_size_as_string(len(file_data_bytes)), 
+        "finished_processing": new_db_file.finished_processing
+    }
     
 def delete_document(database : Session, 
                     auth : AuthType,
