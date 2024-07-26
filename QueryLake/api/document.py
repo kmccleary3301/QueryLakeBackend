@@ -17,7 +17,7 @@ from ..database.encryption import aes_decrypt_zip_file
 # from chromadb.api import ClientAPI
 import time
 import json
-import py7zr
+import py7zr, zipfile
 from fastapi.responses import StreamingResponse
 import ocrmypdf
 from ..typing.config import AuthType
@@ -28,13 +28,15 @@ import asyncio
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 
+
+
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                           auth : AuthType, 
-                          file : UploadFile, 
+                          file : Union[UploadFile, BytesIO], 
                           collection_hash_id : str, 
+                          file_name : str = None,
                           collection_type : str = "user",
-                          public : bool = False,
                           return_file_hash : bool = False,
                           add_to_vector_db : bool = True,
                           await_embedding : bool = False) -> dict:
@@ -69,28 +71,42 @@ async def upload_document(database : Session,
     # file_id = hash_function(file.filename+" "+str(time.time()))
 
     # file_zip_save_path = user_db_path+random_hash()+".7z"
-    file.file.seek(0)
-    file_data_bytes = file.file.read()
+    if isinstance(file, BytesIO):
+        assert hasattr(file, 'name') or (not file_name is None), "upload_document recieved a BytesIO object without a name attribute"
+        file_data_bytes_io : BytesIO = file
+        file_name = file_data_bytes_io.name if file_name is None else file_name
+        file_data_bytes = file_data_bytes_io.getvalue()
+    else:
+        file_name = file.filename
+        file.file.seek(0)
+        file_data_bytes = file.file.read()
+        file_data_bytes_io = BytesIO(file_data_bytes)
+    
     file_integrity = sha256(file_data_bytes).hexdigest()
+    file_size = len(file_data_bytes)
+    
     collection_author_kwargs = {collection_type_lookup[collection_type]: collection_hash_id}
 
     if collection_type == "user":
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == collection_hash_id)).first()
         assert collection.author_user_name == user_auth.username, "User not authorized"
+        public = collection.public
     elif collection_type == "organization":
         collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
+        public = collection.public
     elif collection_type == "global":
         collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized"
-    
+        public = True
     elif collection_type == "toolchain_session":
         session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
         assert type(session) is sql_db_tables.toolchain_session, "Session not found"
         collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
+        public = False
     
     if not public:
         if collection_type == "organization":
@@ -104,7 +120,7 @@ async def upload_document(database : Session,
     if public:
         encrypted_bytes = encryption.aes_encrypt_zip_file(
             key=None, 
-            file_data=BytesIO(file_data_bytes)
+            file_data=file_data_bytes_io
         )
         # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
         #     "key": None, 
@@ -114,7 +130,7 @@ async def upload_document(database : Session,
     else:
         encrypted_bytes = encryption.aes_encrypt_zip_file(
             key=encryption_key,
-            file_data=BytesIO(file_data_bytes)
+            file_data=file_data_bytes_io
         )
         # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
         #     "key": encryption_key, 
@@ -125,14 +141,14 @@ async def upload_document(database : Session,
     
     new_db_file = sql_db_tables.document_raw(
         # server_zip_archive_path=file_zip_save_path,
-        file_name=file.filename,
+        file_name=file_name,
         integrity_sha256=file_integrity,
-        size_bytes=len(file_data_bytes),
+        size_bytes=file_size,
         creation_timestamp=time.time(),
         public=public,
         encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         file_data=encrypted_bytes,
-        md={"file_name": file.filename, "integrity_sha256": file_integrity, "size_bytes": len(file_data_bytes)},
+        md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": len(file_data_bytes)},
         **collection_author_kwargs
     )
     
@@ -151,13 +167,13 @@ async def upload_document(database : Session,
                                                 auth, 
                                                 file_data_bytes, 
                                                 new_db_file.id, 
-                                                file.filename)
+                                                file_name)
         else:
             asyncio.create_task(create_embeddings_in_database(toolchain_function_caller,
                                                               auth, 
                                                               file_data_bytes, 
                                                               new_db_file.id, 
-                                                              file.filename))
+                                                              file_name))
     
     time_taken = time.time() - time_start
 
@@ -166,15 +182,75 @@ async def upload_document(database : Session,
     
     print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
-        return {"hash_id": new_db_file.id, "file_name": file.filename, "finished_processing": new_db_file.finished_processing}
+        return {"hash_id": new_db_file.id, "file_name": file_name, "finished_processing": new_db_file.finished_processing}
 
     return {
         "hash_id": new_db_file.id, 
-        "title": file.filename, 
+        "title": file_name, 
         "size": file_size_as_string(len(file_data_bytes)), 
         "finished_processing": new_db_file.finished_processing
     }
+
+async def upload_archive(database : Session,
+                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+                         auth : AuthType, 
+                         file : UploadFile, 
+                         collection_hash_id : str, 
+                         collection_type : str = "user",
+                         return_file_hash : bool = False,
+                         add_to_vector_db : bool = True,
+                         await_embedding : bool = False):
+    """
+    The batch version of upload_document.
+    The user uploads a zip archive of all files.
+    The files must all be in the top level directory of the zip archive.
+    """
     
+    file_name = file.filename
+    file_ext = file_name.split(".")[-1]
+    file.file.seek(0)
+    file_data_bytes = file.file.read()
+    file_bytes_io = BytesIO(file_data_bytes)
+    
+    files_retrieved, files_retrieved_names, coroutines = [], [], []
+    
+    if file_ext == "7z":
+        # with py7zr.SevenZipFile(file_bytes_io, mode='r', password="") as z:
+        #     file_list = z.files()
+        pass
+    elif file_ext == "zip":
+        with zipfile.ZipFile(file_bytes_io, 'r') as z:
+            zip_file_list = z.namelist()
+            
+            for name in zip_file_list:
+                if not name.endswith('/'):
+                    with z.open(name, "r") as file:
+                        file_entry_bytes_io = BytesIO(file.read())
+                        files_retrieved.append(file_entry_bytes_io)
+                        files_retrieved_names.append(name)
+                        file.close()
+                        
+            z.close()
+    else:
+        raise ValueError(f"File extension `{file_ext}` not supported for archival, only .7z and .zip")
+    
+    for i in range(len(files_retrieved)):
+        coroutines.append(upload_document(database, 
+                                          toolchain_function_caller,
+                                          auth, 
+                                          files_retrieved[i], 
+                                          collection_hash_id,
+                                          file_name=files_retrieved_names[i],
+                                          collection_type=collection_type, 
+                                          return_file_hash=return_file_hash, 
+                                          add_to_vector_db=add_to_vector_db, 
+                                          await_embedding=await_embedding))
+    
+    results = await asyncio.gather(*coroutines)
+    return results
+    
+
+
 def delete_document(database : Session, 
                     auth : AuthType,
                     hash_id: str):
@@ -357,6 +433,8 @@ async def fetch_document(database : Session,
 
     document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
 
+    print("Document Request Access Auth:", document_auth_access)
+    
     document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
     assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
     
@@ -378,11 +456,15 @@ async def fetch_document(database : Session,
     #         file = file[file_name]
     #         yield file.getbuffer().tobytes()
     # return StreamingResponse(yield_single_file())
-    return StreamingResponse(aes_decrypt_zip_file(
+    file_io = aes_decrypt_zip_file(
         database, 
         password,
         fetch_parameters["hash_id"]
-    ))
+    )
+    
+    print("fetch_document got", type(file_io), "with size", len(file_io.getvalue()))
+    
+    return StreamingResponse(file_io)
 
 def ocr_pdf_file(database : Session,
                  auth : AuthType,

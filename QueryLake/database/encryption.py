@@ -102,14 +102,12 @@ def zip_test(key : str):
         z.write(server_dir+"QueryLake")
 
 def aes_encrypt_zip_file(key : str, 
-                         file_data : Union[str, bytes]) -> bytes:
+                         file_data : BytesIO) -> bytes:
     """
     Encrypts a dictionary of file data, with the key as the password using 7zip.
     Returns the encrypted file as bytes.
     """
     new_bytes = BytesIO()
-    
-    
     
     with py7zr.SevenZipFile(new_bytes, 'w', password=key, header_encryption=True) as z:
         z.writed({"file": file_data})
@@ -125,7 +123,7 @@ def aes_decrypt_zip_file(database: Session,
     Returns dictionary with structure of archive.
     Each file value is a BytesIO object.
     """
-
+    
     if toolchain_file:
         statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
     else:
@@ -137,7 +135,9 @@ def aes_decrypt_zip_file(database: Session,
     file_bytes = file_model.file_data
     
     with py7zr.SevenZipFile(BytesIO(file_bytes), mode='r', password=key) as z:
-        return z.read()["file"]
+        print("Decrypted file names:", z.getnames())
+        file_data = z.read()["file"]
+        return file_data
 
 # def save_file_aes(file_path : str, encryption_key : str) -> None:
 

@@ -395,23 +395,21 @@ class UmbrellaClass:
     @fastapi_app.post("/upload_document/{rest_of_path:path}")
     async def upload_document_new(self, req : Request, rest_of_path: str, file : UploadFile):
         try:
-            print("Calling upload_document with file", file.filename)
-            # arguments = req.query_params._dict
+            file_name = file.filename
+            arguments = json.loads(req.query_params._dict["parameters"])
+            file_ext = file_name.split(".")[-1]
+            if file_ext in ["zip", "7z", "rar", "tar"]:
+                target_func, target_func_str = api.upload_archive, "upload_archive"
+            else:
+                target_func, target_func_str = api.upload_document, "upload_document"
             
-            
-            # print(req.__dict__)
-            # route = req.scope['path']
-            # route_split = route.split("/")
-            # print("/".join(route_split[:4]), req.query_params._dict)
-            arguments = json.loads(req.query_params._dict["parameters"]) 
-            # arguments = await req.json()
-            # arguments = json.loads(data) if data else {}
             true_arguments = clean_function_arguments_for_api({
                 **self.default_function_arguments,
                 "file": file,
-            }, arguments, "upload_document")
-
-            return {"success": True, "result": await api.upload_document(**true_arguments)}
+            }, arguments, target_func_str)
+            
+            return {"success": True, "result": await target_func(**true_arguments)}
+        
         except Exception as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
