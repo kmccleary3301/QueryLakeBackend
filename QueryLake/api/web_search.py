@@ -6,7 +6,7 @@ from serpapi import GoogleSearch
 import json, time, requests
 from typing import List, Callable, Awaitable, Dict, Tuple, Any, Union
 from ..vector_database.document_parsing import parse_url
-from ..vector_database.embeddings import create_website_embeddings, create_text_embeddings
+from ..vector_database.embeddings import create_website_embeddings, create_text_chunks
 from ..typing.config import AuthType, getUserType
 from io import BytesIO
 from hashlib import sha256
@@ -72,7 +72,7 @@ async def embed_urls(database : Session,
         database.add(new_document)
         document_entries.append((new_document, content))
         embedding_coroutines.append(
-            create_text_embeddings(database, 
+            create_text_chunks(database, 
                                    auth, 
                                    toolchain_function_caller,
                                    [(content, {"page": 0})],

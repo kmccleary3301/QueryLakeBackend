@@ -49,11 +49,12 @@ def split_list(input_list : list, n : int) -> List[list]:
     k, m = divmod(len(input_list), n)
     return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
-async def create_embeddings_in_database(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                                        auth : AuthType,
-                                        document_bytes : bytes, 
-                                        document_db_entry_id : str,
-                                        document_name : str):
+async def create_document_chunks(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+                                 auth : AuthType,
+                                 document_bytes : bytes, 
+                                 document_db_entry_id : str,
+                                 document_name : str,
+                                 create_embeddings : bool = True):
     """
     Add document to postgres vector database using embeddings.
     """
@@ -77,15 +78,17 @@ async def create_embeddings_in_database(toolchain_function_caller: Callable[[Any
     else:
         raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
     
-    await create_text_embeddings(database, auth, toolchain_function_caller, text_chunks, document_db_entry, document_name)
+    await create_text_chunks(database, auth, toolchain_function_caller, text_chunks, 
+                             document_db_entry, document_name, create_embeddings=create_embeddings)
     pass
 
-async def create_text_embeddings(database : Session,
-                                 auth : AuthType,
-                                 toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                                 text_segments : List[Tuple[str, dict]],
-                                 document_sql_entry : document_raw, 
-                                 document_name: str):
+async def create_text_chunks(database : Session,
+                             auth : AuthType,
+                             toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+                             text_segments : List[Tuple[str, dict]],
+                             document_sql_entry : document_raw, 
+                             document_name: str,
+                             create_embeddings : bool = True):
     """
     Given a set of text chunks, possibly pairs with metadata, create embeddings for the
     entries. Craft an entry in the vector db, using the collection relevant to the
@@ -189,11 +192,14 @@ async def create_text_embeddings(database : Session,
     # del text_combined_chunk_assignments
     
     # print("Running embeddings")
-    embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
-    embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
+    embeddings = None
+    
+    if create_embeddings:
+        embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
+        embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
 
-    for i, vec in enumerate(embeddings):
+    for i, chunk in enumerate(splits):
         embedding_db_entry = DocumentChunk(
             collection_type=collection_type,
             document_id=document_sql_entry.id,
@@ -201,10 +207,10 @@ async def create_text_embeddings(database : Session,
             collection_id=parent_collection_id,
             document_name=document_name,
             document_integrity=document_sql_entry.integrity_sha256,
-            embedding=vec,
-            md=splits[i].metadata,
-            text=splits[i].page_content,
+            md=chunk.metadata,
+            text=chunk.page_content,
             **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
+            **({"embedding": embeddings[i]} if not embeddings is None else {}),
         )
         database.add(embedding_db_entry)
     document_sql_entry.finished_processing = True

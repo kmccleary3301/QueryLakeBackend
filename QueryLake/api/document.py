@@ -11,7 +11,7 @@ from io import BytesIO
 from .user_auth import *
 from .hashing import *
 from threading import Thread
-from ..vector_database.embeddings import query_database, create_embeddings_in_database
+from ..vector_database.embeddings import query_database, create_document_chunks
 from ..vector_database.document_parsing import parse_PDFs
 from ..database.encryption import aes_decrypt_zip_file
 # from chromadb.api import ClientAPI
@@ -38,7 +38,7 @@ async def upload_document(database : Session,
                           file_name : str = None,
                           collection_type : str = "user",
                           return_file_hash : bool = False,
-                          add_to_vector_db : bool = True,
+                          create_embeddings : bool = True,
                           await_embedding : bool = False) -> dict:
     """
     Upload file to server. Possibly with encryption.
@@ -160,20 +160,20 @@ async def upload_document(database : Session,
         collection.document_count += 1
     database.add(new_db_file)
     database.commit()
-    if add_to_vector_db:
-        if await_embedding:
-            await create_embeddings_in_database(
-                                                toolchain_function_caller,
-                                                auth, 
-                                                file_data_bytes, 
-                                                new_db_file.id, 
-                                                file_name)
-        else:
-            asyncio.create_task(create_embeddings_in_database(toolchain_function_caller,
-                                                              auth, 
-                                                              file_data_bytes, 
-                                                              new_db_file.id, 
-                                                              file_name))
+    if await_embedding:
+        await create_document_chunks(toolchain_function_caller,
+                                     auth, 
+                                     file_data_bytes, 
+                                     new_db_file.id, 
+                                     file_name,
+                                     create_embeddings=create_embeddings)
+    else:
+        asyncio.create_task(create_document_chunks(toolchain_function_caller,
+                                                   auth, 
+                                                   file_data_bytes, 
+                                                   new_db_file.id, 
+                                                   file_name,
+                                                   create_embeddings=create_embeddings))
     
     time_taken = time.time() - time_start
 
@@ -198,7 +198,7 @@ async def upload_archive(database : Session,
                          collection_hash_id : str, 
                          collection_type : str = "user",
                          return_file_hash : bool = False,
-                         add_to_vector_db : bool = True,
+                         create_embeddings : bool = True,
                          await_embedding : bool = False):
     """
     The batch version of upload_document.
@@ -243,7 +243,7 @@ async def upload_archive(database : Session,
                                           file_name=files_retrieved_names[i],
                                           collection_type=collection_type, 
                                           return_file_hash=return_file_hash, 
-                                          add_to_vector_db=add_to_vector_db, 
+                                          create_embeddings=create_embeddings,
                                           await_embedding=await_embedding))
     
     results = await asyncio.gather(*coroutines)

@@ -60,7 +60,7 @@ class DocumentChunk(SQLModel, table=True):
     collection_id: Optional[str] = Field(index=True, default=None)
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None, index=True)
-    embedding: List[float] = Field(sa_column=Column(Vector(1024)))
+    embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None)
     private: bool = Field(default=False)
     
     document_md: dict = Field(sa_column=Column(JSONB), default={})
