@@ -11,7 +11,7 @@ from io import BytesIO
 from .user_auth import *
 from .hashing import *
 from threading import Thread
-from ..vector_database.embeddings import query_database, create_document_chunks
+from ..vector_database.embeddings import query_database, chunk_documents
 from ..vector_database.document_parsing import parse_PDFs
 from ..database.encryption import aes_decrypt_zip_file
 # from chromadb.api import ClientAPI
@@ -25,6 +25,8 @@ import contextlib
 import io
 from ..misc_functions.function_run_clean import file_size_as_string
 import asyncio
+import bisect
+import concurrent.futures
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 
@@ -139,6 +141,17 @@ async def upload_document(database : Session,
         # })
     # zip_thread.start()
     
+    new_file_blob = sql_db_tables.document_zip_blob(
+        file_count=1,
+        size_bytes=len(encrypted_bytes),
+        encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
+        file_data=encrypted_bytes,
+        **collection_author_kwargs,
+    )
+    
+    database.add(new_file_blob)
+    database.commit()
+    
     new_db_file = sql_db_tables.document_raw(
         # server_zip_archive_path=file_zip_save_path,
         file_name=file_name,
@@ -147,7 +160,9 @@ async def upload_document(database : Session,
         creation_timestamp=time.time(),
         public=public,
         encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
-        file_data=encrypted_bytes,
+        # file_data=encrypted_bytes,
+        blob_id=new_file_blob.id,
+        blob_dir="file",
         md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": len(file_data_bytes)},
         **collection_author_kwargs
     )
@@ -161,18 +176,20 @@ async def upload_document(database : Session,
     database.add(new_db_file)
     database.commit()
     if await_embedding:
-        await create_document_chunks(toolchain_function_caller,
+        await chunk_documents(toolchain_function_caller,
+                                     database,
                                      auth, 
-                                     file_data_bytes, 
-                                     new_db_file.id, 
-                                     file_name,
+                                     [file_data_bytes], 
+                                     [new_db_file.id], 
+                                     [file_name],
                                      create_embeddings=create_embeddings)
     else:
-        asyncio.create_task(create_document_chunks(toolchain_function_caller,
+        asyncio.create_task(chunk_documents(toolchain_function_caller,
+                                                   database,
                                                    auth, 
-                                                   file_data_bytes, 
-                                                   new_db_file.id, 
-                                                   file_name,
+                                                   [file_data_bytes], 
+                                                   [new_db_file.id], 
+                                                   [file_name],
                                                    create_embeddings=create_embeddings))
     
     time_taken = time.time() - time_start
@@ -206,18 +223,100 @@ async def upload_archive(database : Session,
     The files must all be in the top level directory of the zip archive.
     """
     
+    
+    print("Adding document to collection")
+    collection_type_lookup = {
+        "user": "user_document_collection_hash_id", 
+        "organization": "organization_document_collection_hash_id",
+        "global": "global_document_collection_hash_id",
+        "toolchain_session": "toolchain_session_id" 
+    }
+
+    assert collection_type in ["global", "organization", "user", "toolchain_session"]
+
+    if collection_type == "global":
+        public = True
+
+    (user, user_auth) = get_user(database, auth)
+
+    collection_author_kwargs = {collection_type_lookup[collection_type]: collection_hash_id}
+
+    if collection_type == "user":
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == collection_hash_id)).first()
+        assert collection.author_user_name == user_auth.username, "User not authorized"
+        public = collection.public
+    elif collection_type == "organization":
+        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
+        assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
+        public = collection.public
+    elif collection_type == "global":
+        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.id == collection_hash_id)).first()
+        assert user.is_admin == True, "User not authorized"
+        public = True
+    elif collection_type == "toolchain_session":
+        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
+        assert type(session) is sql_db_tables.toolchain_session, "Session not found"
+        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
+        public = False
+    
+    if not public:
+        if collection_type == "organization":
+            public_key = organization.public_key
+        else:
+            public_key = user.public_key
+
+    encryption_key = random_hash()
+    
+    
     file_name = file.filename
     file_ext = file_name.split(".")[-1]
     file.file.seek(0)
     file_data_bytes = file.file.read()
-    file_bytes_io = BytesIO(file_data_bytes)
     
-    files_retrieved, files_retrieved_names, coroutines = [], [], []
+    file_bytes_io = BytesIO(file_data_bytes)
+    files_retrieved : List[BytesIO] = []
+    files_retrieved_bytes : List[bytes] = []
+    files_retrieved_names, coroutines = [], []
+    
+    
     
     if file_ext == "7z":
-        # with py7zr.SevenZipFile(file_bytes_io, mode='r', password="") as z:
-        #     file_list = z.files()
-        pass
+        with py7zr.SevenZipFile(file_bytes_io, mode='r') as z:
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                # future = executor.submit(z.read)
+                future = executor.submit(z.getnames)
+                try:
+                    file_list = future.result(timeout=10)
+                    # print("Extracted file names:", file_list)
+                except concurrent.futures.TimeoutError:
+                    raise concurrent.futures.TimeoutError("Reading the archive files took more than 10 seconds. This is usually a sign that the 7z file has too many entries.")
+            
+            assert len(file_list) <= 10000, "7z archive must contain <= 10,000 files"
+            
+            top_level_files, top_level_folders, folder_indices = [], [], []
+            for entry in file_list:
+                if '/' in entry:
+                    top_level_folders.append(entry.split('/')[0])
+                else:
+                    bisect.insort(top_level_files, entry)
+
+            for folder in top_level_folders:
+                index = bisect.bisect_left(top_level_files, folder)
+                if index < len(top_level_files) and top_level_files[index] == folder:
+                    bisect.insort(folder_indices, index)
+            
+            for index in folder_indices[::-1]:
+                del top_level_files[index]
+            
+            for name, file_entry_bytes_io in z.read(top_level_files).items():
+                files_retrieved.append(file_entry_bytes_io)
+                files_retrieved_bytes.append(file_entry_bytes_io.getvalue())
+                files_retrieved_names.append(name)
+    
     elif file_ext == "zip":
         with zipfile.ZipFile(file_bytes_io, 'r') as z:
             zip_file_list = z.namelist()
@@ -225,7 +324,9 @@ async def upload_archive(database : Session,
             for name in zip_file_list:
                 if not name.endswith('/'):
                     with z.open(name, "r") as file:
-                        file_entry_bytes_io = BytesIO(file.read())
+                        file_entry_bytes = file.read()
+                        file_entry_bytes_io = BytesIO(file_entry_bytes)
+                        files_retrieved_bytes.append(file_entry_bytes)
                         files_retrieved.append(file_entry_bytes_io)
                         files_retrieved_names.append(name)
                         file.close()
@@ -234,19 +335,85 @@ async def upload_archive(database : Session,
     else:
         raise ValueError(f"File extension `{file_ext}` not supported for archival, only .7z and .zip")
     
-    for i in range(len(files_retrieved)):
-        coroutines.append(upload_document(database, 
-                                          toolchain_function_caller,
-                                          auth, 
-                                          files_retrieved[i], 
-                                          collection_hash_id,
-                                          file_name=files_retrieved_names[i],
-                                          collection_type=collection_type, 
-                                          return_file_hash=return_file_hash, 
-                                          create_embeddings=create_embeddings,
-                                          await_embedding=await_embedding))
+    time_start = time.time()
     
-    results = await asyncio.gather(*coroutines)
+    gen_directories = list(map(lambda x: random_hash(), files_retrieved_names))
+    file_blob_dict = {gen_directories[i]: files_retrieved[i] for i in range(len(files_retrieved))}
+    
+    if public:
+        encrypted_bytes = encryption.aes_encrypt_zip_file_dict(
+            key=None, 
+            file_data=file_blob_dict
+        )
+    else:
+        encrypted_bytes = encryption.aes_encrypt_zip_file_dict(
+            key=encryption_key, 
+            file_data=file_blob_dict
+        )
+    
+    new_file_blob = sql_db_tables.document_zip_blob(
+        file_count=len(gen_directories),
+        size_bytes=len(encrypted_bytes),
+        encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
+        file_data=encrypted_bytes,
+        **collection_author_kwargs,
+    )
+    
+    database.add(new_file_blob)
+    database.commit()
+    
+    results, new_doc_ids, new_doc_db_entries = [], [], []
+    
+    for i in range(len(files_retrieved)):
+        file_integrity = sha256(files_retrieved_bytes[i]).hexdigest()
+        file_size = len(files_retrieved_bytes[i])
+        file_name = files_retrieved_names[i]
+        new_db_file = sql_db_tables.document_raw(
+            # server_zip_archive_path=file_zip_save_path,
+            file_name=file_name,
+            integrity_sha256=file_integrity,
+            size_bytes=file_size,
+            creation_timestamp=time.time(),
+            public=public,
+            encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
+            # file_data=encrypted_bytes,
+            blob_id=new_file_blob.id,
+            blob_dir=gen_directories[i],
+            md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": file_size},
+            **collection_author_kwargs
+        )
+        database.add(new_db_file)
+        results.append({
+            "hash_id": new_db_file.id, 
+            "title": file_name, 
+            "size": file_size_as_string(file_size), 
+            "finished_processing": new_db_file.finished_processing
+        })
+        new_doc_ids.append(new_db_file.id)
+        new_doc_db_entries.append(new_db_file)
+    
+    collection.document_count += len(new_doc_ids)
+    
+    database.commit()
+    
+    if await_embedding:
+        await chunk_documents(toolchain_function_caller,
+                              database,
+                              auth, 
+                              files_retrieved_bytes, 
+                              new_doc_db_entries, 
+                              files_retrieved_names,
+                              create_embeddings=create_embeddings)
+    else:
+        asyncio.create_task(chunk_documents(toolchain_function_caller,
+                                            database,
+                                            auth,
+                                            files_retrieved_bytes, 
+                                            new_doc_db_entries, 
+                                            files_retrieved_names,
+                                            create_embeddings=create_embeddings))
+    
+    # results = await asyncio.gather(*coroutines)
     return results
     
 
@@ -437,6 +604,8 @@ async def fetch_document(database : Session,
     
     document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
     assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
+    
+    
     
 
     fetch_parameters = get_document_secure(**{

@@ -23,6 +23,7 @@ import re
 from itertools import chain
 import json
 import bisect
+from ..database.create_db_session import initialize_database_engine
 
 def binary_search(sorted_list, target):
 	index = bisect.bisect_right(sorted_list, target)
@@ -49,45 +50,121 @@ def split_list(input_list : list, n : int) -> List[list]:
     k, m = divmod(len(input_list), n)
     return [input_list[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
-async def create_document_chunks(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                                 auth : AuthType,
-                                 document_bytes : bytes, 
-                                 document_db_entry_id : str,
-                                 document_name : str,
-                                 create_embeddings : bool = True):
+# async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+#                           auth : AuthType,
+#                           document_bytes_list : List[bytes], 
+#                           document_ids: List[str],
+#                           document_names : List[str],
+#                           create_embeddings : bool = True,):
+#     """
+#     Add document batch to postgres vector database using embeddings.
+#     """
+    
+#     assert len(document_ids) == len(document_bytes_list) and len(document_ids) == len(document_names),\
+#         "Length of document_bytes_list, document_ids, and document_names must be the same."
+
+#     database = initialize_database_engine()
+    
+#     doc_lookup = {document_ids[i] : {
+#         "name": document_names[i],
+#         "bytes": document_bytes_list[i]    
+#     } for i in range(len(document_ids))}
+
+#     text_segment_collections = []
+#     real_db_entries = list(database.exec(select(document_raw).where(document_raw.id.in_(document_ids))).all())
+    
+#     names_reordered = []
+    
+    
+#     for i in range(len(real_db_entries)):
+        
+#         document_db_entry = real_db_entries[i]
+#         document_name = doc_lookup[document_db_entry.id]["name"]
+#         document_bytes = doc_lookup[document_db_entry.id]["bytes"]
+        
+#         names_reordered.append(document_name)
+        
+#         assert isinstance(document_bytes, bytes), "Document bytes must be a bytes object."
+        
+#         if isinstance(document_db_entry, str):
+#             document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry)).first()
+#             assert not document_db_entry is None, "Document not found in database."
+        
+#         assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
+        
+#         file_extension = document_name.split(".")[-1]
+        
+#         if file_extension in ["pdf"]:
+#             text_chunks = parse_PDFs(document_bytes)
+#         elif file_extension in ["txt", "md", "json"]:
+#             text = document_bytes.decode("utf-8").split("\n")
+#             text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
+#         else:
+#             raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
+        
+#         text_segment_collections.append(text_chunks)
+        
+#     await create_text_chunks(database, auth, toolchain_function_caller, text_segment_collections, 
+#                              real_db_entries, names_reordered, create_embeddings=create_embeddings)
+#     pass
+
+async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+                          database : Session,
+                          auth : AuthType,
+                          document_bytes_list : List[bytes], 
+                          document_db_entries: List[Union[str, document_raw]],
+                          document_names : List[str],
+                          create_embeddings : bool = True,):
     """
-    Add document to postgres vector database using embeddings.
+    Add document batch to postgres vector database using embeddings.
     """
     
-    engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
+    assert len(document_db_entries) == len(document_bytes_list) and len(document_db_entries) == len(document_names),\
+        "Length of document_bytes_list, document_db_entries, and document_names must be the same."
+
+    text_segment_collections = []
+    real_db_entries = []
     
-    SQLModel.metadata.create_all(engine)
-    database = Session(engine)
     
-    document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry_id)).first()
-    assert not document_db_entry is None, "Document not found in database."
-    assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
     
-    file_extension = document_name.split(".")[-1]
-    
-    if file_extension in ["pdf"]:
-        text_chunks = parse_PDFs(document_bytes)
-    elif file_extension in ["txt", "md", "json"]:
-        text = document_bytes.decode("utf-8").split("\n")
-        text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
-    else:
-        raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
-    
-    await create_text_chunks(database, auth, toolchain_function_caller, text_chunks, 
-                             document_db_entry, document_name, create_embeddings=create_embeddings)
+    for i in range(len(document_db_entries)):
+        
+        document_db_entry = document_db_entries[i]
+        document_name = document_names[i]
+        document_bytes = document_bytes_list[i]
+        
+        assert isinstance(document_bytes, bytes), "Document bytes must be a bytes object."
+        
+        if isinstance(document_db_entry, str):
+            document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry)).first()
+            assert not document_db_entry is None, "Document not found in database."
+        
+        assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
+        real_db_entries.append(document_db_entry)
+        
+        file_extension = document_name.split(".")[-1]
+        
+        if file_extension in ["pdf"]:
+            text_chunks = parse_PDFs(document_bytes)
+        elif file_extension in ["txt", "md", "json"]:
+            text = document_bytes.decode("utf-8").split("\n")
+            text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
+        else:
+            raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
+
+        text_segment_collections.append(text_chunks)
+        
+    await create_text_chunks(database, auth, toolchain_function_caller, text_segment_collections, 
+                             real_db_entries, document_names, create_embeddings=create_embeddings)
     pass
+
 
 async def create_text_chunks(database : Session,
                              auth : AuthType,
                              toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                             text_segments : List[Tuple[str, dict]],
-                             document_sql_entry : document_raw, 
-                             document_name: str,
+                             text_segment_collections : List[List[Tuple[str, dict]]],
+                             document_sql_entries : List[document_raw], 
+                             document_names: List[str],
                              create_embeddings : bool = True):
     """
     Given a set of text chunks, possibly pairs with metadata, create embeddings for the
@@ -102,6 +179,9 @@ async def create_text_chunks(database : Session,
     document_name - name of the original document.
     """
 
+    assert len(text_segment_collections) == len(document_sql_entries) and len(text_segment_collections) == len(document_names),\
+        "Length of text_segment_collections, document_sql_entries, and document_names must be the same."
+
     chunk_size = 1200
     chunk_overlap = 100
     # text_splitter = RecursiveCharacterTextSplitter(
@@ -112,108 +192,79 @@ async def create_text_chunks(database : Session,
         chunk_overlap=chunk_overlap,
         add_start_index=True
     )
-
-    if not document_sql_entry.global_document_collection_hash_id is None:
-        collection_type = "global"
-        parent_collection_id = document_sql_entry.global_document_collection_hash_id
-    elif not document_sql_entry.user_document_collection_hash_id is None:
-        collection_type = "user"
-        parent_collection_id = document_sql_entry.user_document_collection_hash_id
-    elif not document_sql_entry.organization_document_collection_hash_id is None:
-        collection_type = "organization"
-        parent_collection_id = document_sql_entry.organization_document_collection_hash_id
-    elif not document_sql_entry.website_url is None:
-        collection_type = "website"
-        parent_collection_id = None
-    else:
-        return
     
+    current_chunks_queued = 0
+    embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
-    
-    # We are assuming an input of tuples with text and metadata.
-    # We do this to keep track of location/ordering metadata such as page number.
-    # This code concatenates the text and allows us to recover the minimum location index
-    # After splitting for embedding.
-    
-    created_document = "\n".join([chunk[0] for chunk in text_segments])
-    
-    m_1 = time()
-    doc_markers, current_sum = [], 0
-    for i in range(len(text_segments)):
-        doc_markers.append(current_sum)
-        current_sum += len(text_segments[i][0]) + 1
-    
-    splits = text_splitter.split_documents([Document(page_content=created_document, metadata={})])
-    splits = list(map(lambda x: Document(
-        page_content=x.page_content,
-        metadata={**text_segments[binary_search(doc_markers, x.metadata["start_index"])][1]}
-    ), splits))
-    m_2 = time()
-    print("Split %10d segments in %5.2fs" % (len(text_segments), m_2 - m_1))
- 
-    # print("Concatenating text with %d segments..." % (len(text_segments)))
-    # for chunk_i, chunk in enumerate(text_segments):
+    for i in range(len(text_segment_collections)):
+        document_sql_entry = document_sql_entries[i]
+        text_segments = text_segment_collections[i]
+        document_name = document_names[i]
         
-    #     if (chunk_i % max(1, int(len(text_segments) / 100))) == 0:
-    #         progress = (chunk_i+1)/len(text_segments)
-    #         progress_bar = f"\r[{'='*int(20 * progress)}>{' '*(20 - int(20 * progress))}] " + "%3.2f%%" % (progress*100)
-    #         print(progress_bar, end="\r")
+        if not document_sql_entry.global_document_collection_hash_id is None:
+            collection_type = "global"
+            parent_collection_id = document_sql_entry.global_document_collection_hash_id
+        elif not document_sql_entry.user_document_collection_hash_id is None:
+            collection_type = "user"
+            parent_collection_id = document_sql_entry.user_document_collection_hash_id
+        elif not document_sql_entry.organization_document_collection_hash_id is None:
+            collection_type = "organization"
+            parent_collection_id = document_sql_entry.organization_document_collection_hash_id
+        elif not document_sql_entry.website_url is None:
+            collection_type = "website"
+            parent_collection_id = None
+        else:
+            return
         
-    #     chunk_combined_strip = sub(r"[\s]+", "", chunk[0]).lower()
-    #     text_combined_strip += chunk_combined_strip
-    #     text_combined += chunk[0] + " "
-    #     text_combined_chunk_assignments = np.concatenate((text_combined_chunk_assignments, np.full((len(chunk_combined_strip)), chunk_i, dtype=np.int32)), axis=None)
-    
-    
-    
-    
-    # splits_text = [doc.page_content for doc in splits]
-    # splits_metadata = []
-    # text_size_iterator = 0
-    
-    # m_1 = time()
-    # print("Finding minimum metadata for each chunk with %d splits..." % (len(splits)))
-    # for doc in splits:
-    #     text_stripped = sub(r"[\s]+", "", doc.page_content).lower()
-    #     index = text_combined_strip.find(text_stripped)
-    #     try:
-    #         if index != -1:
-    #             metadata = text_segments[text_combined_chunk_assignments[index]][1]
-    #             text_size_iterator = index
-    #         else:
-    #             metadata = text_segments[text_combined_chunk_assignments[text_size_iterator+len(text_stripped)]][1]
-    #         # text_size_iterator += len(text_stripped)
-    #         splits_metadata.append(metadata)
-    #     except:
-    #         splits_metadata.append(metadata[-1])
-    # m_2 = time()
-    # print("Done in %3.2fs" % (m_2 - m_1))
+        # We are assuming an input of tuples with text and metadata.
+        # We do this to keep track of location/ordering metadata such as page number.
+        # This code concatenates the text and allows us to recover the minimum location index
+        # After splitting for embedding.
+        
+        created_document = "\n".join([chunk[0] for chunk in text_segments])
+        
+        m_1 = time()
+        doc_markers, current_sum = [], 0
+        for i in range(len(text_segments)):
+            doc_markers.append(current_sum)
+            current_sum += len(text_segments[i][0]) + 1
+        
+        splits = text_splitter.split_documents([Document(page_content=created_document, metadata={})])
+        splits = list(map(lambda x: Document(
+            page_content=x.page_content,
+            metadata={**text_segments[binary_search(doc_markers, x.metadata["start_index"])][1]}
+        ), splits))
+        m_2 = time() - m_1
+        if m_2 > 1:
+            print("Split %16d segments in %5.2fs" % (len(text_segments), m_2))
+        
+        embeddings = None
+        
+        if create_embeddings:
+            embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
 
-    # del text_combined_chunk_assignments
+        for i, chunk in enumerate(splits):
+            embedding_db_entry = DocumentChunk(
+                collection_type=collection_type,
+                document_id=document_sql_entry.id,
+                document_chunk_number=i,
+                collection_id=parent_collection_id,
+                document_name=document_name,
+                document_integrity=document_sql_entry.integrity_sha256,
+                md=chunk.metadata,
+                text=chunk.page_content,
+                **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
+                **({"embedding": embeddings[i]} if not embeddings is None else {}),
+            )
+            database.add(embedding_db_entry)
+            current_chunks_queued += 1
+            if current_chunks_queued >= 9999:
+                database.commit()
+                database.rollback()
+                current_chunks_queued = 0
+            
+        document_sql_entry.finished_processing = True
     
-    # print("Running embeddings")
-    
-    embeddings = None
-    
-    if create_embeddings:
-        embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
-        embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
-
-    for i, chunk in enumerate(splits):
-        embedding_db_entry = DocumentChunk(
-            collection_type=collection_type,
-            document_id=document_sql_entry.id,
-            document_chunk_number=i,
-            collection_id=parent_collection_id,
-            document_name=document_name,
-            document_integrity=document_sql_entry.integrity_sha256,
-            md=chunk.metadata,
-            text=chunk.page_content,
-            **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
-            **({"embedding": embeddings[i]} if not embeddings is None else {}),
-        )
-        database.add(embedding_db_entry)
-    document_sql_entry.finished_processing = True
     database.commit()
 
     pass

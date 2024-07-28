@@ -52,21 +52,28 @@ def create_document_collection(database : Session,
     If no hash_id is given, one is created, then returned.
     """
     hash_id = random_hash()
-
+    
+    encryption_key = random_hash()
+    
     (user, user_auth) = get_user(database, auth)
     if not organization_id is None:
         membership_get = database.exec(select(sql_db_tables.organization_membership).where(and_(
             sql_db_tables.organization_membership.user_name == user_auth.username,
             sql_db_tables.organization_membership.organization_id == organization_id))).all()
+        
         assert len(membership_get) > 0, "User not in organization"
         assert membership_get[0].role != "viewer", "Invalid Permissions"
-
+        
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == organization_id)).first()
+        public_key = organization.public_key
+        
         new_collection = sql_db_tables.organization_document_collection(
             name=name,
             author_organization_id=organization_id,
             creation_timestamp=time.time(),
             public=public,
-            description=description
+            description=description,
+            encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         )
     else:
         new_collection = sql_db_tables.user_document_collection(
@@ -74,7 +81,8 @@ def create_document_collection(database : Session,
             author_user_name=user_auth.username,
             creation_timestamp=time.time(),
             public=public,
-            description=description
+            description=description,
+            encryption_key_secure=encryption.ecc_encrypt_string(user.public_key, encryption_key),
         )
     database.add(new_collection)
     database.commit()
@@ -205,7 +213,7 @@ def fetch_collection_documents(database : Session,
     }, list(documents)))
     
     return results
-    
+
 
 def modify_document_collection(database : Session,
                                 auth : AuthType,
@@ -218,7 +226,7 @@ def modify_document_collection(database : Session,
     
     TODO: Implement public/private switch.
     """
-
+    
     assert collection_type in ["user", "organization", "global"], "Invalid collection type"
     (user, user_auth) = get_user(database, auth)
 

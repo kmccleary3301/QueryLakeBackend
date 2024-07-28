@@ -355,6 +355,21 @@ class model_query_raw(SQLModel, table=True):
     access_token_id: Optional[int] = Field(foreign_key="access_token.id", index=True, default=None)
     organization_id: Optional[str] = Field(default=None, foreign_key="organization.id", index=True)
 
+
+class document_zip_blob(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    file_count: int
+    size_bytes: int
+    
+    encryption_key_secure: Optional[str] = Field(default=None)
+    organization_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="organization_document_collection.id", index=True)
+    user_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="user_document_collection.id", index=True)
+    global_document_collection_hash_id: Optional[str] = Field(default=None, foreign_key="global_document_collection.id", index=True)
+    toolchain_session_id: Optional[str] = Field(default=None, foreign_key="toolchain_session.id", index=True)
+    
+    file_data: bytes = Field(sa_column=Column(LargeBinary))
+
+
 class document_raw(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     # hash_id: str = Field(index=True, unique=True)
@@ -371,6 +386,10 @@ class document_raw(SQLModel, table=True):
     website_url: Optional[str] = Field(default=None)
     
     file_data: bytes = Field(sa_column=Column(LargeBinary))
+    
+    blob_id: Optional[str] = Field(default=None, foreign_key="document_zip_blob.id", index=True)
+    blob_dir: Optional[str] = Field(default=None)
+    
     finished_processing: Optional[bool] = Field(default=False)
     md: Optional[dict] = Field(sa_column=Column(JSONB), default={})
     

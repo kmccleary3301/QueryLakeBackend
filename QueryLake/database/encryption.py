@@ -8,9 +8,9 @@ from fastapi import UploadFile
 import py7zr
 import os
 from io import BytesIO
-from typing import Dict, Union
+from typing import Dict, Union, List
 from sqlmodel import Session, select, and_
-from ..database.sql_db_tables import document_raw, ToolchainSessionFileOutput
+from ..database.sql_db_tables import document_raw, ToolchainSessionFileOutput, document_zip_blob
 
 
 def get_random_hash():
@@ -114,6 +114,20 @@ def aes_encrypt_zip_file(key : str,
     
     return new_bytes.getvalue()
     
+    
+
+def aes_encrypt_zip_file_dict(key : str, 
+                              file_data : Dict[str, BytesIO]) -> bytes:
+    """
+    Encrypts a dictionary of file data, with the key as the password using 7zip.
+    Returns the encrypted file as bytes.
+    """
+    new_bytes = BytesIO()
+    
+    with py7zr.SevenZipFile(new_bytes, 'w', password=key, header_encryption=True) as z:
+        z.writed(file_data)
+    
+    return new_bytes.getvalue()
 
 def aes_decrypt_zip_file(database: Session,
                          key : str, 
@@ -124,19 +138,29 @@ def aes_decrypt_zip_file(database: Session,
     Each file value is a BytesIO object.
     """
     
+    document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
+    
     if toolchain_file:
         statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
+        file_model = database.exec(statement).first()
+        directory = "file"
     else:
-        statement = select(document_raw).where(document_raw.id == document_id)
-    file_model = database.exec(statement).first()
+        document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
+        document_blob = database.exec(select(document_zip_blob).where(document_zip_blob.id == document.blob_id)).first()
+        assert document_blob is not None, "Document blob not found in database."
+        file_model = document_blob
+        directory = document.blob_dir
+        assert not directory is None, "Document doesn't contain a blob directory."
+        
+    
+    
     if file_model is None:
         raise FileNotFoundError("Document id not found in database.")
     
     file_bytes = file_model.file_data
     
     with py7zr.SevenZipFile(BytesIO(file_bytes), mode='r', password=key) as z:
-        print("Decrypted file names:", z.getnames())
-        file_data = z.read()["file"]
+        file_data = z.read()[directory]
         return file_data
 
 # def save_file_aes(file_path : str, encryption_key : str) -> None:

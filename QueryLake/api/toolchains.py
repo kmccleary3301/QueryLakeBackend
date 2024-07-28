@@ -28,6 +28,7 @@ from ..operation_classes.toolchain_session import ToolchainSession
 from ..misc_functions.toolchain_state_management import safe_serialize
 from ..typing.config import Config
 from io import BytesIO
+from ..database.encryption import ecc_encrypt_string
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -164,7 +165,7 @@ def create_toolchain_session(database : Session,
     database accordingly.
     """
     user_retrieved : getUserType  = get_user(database, auth)
-    (_, user_auth) = user_retrieved
+    (user, user_auth) = user_retrieved
     
     toolchain_get = get_toolchain_from_db(database, toolchain_id, auth)
     created_session = ToolchainSession(database,
@@ -175,12 +176,16 @@ def create_toolchain_session(database : Session,
                                        "",
                                        user_auth.username)
     
+    public_key = user.public_key
+    encryption_key = random_hash()
+    
     new_session_in_database = sql_db_tables.toolchain_session(
         title=created_session.state["title"],
         state=json.dumps(created_session.state),
         creation_timestamp=time.time(),
         toolchain_id=toolchain_id,
-        author=user_auth.username
+        author=user_auth.username,
+        encryption_key_secure=ecc_encrypt_string(public_key, encryption_key)
     )
     database.add(new_session_in_database)
     database.commit()

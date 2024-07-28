@@ -403,18 +403,22 @@ class UmbrellaClass:
             else:
                 target_func, target_func_str = api.upload_document, "upload_document"
             
+            print("Calling:", target_func_str, "with file:", file_name)
+            
             true_arguments = clean_function_arguments_for_api({
                 **self.default_function_arguments,
                 "file": file,
             }, arguments, target_func_str)
-            
+            self.database.rollback()
             return {"success": True, "result": await target_func(**true_arguments)}
         
         except Exception as e:
+            self.database.rollback()
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_msg = {"success": False, "note": error_message, "trace": stack_trace}
-            print(return_msg)
+            # print(return_msg)
+            print(error_message[:2000])
             return return_msg
 
     @fastapi_app.get("/fetch_document")
