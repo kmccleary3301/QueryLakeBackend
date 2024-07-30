@@ -6,7 +6,8 @@ from ...misc_functions.prompt_construction import async_construct_chat_history_o
 from copy import deepcopy
 from ..single_user_auth import get_user
 from sqlmodel import Session
-from ...vector_database.embeddings import query_database, expand_source
+from ...vector_database.embeddings import expand_source
+from ...api.search import search_hybrid
 from .standalone_question import llm_isolate_question
 from ...database.sql_db_tables import DocumentEmbeddingDictionary
 import re
@@ -170,7 +171,7 @@ async def llm_multistep_search(database : Session,
         if search_web:
             await web_search(database, toolchain_function_caller, auth, query, 10, web_timeout=web_timeout)
         
-        search_results = await query_database(database,
+        search_results = await search_hybrid(database,
                                               auth,
                                               toolchain_function_caller,
                                               query,

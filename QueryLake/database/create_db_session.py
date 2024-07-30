@@ -18,7 +18,7 @@ SELECT EXISTS (
     WHERE  c.relname = '&CHUNK_CLASS_NAME&_vector_cos_idx'
     AND    n.nspname = 'public'  -- or your schema name here
 );
-""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
+""".replace("&CHUNK_CLASS_NAME&", ORIGINAL_CHUNK_CLASS_NAME)
 
 CREATE_VECTOR_INDEX_SQL = """
 DO $$
@@ -28,7 +28,7 @@ BEGIN
 				WITH (m = 16, ef_construction = 64);';
 END
 $$;
-""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
+""".replace("&CHUNK_CLASS_NAME&", ORIGINAL_CHUNK_CLASS_NAME)
 
 def check_index_created(database: Session):
     result = database.exec(text(CHECK_INDEX_EXISTS_SQL))
@@ -57,4 +57,4 @@ def initialize_database_engine() -> Session:
     
     # For some reason in testing, the raw SQL adds the fastest speedup despite adding the same index with the same ID.
     
-    return database
+    return database, engine

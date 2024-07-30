@@ -11,7 +11,7 @@ from io import BytesIO
 from .user_auth import *
 from .hashing import *
 from threading import Thread
-from ..vector_database.embeddings import query_database, chunk_documents
+from ..vector_database.embeddings import chunk_documents
 from ..vector_database.document_parsing import parse_PDFs
 from ..database.encryption import aes_decrypt_zip_file
 # from chromadb.api import ClientAPI
@@ -335,7 +335,8 @@ async def upload_archive(database : Session,
     else:
         raise ValueError(f"File extension `{file_ext}` not supported for archival, only .7z and .zip")
     
-    time_start = time.time()
+    if len(files_retrieved) == 0:
+        return []
     
     gen_directories = list(map(lambda x: random_hash(), files_retrieved_names))
     file_blob_dict = {gen_directories[i]: files_retrieved[i] for i in range(len(files_retrieved))}

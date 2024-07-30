@@ -154,7 +154,7 @@ class UmbrellaClass:
         self.rerank_handle = rerank_handle
         self.web_scraper_handle = web_scraper_handle
         
-        self.database = initialize_database_engine()
+        self.database, self.engine = initialize_database_engine()
         
         database_admin_operations.add_models_to_database(self.database, self.config.models)
         database_admin_operations.add_toolchains_to_database(self.database, self.toolchain_configs)

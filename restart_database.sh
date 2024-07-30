@@ -6,6 +6,9 @@ sudo docker stop querylakebackend_postgres_db_1
 # Remove the Docker container
 sudo docker rm querylakebackend_postgres_db_1
 
+# Pull the latest Docker image
+docker pull paradedb/paradedb:latest
+
 # Remove the db_data directory
 # The script uses "$(dirname "$0")" to get the directory where the script is located
 sudo rm -rf "$(dirname "$0")/db_data"

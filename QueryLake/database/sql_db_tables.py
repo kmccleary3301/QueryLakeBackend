@@ -7,7 +7,7 @@ from sqlalchemy import event, text
 
 from sqlalchemy.sql import func
 
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, create_engine, UUID
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
 from ..api.hashing import random_hash
@@ -19,12 +19,30 @@ from psycopg2.errors import InFailedSqlTransaction
 from functools import partial
 from time import time
 import inspect
+import uuid as uuid_pkg
 
 def data_dict(db_entry : SQLModel):
     return {i:db_entry.__dict__[i] for i in db_entry.__dict__ if i != "_sa_instance_state"}
 
 def random_hash_32():
     return random_hash(32, 62)
+
+
+generator_1 = random_hash_32
+id_type_1 = str
+
+
+id_factories = {
+    "document_chunk": generator_1,
+    "collections": generator_1,
+    "document_raw": generator_1
+}
+
+id_types = {
+    "document_chunk": id_type_1,
+    "collections": id_type_1,
+    "document_raw": id_type_1
+}
 
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
 
@@ -51,7 +69,7 @@ class ApiKey(SQLModel, table=True):
     user_password_prehash_encrypted: str
 
 class DocumentChunk(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=id_factories["document_chunk"], primary_key=True, index=True, unique=True)
     creation_timestamp: Optional[float] = Field(default_factory=time)
     collection_type: Optional[str] = Field(index=True, default=None)
     document_id: Optional[str] = Field(foreign_key="document_raw.id", default=None, index=True)
@@ -69,9 +87,16 @@ class DocumentChunk(SQLModel, table=True):
     # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
     ts_content: str = Field(sa_column=Column(TSVECTOR))
     
+# class DocumentChunkPointer(SQLModel, table=True):
+#     id: int = Field(primary_key=True, index=True, unique=True)
+#     text: str = Field()
+#     md: dict = Field(sa_column=Column(JSONB), default={})
     
 
-CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
+# CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
+ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
+# CHUNK_CLASS_NAME = DocumentChunkPointer.__name__.lower()
+CHUNK_CLASS_NAME = ORIGINAL_CHUNK_CLASS_NAME
 CHUNK_INDEXED_COLUMNS = ["text", "document_id", "website_url", "collection_id", "md", "document_md"]
 
 CREATE_BM25_INDEX_SQL = """
@@ -80,14 +105,25 @@ CALL paradedb.create_bm25(
 	table_name => '&CHUNK_CLASS_NAME&',
 	key_field => 'id',
 	text_fields => '{
-		text: {tokenizer: {type: "en_stem"}},
-        document_id: {},
-        website_url: {},
-        collection_id: {}
+		"text": {"tokenizer": {"type": "en_stem"}},
+        "document_id": {},
+        "website_url": {},
+        "collection_id": {}
 	}',
     json_fields => '{"md": {}, "document_md": {}}'
 );
 """.replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
+
+# CREATE_BM25_INDEX_SQL = """
+# CALL paradedb.create_bm25(
+# 	index_name => 'search_&CHUNK_CLASS_NAME&_idx',
+# 	table_name => '&CHUNK_CLASS_NAME&',
+# 	key_field => 'id',
+#     text_fields => '{
+#         text: {tokenizer: {type: "en_stem"}},
+#     }'
+# );
+# """.replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
 # You never need to pass ts_content to DocumentEmbedding, as this will automatically
 # derive it from `text` using a trigger.
@@ -101,13 +137,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS update_ts_content_trigger ON {CHUNK_CLASS_NAME};
+DROP TRIGGER IF EXISTS update_ts_content_trigger ON {ORIGINAL_CHUNK_CLASS_NAME};
 
 CREATE TRIGGER update_ts_content_trigger
-BEFORE INSERT OR UPDATE ON {CHUNK_CLASS_NAME}
+BEFORE INSERT OR UPDATE ON {ORIGINAL_CHUNK_CLASS_NAME}
 FOR EACH ROW EXECUTE FUNCTION update_ts_content();
 
-CREATE INDEX IF NOT EXISTS ts_content_gin ON {CHUNK_CLASS_NAME} USING gin(ts_content);
+CREATE INDEX IF NOT EXISTS ts_content_gin ON {ORIGINAL_CHUNK_CLASS_NAME} USING gin(ts_content);
 """)
 event.listen(DocumentChunk.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
 
@@ -371,7 +407,7 @@ class document_zip_blob(SQLModel, table=True):
 
 
 class document_raw(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=id_factories["document_raw"], primary_key=True, index=True, unique=True)
     # hash_id: str = Field(index=True, unique=True)
     file_name: str
     creation_timestamp: float
@@ -396,7 +432,7 @@ class document_raw(SQLModel, table=True):
 
 
 class organization_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=id_factories["collections"], primary_key=True, index=True, unique=True)
     # hash_id: Optional[str] = Field(index=True, unique=True, default_factory=random_hash_20)
     name: str
     author_organization_id: str = Field(foreign_key="organization.id", index=True)
@@ -406,7 +442,7 @@ class organization_document_collection(SQLModel, table=True):
     document_count: int = Field(default=0)
 
 class user_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=id_factories["collections"], primary_key=True, index=True, unique=True)
     # hash_id: Optional[str] = Field(index=True, unique=True, default_factory=random_hash_20)
     name: str
     author_user_name: str = Field(foreign_key="user.name", index=True)
@@ -416,7 +452,7 @@ class user_document_collection(SQLModel, table=True):
     document_count: int = Field(default=0)
 
 class global_document_collection(SQLModel, table=True):
-    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    id: Optional[str] = Field(default_factory=id_factories["collections"], primary_key=True, index=True, unique=True)
     # hash_id: str = Field(index=True, unique=True)
     name: str
     description: Optional[str] = Field(default="")

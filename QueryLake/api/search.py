@@ -16,28 +16,42 @@ from ..typing.config import AuthType
 from .single_user_auth import get_user
 
 class DocumentChunkDictionary(BaseModel):
-    id: str
+    id: Union[str, int]
     creation_timestamp: float
     collection_type: Optional[Union[str, None]]
     document_id: Optional[Union[str, None]]
     document_chunk_number: Optional[Union[int, None]]
-    document_integrity: Optional[Union[str, None]]
+    # document_integrity: Optional[Union[str, None]]
     collection_id: Optional[Union[str, None]]
-    document_name: str
-    website_url : Optional[Union[str, None]]
-    private: bool
+    # document_name: str
+    # website_url : Optional[Union[str, None]]
+    # private: bool
     md: dict
-    document_md: dict
+    # document_md: dict
     text: str
     
 class DocumentChunkDictionaryReranked(DocumentChunkDictionary):
     rerank_score: float
 
-chunk_dict_arguments = ["id", "creation_timestamp", "collection_type", 
-                        "document_id", "document_chunk_number", "document_integrity", 
-                        "collection_id", "document_name", "website_url", 
-                        "private", "md", "document_md", "text", "rerank_score"]
-    
+chunk_dict_arguments = [
+    "id", 
+    "creation_timestamp", 
+    "collection_type", 
+    "document_id", 
+    "document_chunk_number", 
+    "document_integrity", 
+    "collection_id", 
+    "document_name", 
+    "website_url", 
+    "private", 
+    "md", 
+    "document_md", 
+    "text", 
+    "rerank_score"
+]
+
+retrieved_fields_string = ", ".join(["m."+e for e in chunk_dict_arguments if e not in ["rerank_score"]])
+
 
 def convert_query_result(query_results: tuple, rerank: bool = False, return_wrapped : bool = False):
     wrapped_args =  {chunk_dict_arguments[i]: query_results[i] for i in range(min(len(query_results), len(chunk_dict_arguments)))}
@@ -80,6 +94,9 @@ async def search_hybrid(database: Session,
     assert (isinstance(limit_similarity, int) and limit_similarity >= 0 and limit_similarity <= 200), \
         "limit_similarity must be an int between 0 and 200"
     
+    # assert all(list(map(lambda x: isinstance(x, int), collection_ids))), \
+    #     "All collection ids must be integers"
+    
     # Prevent SQL injection with embedding
     if not embedding is None:
         assert len(embedding) == 1024 and all(list(map(lambda x: isinstance(x, (int, float)), embedding))), \
@@ -109,9 +126,7 @@ async def search_hybrid(database: Session,
     print("Formatted query:", formatted_query)
     
     STMT = text(f"""
-	SELECT m.id, m.creation_timestamp, m.collection_type, m.document_id, 
-           m.document_chunk_number, m.document_integrity, m.collection_id, 
-           m.document_name, m.website_url, m.private, m.md, m.document_md, m.text
+	SELECT {retrieved_fields_string}
 	FROM {CHUNK_CLASS_NAME} m
 	RIGHT JOIN (
 		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.rank_hybrid(
@@ -230,3 +245,5 @@ def search_bm25(database: Session,
     except Exception as e:
         database.rollback()
         raise e
+
+    

@@ -6,7 +6,7 @@ from .text_chunking.character import RecursiveCharacterTextSplitter
 from .text_chunking.markdown import MarkdownTextSplitter
 from .text_chunking.document_class import Document
 # from chromadb.api import ClientAPI
-from ..database.sql_db_tables import document_raw, DocumentChunk, search_embeddings_lexical, DocumentEmbeddingDictionary
+from ..database.sql_db_tables import document_raw, DocumentChunk, DocumentEmbeddingDictionary
 from ..api.hashing import random_hash, hash_function
 from ..api.single_user_auth import get_user
 from typing import List, Callable, Any, Union, Awaitable, Tuple
@@ -125,7 +125,7 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
     text_segment_collections = []
     real_db_entries = []
     
-    
+    # db_2, engine_2 = initialize_database_engine()
     
     for i in range(len(document_db_entries)):
         
@@ -153,9 +153,13 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
             raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
 
         text_segment_collections.append(text_chunks)
-        
+    
+    # try:
     await create_text_chunks(database, auth, toolchain_function_caller, text_segment_collections, 
-                             real_db_entries, document_names, create_embeddings=create_embeddings)
+                            real_db_entries, document_names, create_embeddings=create_embeddings)
+    # except Exception as e:
+    #     print("Got error, engine URL was:", engine_2.url)
+    #     raise e
     pass
 
 
@@ -196,25 +200,28 @@ async def create_text_chunks(database : Session,
     current_chunks_queued = 0
     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
+    if not document_sql_entries[0].global_document_collection_hash_id is None:
+        collection_type = "global"
+        parent_collection_id =  document_sql_entries[0].global_document_collection_hash_id
+    elif not document_sql_entries[0].user_document_collection_hash_id is None:
+        collection_type = "user"
+        parent_collection_id =  document_sql_entries[0].user_document_collection_hash_id
+    elif not document_sql_entries[0].organization_document_collection_hash_id is None:
+        collection_type = "organization"
+        parent_collection_id =  document_sql_entries[0].organization_document_collection_hash_id
+    elif not document_sql_entries[0].website_url is None:
+        collection_type = "website"
+        parent_collection_id = None
+    else:
+        return
+    
+    split_collections = []
+    
     for i in range(len(text_segment_collections)):
         document_sql_entry = document_sql_entries[i]
         text_segments = text_segment_collections[i]
         document_name = document_names[i]
         
-        if not document_sql_entry.global_document_collection_hash_id is None:
-            collection_type = "global"
-            parent_collection_id = document_sql_entry.global_document_collection_hash_id
-        elif not document_sql_entry.user_document_collection_hash_id is None:
-            collection_type = "user"
-            parent_collection_id = document_sql_entry.user_document_collection_hash_id
-        elif not document_sql_entry.organization_document_collection_hash_id is None:
-            collection_type = "organization"
-            parent_collection_id = document_sql_entry.organization_document_collection_hash_id
-        elif not document_sql_entry.website_url is None:
-            collection_type = "website"
-            parent_collection_id = None
-        else:
-            return
         
         # We are assuming an input of tuples with text and metadata.
         # We do this to keep track of location/ordering metadata such as page number.
@@ -237,37 +244,62 @@ async def create_text_chunks(database : Session,
         m_2 = time() - m_1
         if m_2 > 1:
             print("Split %16d segments in %5.2fs" % (len(text_segments), m_2))
+        split_collections.append(splits)
+    
+    embeddings_all, embeddings_iterable = None, 0
+    
+    flattened_splits = list([e.page_content for e in chain.from_iterable(split_collections)])
+    
+    if create_embeddings:
+        embeddings_all = await embedding_call(auth, list(map(lambda x: x.page_content, flattened_splits)))
+    
+    
+    db_additions = []
+    
+    for seg_i in range(len(text_segment_collections)):
+        document_sql_entry = document_sql_entries[seg_i]
+        text_segments = text_segment_collections[seg_i]
+        document_name = document_names[seg_i]
+        splits : List[Document] = split_collections[seg_i]
+        current_split_size = len(splits)
         
         embeddings = None
-        
         if create_embeddings:
-            embeddings = await embedding_call(auth, list(map(lambda x: x.page_content, splits)))
-
+            embeddings = embeddings_all[embeddings_iterable:embeddings_iterable+current_split_size]
+        
+        
         for i, chunk in enumerate(splits):
+            chunk_md = chunk.metadata
+            assert isinstance(chunk_md, dict), "Metadata must be a dictionary."
+            parent_doc_md = document_sql_entry.md
+            assert isinstance(parent_doc_md, dict), "Parent document metadata must be a dictionary."
+            
+            
             embedding_db_entry = DocumentChunk(
-                collection_type=collection_type,
+                # collection_type=collection_type,
                 document_id=document_sql_entry.id,
                 document_chunk_number=i,
                 collection_id=parent_collection_id,
+                collection_type=collection_type,
                 document_name=document_name,
                 document_integrity=document_sql_entry.integrity_sha256,
-                md=chunk.metadata,
+                md=chunk_md,
+                document_md=parent_doc_md,
                 text=chunk.page_content,
                 **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
                 **({"embedding": embeddings[i]} if not embeddings is None else {}),
             )
             database.add(embedding_db_entry)
+            # db_additions.append(embedding_db_entry)
             current_chunks_queued += 1
             if current_chunks_queued >= 9999:
                 database.commit()
-                database.rollback()
                 current_chunks_queued = 0
-            
+        
         document_sql_entry.finished_processing = True
+        embeddings_iterable += current_split_size
     
     database.commit()
-
-    pass
 
 async def create_website_embeddings(database : Session, 
                                     auth : AuthType,
@@ -322,175 +354,175 @@ async def create_website_embeddings(database : Session,
     
     pass
 
-async def query_database(database : Session ,
-                         auth : AuthType,
-                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                         query : Union[str, List[str]], 
-                         collection_ids : List[str], 
-                         k : int = 10, 
-                         use_lexical : bool = False,
-                         use_embeddings : bool = True,
-                         use_rerank : bool = False,
-                         use_web : bool = False,
-                         rerank_question : str = "",
-                         ratio: float = 0.5,
-                         minimum_relevance : float = 0.05) -> List[DocumentEmbeddingDictionary]:
-    """
-    Create an embedding for a query and lookup a certain amount of relevant chunks.
-    """
+# async def query_database(database : Session ,
+#                          auth : AuthType,
+#                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+#                          query : Union[str, List[str]], 
+#                          collection_ids : List[str], 
+#                          k : int = 10, 
+#                          use_lexical : bool = False,
+#                          use_embeddings : bool = True,
+#                          use_rerank : bool = False,
+#                          use_web : bool = False,
+#                          rerank_question : str = "",
+#                          ratio: float = 0.5,
+#                          minimum_relevance : float = 0.05) -> List[DocumentEmbeddingDictionary]:
+#     """
+#     Create an embedding for a query and lookup a certain amount of relevant chunks.
+#     """
     
-    (_, _) = get_user(database, auth)
+#     (_, _) = get_user(database, auth)
     
-    print("QUERY ARGUMENTS:", json.dumps({
-        "query": query,
-        "collection_ids": collection_ids,
-        "k": k,
-        "use_lexical": use_lexical,
-        "use_embeddings": use_embeddings,
-        "use_rerank": use_rerank,
-        "use_web": use_web,
-        "rerank_question": rerank_question,
-        "ratio": ratio,
-        "minimum_relevance": minimum_relevance,
-    }, indent=4))
+#     print("QUERY ARGUMENTS:", json.dumps({
+#         "query": query,
+#         "collection_ids": collection_ids,
+#         "k": k,
+#         "use_lexical": use_lexical,
+#         "use_embeddings": use_embeddings,
+#         "use_rerank": use_rerank,
+#         "use_web": use_web,
+#         "rerank_question": rerank_question,
+#         "ratio": ratio,
+#         "minimum_relevance": minimum_relevance,
+#     }, indent=4))
     
-    assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
-    assert k > 0, "k must be greater than 0."
-    assert k <= 1000, "k cannot be more than 1000."
-    assert any([use_lexical, use_embeddings]), "At least one of use_lexical or use_embeddings must be True."
-    assert any([use_web, (len(collection_ids) > 0)]), "At least one collection must be specified or use_web must be enabled"
+#     assert isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)), "Query must be a string or a list of strings."
+#     assert k > 0, "k must be greater than 0."
+#     assert k <= 1000, "k cannot be more than 1000."
+#     assert any([use_lexical, use_embeddings]), "At least one of use_lexical or use_embeddings must be True."
+#     assert any([use_web, (len(collection_ids) > 0)]), "At least one collection must be specified or use_web must be enabled"
     
-    # This is a hack to allow the web search to work and avoid locking up the code below.
-    if use_web and len(collection_ids) == 0:
-        collection_ids = ["fake_collection_id"] 
+#     # This is a hack to allow the web search to work and avoid locking up the code below.
+#     if use_web and len(collection_ids) == 0:
+#         collection_ids = ["fake_collection_id"] 
         
     
-    first_pass_k = min(1000, 3*k if use_rerank else k)
-    first_pass_k_lexical = int(first_pass_k*ratio) if (use_lexical and use_embeddings) else first_pass_k
-    first_pass_k_embedding = first_pass_k - first_pass_k_lexical if use_lexical else first_pass_k
+#     first_pass_k = min(1000, 3*k if use_rerank else k)
+#     first_pass_k_lexical = int(first_pass_k*ratio) if (use_lexical and use_embeddings) else first_pass_k
+#     first_pass_k_embedding = first_pass_k - first_pass_k_lexical if use_lexical else first_pass_k
     
 
-    chunk_size = 250
-    chunk_overlap = 30
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap
-    )
-    # splits = text_splitter.split_documents([Document(page_content=query, metadata={"source": "local"})])
-    # splits_text = [doc.page_content for doc in splits]
-    # query_embeddings = ndarray.tolist(model.encode(splits_text, normalize_embeddings=True))
+#     chunk_size = 250
+#     chunk_overlap = 30
+#     text_splitter = RecursiveCharacterTextSplitter(
+#         chunk_size=chunk_size, chunk_overlap=chunk_overlap
+#     )
+#     # splits = text_splitter.split_documents([Document(page_content=query, metadata={"source": "local"})])
+#     # splits_text = [doc.page_content for doc in splits]
+#     # query_embeddings = ndarray.tolist(model.encode(splits_text, normalize_embeddings=True))
 
     
     
-    embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
+#     embedding_call : Awaitable[Callable] = toolchain_function_caller("embedding")
     
-    if isinstance(query, str):
-        query_embeddings = await embedding_call(auth, [query])
-        ordering = DocumentChunk.embedding.cosine_distance(query_embeddings[0])
-    else:
-        query_embeddings = await embedding_call(auth, query)
-        cosine_distances = [DocumentChunk.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
-        ordering = func.greatest(*cosine_distances)
-    
-    
+#     if isinstance(query, str):
+#         query_embeddings = await embedding_call(auth, [query])
+#         ordering = DocumentChunk.embedding.cosine_distance(query_embeddings[0])
+#     else:
+#         query_embeddings = await embedding_call(auth, query)
+#         cosine_distances = [DocumentChunk.embedding.cosine_distance(query_embedding) for query_embedding in query_embeddings]
+#         ordering = func.greatest(*cosine_distances)
     
     
-    if len(collection_ids) > 1:
-        lookup_sql_condition = or_(
-            *(DocumentChunk.collection_id == collection_hash_id for collection_hash_id in collection_ids)
-        )
-    else:
-        lookup_sql_condition = (DocumentChunk.collection_id == collection_ids[0])
+    
+    
+#     if len(collection_ids) > 1:
+#         lookup_sql_condition = or_(
+#             *(DocumentChunk.collection_id == collection_hash_id for collection_hash_id in collection_ids)
+#         )
+#     else:
+#         lookup_sql_condition = (DocumentChunk.collection_id == collection_ids[0])
         
-    if use_web:
-        lookup_sql_condition = or_(
-            lookup_sql_condition,
-            not_(DocumentChunk.website_url == None)
-        )    
+#     if use_web:
+#         lookup_sql_condition = or_(
+#             lookup_sql_condition,
+#             not_(DocumentChunk.website_url == None)
+#         )    
     
     
-    first_lookup_results : List[DocumentEmbeddingDictionary] = []
+#     first_lookup_results : List[DocumentEmbeddingDictionary] = []
     
-    if use_lexical:
-        results_lexical = search_embeddings_lexical(database, collection_ids, query, first_pass_k_lexical, web_search=use_web)
-        # The embedding search will now exclude our results from lexical search.
-        lookup_sql_condition = and_(
-            lookup_sql_condition,
-            not_(or_(*[(DocumentChunk.id == e.id) for (e, _, _) in results_lexical]))
-        ) if len(results_lexical) > 0 else lookup_sql_condition
-        first_lookup_results.extend([e for (e, _, _) in results_lexical])
+#     if use_lexical:
+#         results_lexical = search_embeddings_lexical(database, collection_ids, query, first_pass_k_lexical, web_search=use_web)
+#         # The embedding search will now exclude our results from lexical search.
+#         lookup_sql_condition = and_(
+#             lookup_sql_condition,
+#             not_(or_(*[(DocumentChunk.id == e.id) for (e, _, _) in results_lexical]))
+#         ) if len(results_lexical) > 0 else lookup_sql_condition
+#         first_lookup_results.extend([e for (e, _, _) in results_lexical])
     
-    # if web_query:
-    #     # TODO: Check that this works later when implementing the website search.
-    #     lookup_sql_condition = or_(
-    #         lookup_sql_condition,
-    #         (DocumentEmbedding.website_url != None)
-    #     )
+#     # if web_query:
+#     #     # TODO: Check that this works later when implementing the website search.
+#     #     lookup_sql_condition = or_(
+#     #         lookup_sql_condition,
+#     #         (DocumentEmbedding.website_url != None)
+#     #     )
 
-    if not use_embeddings:
-        first_pass_results = first_lookup_results
-    else:
-        selection = select(DocumentChunk).where(lookup_sql_condition) \
-                                    .order_by(
-                                        ordering
-                                    ) \
-                                    .limit(first_pass_k_embedding)
+#     if not use_embeddings:
+#         first_pass_results = first_lookup_results
+#     else:
+#         selection = select(DocumentChunk).where(lookup_sql_condition) \
+#                                     .order_by(
+#                                         ordering
+#                                     ) \
+#                                     .limit(first_pass_k_embedding)
         
-        first_pass_results : List[DocumentChunk] = database.exec(selection)
+#         first_pass_results : List[DocumentChunk] = database.exec(selection)
         
-        first_pass_results : List[DocumentEmbeddingDictionary] = list(map(
-            lambda x: DocumentEmbeddingDictionary(**{
-                key : v \
-                for key, v in x.__dict__.items() \
-                if key in DocumentEmbeddingDictionary.model_fields.keys()
-            }),
-            first_pass_results
-        ))
+#         first_pass_results : List[DocumentEmbeddingDictionary] = list(map(
+#             lambda x: DocumentEmbeddingDictionary(**{
+#                 key : v \
+#                 for key, v in x.__dict__.items() \
+#                 if key in DocumentEmbeddingDictionary.model_fields.keys()
+#             }),
+#             first_pass_results
+#         ))
     
-        # Evenly combine the lexical and embedding results, with lexical coming first.
-        if use_lexical:
-            first_pass_results_split = split_list(first_pass_results, len(first_lookup_results))
-            first_pass_results = [[lookup_result, *first_pass_results_split[i]] for i, lookup_result in enumerate(first_lookup_results)]
-            first_pass_results : List[DocumentEmbeddingDictionary] = list(chain.from_iterable(first_pass_results))
+#         # Evenly combine the lexical and embedding results, with lexical coming first.
+#         if use_lexical:
+#             first_pass_results_split = split_list(first_pass_results, len(first_lookup_results))
+#             first_pass_results = [[lookup_result, *first_pass_results_split[i]] for i, lookup_result in enumerate(first_lookup_results)]
+#             first_pass_results : List[DocumentEmbeddingDictionary] = list(chain.from_iterable(first_pass_results))
     
-    new_docs_dict = {} # Remove duplicates
-    for i, doc in enumerate(first_pass_results):
-        # print(doc)
-        content_hash = hash_function(hash_function(doc.text)+hash_function(doc.document_integrity))
-        new_docs_dict[content_hash] = {
-            key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"] and v is not None
-        }
+#     new_docs_dict = {} # Remove duplicates
+#     for i, doc in enumerate(first_pass_results):
+#         # print(doc)
+#         content_hash = hash_function(hash_function(doc.text)+hash_function(doc.document_integrity))
+#         new_docs_dict[content_hash] = {
+#             key : v for key, v in doc.__dict__.items() if key not in ["_sa_instance_state", "embedding"] and v is not None
+#         }
         
         
-        # cosine_similarity = np.dot(doc.embedding, query_embeddings) / (np.linalg.norm(doc.embedding) * np.linalg.norm(query_embeddings))
-        # new_docs_dict[content_hash]["embedding_similarity_dot"] = doc.embedding @ query_embeddings
-        # new_docs_dict[content_hash]["embedding_similarity_cosine_similarity"] = cosine_similarity
+#         # cosine_similarity = np.dot(doc.embedding, query_embeddings) / (np.linalg.norm(doc.embedding) * np.linalg.norm(query_embeddings))
+#         # new_docs_dict[content_hash]["embedding_similarity_dot"] = doc.embedding @ query_embeddings
+#         # new_docs_dict[content_hash]["embedding_similarity_cosine_similarity"] = cosine_similarity
         
     
-    new_documents = list(new_docs_dict.values())
+#     new_documents = list(new_docs_dict.values())
     
 
-    if not use_rerank:
-        return new_documents[:min(len(new_documents), k)]
+#     if not use_rerank:
+#         return new_documents[:min(len(new_documents), k)]
 
-    assert rerank_question is not None, "If using rerank, a rerank question must be provided."
+#     assert rerank_question is not None, "If using rerank, a rerank question must be provided."
     
-    rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
+#     rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
     
-    rerank_scores = await rerank_call(auth, [
-        (
-            rerank_question, 
-            doc["text"]
-        ) for doc in new_documents if len(doc["text"]) > 0
-    ])
+#     rerank_scores = await rerank_call(auth, [
+#         (
+#             rerank_question, 
+#             doc["text"]
+#         ) for doc in new_documents if len(doc["text"]) > 0
+#     ])
     
-    for i in range(len(new_documents)):
-        new_documents[i]["rerank_score"] = rerank_scores[i]
+#     for i in range(len(new_documents)):
+#         new_documents[i]["rerank_score"] = rerank_scores[i]
     
-    reranked_pairs = sorted(new_documents, key=lambda x: x["rerank_score"], reverse=True)
+#     reranked_pairs = sorted(new_documents, key=lambda x: x["rerank_score"], reverse=True)
     
-    reranked_pairs = [doc for doc in reranked_pairs if doc["rerank_score"] > minimum_relevance]
+#     reranked_pairs = [doc for doc in reranked_pairs if doc["rerank_score"] > minimum_relevance]
     
-    return reranked_pairs[:min(len(reranked_pairs), k)]
+#     return reranked_pairs[:min(len(reranked_pairs), k)]
 
 async def keyword_query(database : Session ,
                         auth : AuthType,
