@@ -6,6 +6,8 @@ from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.sampling_params import SamplingParams
 from vllm.utils import random_uuid
+# from aphrodite import AsyncAphrodite, AsyncEngineArgs, SamplingParams
+# from aphrodite.common.utils import random_uuid
 from QueryLake.misc_functions.vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
 from ray import serve
 
@@ -62,13 +64,15 @@ class VLLMDeploymentClass:
         
         args = AsyncEngineArgs(
             **kwargs,
-            enforce_eager=True, # Save VRAM by disabling CUDA graphs
+            # enforce_eager=True, # Save VRAM by disabling CUDA graphs
             gpu_memory_utilization=0.4, # This should match the ray GPU allocation
             disable_log_requests=True # Had to mute this thing because it was spamming the logs.
         )
         self.context_size = args.max_model_len
         
         print("INITIALIZING VLLM DEPLOYMENT")
+        # self.engine = AsyncLLMEngine.from_engine_args(args)
+        
         self.engine = AsyncLLMEngine.from_engine_args(args)
         self.tokenizer = self.engine.engine.get_tokenizer()
         # tokenizer_tmp = self.engine.engine.tokenizer
@@ -80,26 +84,38 @@ class VLLMDeploymentClass:
     def count_tokens(self, input_string : str):
         return len(self.tokenizer(input_string)["input_ids"])
     
+    def generate_prompt(self, 
+                        request_dict : dict,
+                        sources : List[dict] = [],
+                        functions_available: List[Union[FunctionCallDefinition, dict]] = None):
+        if "prompt" in request_dict:
+            prompt = request_dict["prompt"]
+            
+            return {"formatted_prompt": prompt, "tokens": self.count_tokens(prompt)}
+        elif "chat_history" in request_dict:
+            chat_history = request_dict["chat_history"]
+            padding = 2 if (functions_available is None and len(sources) == 0) else (100 + 300 * len(sources) + 300 * len(functions_available))
+            prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
+            if len(sources) > 0:
+                chopped_chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
+                    '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
+                    f"\n</SOURCES>\nEND SYSTEM MESSAGE\n{chopped_chat_history[-1]['content']}")
+            if not functions_available is None:
+                chopped_chat_history[-1]["content"] = (
+                    f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
+                    f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n{chopped_chat_history[-1]['content']}"
+                )    
+            
+            return {"formatted_prompt": prompt, "chat_history": chopped_chat_history, "tokens": self.count_tokens(prompt)}
+        else:
+            raise ValueError("Request dictionary must contain either 'prompt' or 'chat_history' key. Got: " + str(request_dict.keys()))
+    
     def get_result_loop(self, 
                         request_dict : dict, 
                         sources : List[dict] = [],
                         functions_available: List[Union[FunctionCallDefinition, dict]] = None):
-        if "prompt" in request_dict:
-            prompt = request_dict.pop("prompt")
-        else:
-            chat_history = request_dict.pop("chat_history")
-            if len(sources) > 0:
-                chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
-                    '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
-                    f"\n</SOURCES>\n END SYSTEM MESSAGE\n{chat_history[-1]['content']}")
-            if not functions_available is None:
-                chat_history[-1]["content"] = (
-                    f"SYSTEM MESSAGE - PROVIDED SOURCES\n{construct_functions_available_prompt(functions_available)}" + \
-                    f"\nEND SYSTEM MESSAGE\n\n{chat_history[-1]['content']}"
-                )    
-            
-            
-            prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] + 2)
+        
+        prompt = self.generate_prompt(request_dict, sources, functions_available)["formatted_prompt"]
         
         assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
         

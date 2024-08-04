@@ -51,7 +51,8 @@ def construct_chat_history_old(max_tokens : int,
                                usr_entry_pad : str, 
                                bot_response_pad : str, 
                                chat_history: List[ChatHistoryEntry],
-                               minimum_context_room : int = 1000) -> str:
+                               minimum_context_room : int = 1000,
+                               return_chat_history : bool = False) -> str:
     """
     Construct model input, trimming from beginning until minimum context room is allowed.
     chat history should be ordered from oldest to newest, and entries in the input list
@@ -60,12 +61,12 @@ def construct_chat_history_old(max_tokens : int,
     system_instruction_prompt = sys_instr_pad.replace("{system_instruction}", chat_history[0].content)
     sys_token_count = token_counter(system_instruction_prompt)    
     
-    chat_history_new, token_counts = [], []
+    chat_history_new, chat_history_new_formated, token_counts = [], [], []
     # for i, entry in enumerate(chat_history[1:]):
     # print("CHAT HISTORY", chat_history)
     
     
-    print([i for i in range(len(chat_history), 0, -2)])
+    print("Wrapping chat entries:", [i for i in range(len(chat_history), 0, -2)])
     
     begin_prefix = bot_response_pad.split("{response}")[0]
     prefix_tokens = token_counter(begin_prefix)
@@ -73,31 +74,46 @@ def construct_chat_history_old(max_tokens : int,
     for i in range(1, len(chat_history), 2):
         if i == len(chat_history) - 1:
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
+            new_entry_formatted = {"role": "user", "content": chat_history[i].content}
         else: 
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)+bot_response_pad.replace("{response}", chat_history[i+1].content)
+            new_entry_formatted = [{"role": "user", "content": chat_history[i].content}, {"role": "assistant", "content": chat_history[i+1].content}]
         
         token_counts.append(token_counter(new_entry))
         chat_history_new.append(new_entry)
+        chat_history_new_formated.append(new_entry_formatted)
+        
     token_counts = token_counts[::-1]
     
     token_count_total = sys_token_count
-    construct_prompt_array = []
+    construct_prompt_array, construct_chat_history_array = [], []
     token_counts = token_counts[::-1]
+    chat_history_new_formated = chat_history_new_formated[::-1]
+    
     for i, entry in enumerate(chat_history_new[::-1]):
         token_count_tmp = token_counts[i]
         if (token_count_total+token_count_tmp+prefix_tokens) > (max_tokens - minimum_context_room):
             break
         token_count_total += token_counts[i]
         construct_prompt_array.append(entry)
+        if isinstance(chat_history_new_formated[i], list):
+            construct_chat_history_array.extend(chat_history_new_formated[i])
+        else:
+            construct_chat_history_array.append(chat_history_new_formated[i])
     
     final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + begin_prefix
+    final_result_formatted = [{"role": "system", "content": "system_instruction_prompt"}] + construct_chat_history_array[::-1]
+    
+    if return_chat_history:
+        return final_result, final_result_formatted
     
     return final_result
 
 def construct_chat_history(model : Model, 
                            token_counter : Callable[[str], int],
                            chat_history : List[dict],
-                           minimum_free_token_space : int) -> str:
+                           minimum_free_token_space : int,
+                           return_chat_history : bool = False) -> str:
     
     chat_history : List[ChatHistoryEntry] = [ChatHistoryEntry(**entry) for entry in chat_history]
     if chat_history[0].role != "system":
@@ -115,7 +131,8 @@ def construct_chat_history(model : Model,
                                       model.padding.question_wrap, 
                                       model.padding.response_wrap, 
                                       chat_history,
-                                      minimum_free_token_space)
+                                      minimum_free_token_space,
+                                      return_chat_history)
     
 
 

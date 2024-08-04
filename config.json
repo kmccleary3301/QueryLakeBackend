@@ -7,8 +7,8 @@
     },
     "enabled_model_classes": {
         "llm": true,
-        "embedding": true,
-        "rerank": true
+        "embedding": false,
+        "rerank": false
     },
     "models": [
         {
@@ -93,6 +93,52 @@
                 "top_k": 20,
                 "top_p": 0.9,
                 "repetition_penalty": 1.15,
+                "stop": [ "<|eot_id|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        },
+        {
+            "name": "LLaMA 3.1 8B Instruct EXL2",
+            "id": "llama-3.1-8b-instruct-exl2-2.5bpw",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "engine": "exllamav2",
+            "max_model_len": 32768,
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Llama-3.1-8B-Instruct-exl2",
+            "default_parameters": {
+                "max_new_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
+                "stop": [ "<|eot_id|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        },
+        {
+            "name": "LLaMA 3.1 70B Instruct",
+            "id": "llama-3.1-70b-instruct",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "engine": "exllamav2",
+            "max_model_len": 32768,
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Llama-3.1-70B-Instruct-exl2",
+            "default_parameters": {
+                "max_new_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
                 "stop": [ "<|eot_id|>" ]
             },
             "padding": {

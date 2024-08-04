@@ -57,7 +57,7 @@ def add_models_to_database(database : Session, models : List[Model]) -> None:
             existing_model.name = model_config.name
             existing_model.path_on_server = model_config.system_path
             existing_model.quantization = model_config.quantization
-            existing_model.default_settings = json.dumps(model_config.default_parameters.dict(), indent=4)
+            existing_model.default_settings = json.dumps(model_config.default_parameters, indent=4)
             existing_model.system_instruction_wrapper = model_config.padding.system_instruction_wrap
             existing_model.context_wrapper = model_config.padding.context_wrap
             existing_model.user_question_wrapper = model_config.padding.question_wrap
@@ -69,7 +69,7 @@ def add_models_to_database(database : Session, models : List[Model]) -> None:
                 name=model_config.name,
                 path_on_server=model_config.system_path,
                 quantization=model_config.quantization,
-                default_settings=json.dumps(model_config.default_parameters.dict(), indent=4),
+                default_settings=json.dumps(model_config.default_parameters, indent=4),
                 system_instruction_wrapper=model_config.padding.system_instruction_wrap,
                 context_wrapper=model_config.padding.context_wrap,
                 user_question_wrapper=model_config.padding.question_wrap,

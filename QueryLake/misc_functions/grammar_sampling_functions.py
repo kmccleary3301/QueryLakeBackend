@@ -106,7 +106,7 @@ def ts_to_pydantic(ts_type: str) -> BaseModel:
     return pre_class()
 
 def get_logits_processor_from_grammar_options(
-        grammar_options : Tuple[Literal["regex", "type"], str], 
+        grammar_options : Tuple[Literal["regex", "typescript"], str], 
         tokenizer_data,
         # space_tokens : List[int],
         # special_ids : List[int]

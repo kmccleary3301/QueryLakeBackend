@@ -38,6 +38,7 @@ from QueryLake.typing.config import Config, AuthType, getUserType, Padding, Mode
 from QueryLake.typing.toolchains import *
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
+from QueryLake.operation_classes.ray_exllamav2_class import ExllamaV2DeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
@@ -60,7 +61,7 @@ from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
 from QueryLake.misc_functions.external_providers import external_llm_generator
-from QueryLake.misc_functions.server_class_functions import stream_results_tokens, consume_deployment_response, find_function_calls
+from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls
 
 from asyncio import gather
 
@@ -149,6 +150,7 @@ class UmbrellaClass:
             # This is what enables streaming/generators. See: https://docs.ray.io/en/latest/serve/api/doc/ray.serve.handle.DeploymentResponseGenerator.html
             stream=True,
         ) for k, handle in llm_handles.items()} if self.config.enabled_model_classes.llm else {}
+        self.llm_configs : Dict[str, Model] = { config.id : config for config in self.config.models }
         
         self.embedding_handle = embedding_handle
         self.rerank_handle = rerank_handle
@@ -175,6 +177,7 @@ class UmbrellaClass:
             "text_models_callback": self.text_models_callback,
             "embedding": self.embedding_call,
             "rerank": self.rerank_call,
+            "find_function_calls": find_function_calls,
             "web_scrape": self.web_scrape_call,
             "function_help": self.get_all_function_descriptions,
         }
@@ -294,7 +297,8 @@ class UmbrellaClass:
                        sources : List[dict] = [],
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
-                       functions_available: List[Union[FunctionCallDefinition, dict]] = None):
+                       functions_available: List[Union[FunctionCallDefinition, dict]] = None,
+                       only_format_prompt: bool = False):
         """
         Call an LLM model, possibly with parameters.
         
@@ -320,7 +324,7 @@ class UmbrellaClass:
                                             .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
         
         model_parameters_true = {
-            **json.loads(model_entry.default_settings)
+            **json.loads(model_entry.default_settings),
         }
         
         model_parameters_true.update(model_parameters)
@@ -332,7 +336,6 @@ class UmbrellaClass:
         stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
         # print("Stop sequences:", stop_sequences)
         
-        
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
             
@@ -340,13 +343,26 @@ class UmbrellaClass:
                                          auth, 
                                          *model_specified,
                                          model_parameters_true)
+            input_token_count = -1
         else:
             assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
             
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
-            gen: DeploymentResponseGenerator = (
-                llm_handle.get_result_loop.remote(model_parameters_true, sources=sources, functions_available=functions_available)
+            gen : DeploymentResponseGenerator = (
+                llm_handle.get_result_loop.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
             )
+            print("GOT LLM REQUEST GENERATOR")
+            
+            if self.llm_configs[model_choice].engine == "exllamav2":
+                async for result in gen:
+                    print("GENERATOR OUTPUT:", result)
+            
+            
+            input_token_count = -1
+            if only_format_prompt:
+                return await self.llm_handles_no_stream[model_choice].generate_prompt.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
+            
+            
         
         if "n" in model_parameters and model_parameters["n"] > 1:
             results = []
@@ -357,11 +373,11 @@ class UmbrellaClass:
         
         if return_stream_response:
             return StreamingResponse(
-                stream_results_tokens(gen, on_new_token=on_new_token, encode_output=False, stop_sequences=stop_sequences),
+                stream_results_tokens(gen, self.llm_configs[model_choice], on_new_token=on_new_token, encode_output=False, stop_sequences=stop_sequences),
             )
         else:
             results = []
-            async for result in stream_results_tokens(gen, on_new_token=on_new_token, stop_sequences=stop_sequences):
+            async for result in stream_results_tokens(gen, self.llm_configs[model_choice], on_new_token=on_new_token, stop_sequences=stop_sequences):
                 results.append(result)
         
         text_outputs = "".join(results)
@@ -377,7 +393,7 @@ class UmbrellaClass:
             call_results = {"function_calls": calls}
             
         
-        return {"output": text_outputs, "token_count": len(results), **call_results}
+        return {"output": text_outputs, "output_token_count": len(results), "input_token_count": input_token_count, **call_results}
     
     def get_all_function_descriptions(self):
         """
@@ -702,6 +718,8 @@ for toolchain_file in toolchain_files_list:
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 
+ENGINE_CLASSES = {"vllm": VLLMDeploymentClass, "exllamav2": ExllamaV2DeploymentClass}
+
 if GLOBAL_CONFIG.enabled_model_classes.llm:
     for model_entry in GLOBAL_CONFIG.models:
         
@@ -709,8 +727,9 @@ if GLOBAL_CONFIG.enabled_model_classes.llm:
         # Only deploy the default model.
         if not model_entry.id == GLOBAL_CONFIG.default_models.llm:
             continue
+        class_choice = ENGINE_CLASSES[model_entry.engine]
         
-        LOCAL_MODEL_BINDINGS[model_entry.id] = VLLMDeploymentClass.bind(
+        LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice.bind(
             model_config=model_entry,
             model=model_entry.system_path, 
             max_model_len=model_entry.max_model_len, 

@@ -3,6 +3,7 @@ from typing import Awaitable, Callable, AsyncGenerator, List, Optional, Union, L
 import json, inspect
 from pydantic import BaseModel
 from ..typing.function_calling import FunctionCallDefinition
+from ..typing.config import Model
 from copy import deepcopy
 from .function_run_clean import get_function_call_preview
 import re
@@ -15,6 +16,8 @@ To do so, you must wrap it in the following template:
 
 It can be any valid python code, as long as it is a function call,
 and it is wrapped as && > ... &&.
+The call MUST begin with the sequence "&& > " and MUST end with the sequence " &&" to be valid.
+The inner content must be valid python code, and it must be one line.
 
 Here are your available functions:
 
@@ -23,7 +26,7 @@ Here are your available functions:
 
 
 def find_function_calls(text_in: str):
-    pattern = r"&& > ([^\n]*) &&"
+    pattern = r"\&\& \> ([^\&]*) \&\&"
     function_calls = []
     for match in re.finditer(pattern, text_in):
         call = match.group(1)
@@ -92,6 +95,7 @@ def construct_functions_available_prompt(functions_available: List[Union[Functio
     return prompt_make
 
 async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
+                                model_config: Model,
                                 encode_output : bool = False,
                                 on_new_token: Awaitable[Callable[[str], None]] = None,
                                 stop_sequences: List[str] = None,
@@ -122,11 +126,15 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
         return (json.dumps({"text": text_in}) + "\n").encode("utf-8") if encode_output else text_in
     
     async for request_output in results_generator:
-        text_outputs = [output.text for output in request_output.outputs]
-        assert len(text_outputs) == 1
-        text_output = text_outputs[0][num_returned:]
-        num_returned = num_returned + len(text_output)
         
+        if model_config.engine == "vllm":
+            text_outputs = [output.text for output in request_output.outputs]
+            assert len(text_outputs) == 1
+            text_output = text_outputs[0][num_returned:]
+            num_returned = num_returned + len(text_output)
+        elif model_config.engine == "exllamav2":
+            print("Attempting to grab output from exllamav2")
+            text_output = request_output.get("text", "")
         # The following code is responsible for withholding the output if 
         # a stop sequence is being matched. This avoids a partial stop sequence
         # being returned just before termination.

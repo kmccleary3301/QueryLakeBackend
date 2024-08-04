@@ -67,7 +67,7 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 			term = re.sub(r"\~(\d+)$", "", term)
 		
 		# Need to escape them only if they're not already escaped.
-		for c in "\\+^`:{}[]()~!*'":
+		for c in "\\+^`:{}[]()~!*',|&<>?/=":
 			# This worked before, try revisiting it
 			# term = term.replace(c, "\\%s" % c)
    
@@ -96,14 +96,15 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 			current_term_sequence = []
 		
 		# If term is negative, add to negative list.
-		if negative:
-			args_parsed_negative.append((term, field))
-		# If the field is specified, it is a necessary argument.
-		elif not field is None:
-			necessary_args.append((term, field))
-		# If term is positive, add it normally.
-		else:
-			args_parsed.append((term, field))
+		if term.strip() != "":
+			if negative:
+				args_parsed_negative.append((term, field))
+			# If the field is specified, it is a necessary argument.
+			elif not field is None:
+				necessary_args.append((term, field))
+			# If term is positive, add it normally.
+			else:
+				args_parsed.append((term, field))
 	
 	term_sequences.append(current_term_sequence)
 	

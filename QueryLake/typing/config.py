@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Union, Tuple, Literal, Annotated
+from typing import List, Dict, Optional, Union, Tuple, Literal, Annotated, Any
 from pydantic import BaseModel
 from ..database.sql_db_tables import user
 from fastapi.security import OAuth2PasswordRequestForm
@@ -24,10 +24,11 @@ class Padding(BaseModel):
 class Model(BaseModel):
     name: str
     id : str
-    quantization: Optional[Literal["awq", "gptq", "squeezellm", "awq_marlin"]]
+    quantization: Optional[Literal["awq", "gptq", "squeezellm", "awq_marlin"]] = "awq"
+    engine: Optional[Literal["vllm", "exllamav2"]] = "vllm"
     modelcard: str
     system_path: str
-    default_parameters: ModelArgs
+    default_parameters: Dict[str, Any]
     max_model_len: int
     padding: Padding
     default_system_instruction: str

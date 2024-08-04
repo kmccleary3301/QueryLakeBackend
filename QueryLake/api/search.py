@@ -1,8 +1,8 @@
 import time
 import random
 from typing import Optional
-from sqlmodel import Field, SQLModel, Session, create_engine
-from sqlalchemy import Column, DDL, event, text, func, Index, JSON, MetaData, Table
+from sqlmodel import Field, Session, select, func
+from sqlalchemy import Column, DDL, event, text, Index, JSON, MetaData, Table
 from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
 from typing import List, Tuple, Union, Literal, Callable, Awaitable, Any
 from pgvector.sqlalchemy import Vector
@@ -11,7 +11,7 @@ import random
 import time
 import re
 from ..misc_functions.paradedb_query_parser import parse_search
-from ..database.sql_db_tables import CHUNK_CLASS_NAME
+from ..database.sql_db_tables import CHUNK_CLASS_NAME, DocumentChunk
 from ..typing.config import AuthType
 from .single_user_auth import get_user
 
@@ -50,7 +50,10 @@ chunk_dict_arguments = [
     "rerank_score"
 ]
 
-retrieved_fields_string = ", ".join(["m."+e for e in chunk_dict_arguments if e not in ["rerank_score"]])
+field_strings_no_rerank = [e for e in chunk_dict_arguments if e not in ["rerank_score"]]
+column_attributes = [getattr(DocumentChunk, e) for e in field_strings_no_rerank]
+retrieved_fields_string = ", ".join(["m."+e for e in field_strings_no_rerank])
+retrieved_fields_string_bm25 = ", ".join(field_strings_no_rerank)
 
 
 def convert_query_result(query_results: tuple, rerank: bool = False, return_wrapped : bool = False):
@@ -123,14 +126,16 @@ async def search_hybrid(database: Session,
     
     formatted_query = parse_search(query["bm25"], catch_all_fields=["text"])
     
-    print("Formatted query:", formatted_query)
+    # print("Formatted query:", formatted_query)
+    
+    collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     
     STMT = text(f"""
 	SELECT {retrieved_fields_string}
 	FROM {CHUNK_CLASS_NAME} m
 	RIGHT JOIN (
 		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.rank_hybrid(
-			bm25_query => paradedb.parse('collection_id:IN {str(collection_ids).replace("'", "")} AND ({formatted_query})'),
+			bm25_query => paradedb.parse('({collection_spec}) AND ({formatted_query})'),
 			similarity_query => '':embedding_in' <=> embedding',
 			bm25_weight => :bm25_weight,
 			similarity_weight => :similarity_weight,
@@ -214,16 +219,15 @@ def search_bm25(database: Session,
     formatted_query = parse_search(query, catch_all_fields=["text"])
     unique_alias = "temp_alias"
     
-    print("Formatted query:", formatted_query)
-    print(f'collection_id:IN {collection_string} AND {formatted_query}')
+    # print("Formatted query:", formatted_query)
+    # print(f'collection_id:IN {collection_string} AND {formatted_query}')
+    collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     
     STMT = text(f"""
-	SELECT id, creation_timestamp, collection_type, document_id, 
-           document_chunk_number, document_integrity, collection_id, 
-           document_name, website_url, private, md, document_md, text, 
+	SELECT {retrieved_fields_string_bm25}, 
            paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
 	FROM search_documentchunk_idx.search(
-     	query => paradedb.parse('collection_id:IN {collection_string} AND {formatted_query}'),
+     	query => paradedb.parse('({collection_spec}) AND {formatted_query}'),
 		offset_rows => :offset,
 		limit_rows => :limit,
 		alias => '{unique_alias}'
@@ -237,13 +241,55 @@ def search_bm25(database: Session,
     try:
         results = database.exec(STMT)
         results = list(results)
-        for e in results:
-            print(e)
-        results = list(map(lambda x: convert_query_result(x[:-2]), results))
+        results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
         database.rollback()
         return results
     except Exception as e:
         database.rollback()
         raise e
-
     
+def get_random_chunks(database: Session,
+                      auth : AuthType,
+                      collection_ids: List[str],
+                      limit : int = 10) -> List[DocumentChunkDictionary]:
+    
+    (_, _) = get_user(database, auth)
+    
+    # assert (isinstance(offset, int) and offset >= 0), \
+    #     "offset must be an int greater than 0"
+    
+    assert (isinstance(limit, int) and limit >= 0 and limit <= 2000), \
+        "limit must be an int between 0 and 2000"
+    
+    # Prevent SQL injection with the collection ids.
+    collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
+    
+    results = database.exec(
+        select(*column_attributes)
+        .where(
+            DocumentChunk.collection_id.in_(collection_ids)
+        )
+        .order_by(func.random())
+        # .offset(offset)
+        .limit(limit)
+    ).all()
+    results = list(results)
+    results : List[dict] = list(map(lambda x: convert_query_result(x, return_wrapped=True), results))
+    
+    return results
+    
+def count_chunks(database: Session,
+                 auth : AuthType,
+                 collection_ids: List[str]) -> int:
+    
+    (_, _) = get_user(database, auth)
+    
+    # Prevent SQL injection with the collection ids.
+    collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
+    
+    count = database.exec(
+        select(func.count())
+        .where(DocumentChunk.collection_id.in_(collection_ids))
+    ).first()
+    
+    return count
