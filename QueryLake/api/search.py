@@ -1,6 +1,6 @@
 import time
 import random
-from typing import Optional
+from typing import Optional, Dict
 from sqlmodel import Field, Session, select, func
 from sqlalchemy import Column, DDL, event, text, Index, JSON, MetaData, Table
 from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
@@ -20,14 +20,14 @@ class DocumentChunkDictionary(BaseModel):
     creation_timestamp: float
     collection_type: Optional[Union[str, None]]
     document_id: Optional[Union[str, None]]
-    document_chunk_number: Optional[Union[int, None]]
+    document_chunk_number: Optional[Union[int, Tuple[int, int], None]]
     # document_integrity: Optional[Union[str, None]]
     collection_id: Optional[Union[str, None]]
-    # document_name: str
+    document_name: str
     # website_url : Optional[Union[str, None]]
     # private: bool
     md: dict
-    # document_md: dict
+    document_md: dict
     text: str
     
 class DocumentChunkDictionaryReranked(DocumentChunkDictionary):
@@ -66,6 +66,59 @@ def convert_query_result(query_results: tuple, rerank: bool = False, return_wrap
         print("Error with result tuple:", query_results)
         print("Error with wrapped args:", wrapped_args)
         raise e
+
+
+def find_overlap(string_a: str, string_b: str) -> int:
+    max_overlap = min(len(string_a), len(string_b))
+    for i in range(max_overlap, 0, -1):
+        if string_a[-i:] == string_b[:i]:
+            return i
+    return 0
+
+def group_adjacent_chunks(chunks: List[DocumentChunkDictionary]) -> List[DocumentChunkDictionary]:
+    document_bin : Dict[str, List[DocumentChunkDictionary]] = {}
+    for chunk in chunks:
+        if chunk.document_id in document_bin:
+            document_bin[chunk.document_id].append(chunk)
+        else:
+            document_bin[chunk.document_id] = [chunk]
+    new_results = []
+    
+    for bin in document_bin:
+        if len(document_bin[bin]) == 0:
+            continue
+        document_bin[bin] = sorted(document_bin[bin], key=lambda x: x.document_chunk_number[0] if isinstance(x.document_chunk_number, tuple) else x.document_chunk_number)
+        current_chunk = document_bin[bin][0]
+        most_recent_chunk_added = False
+        
+        for chunk in document_bin[bin][1:]:
+            current_chunk_bottom_index = current_chunk.document_chunk_number[0] if isinstance(current_chunk.document_chunk_number, tuple) else current_chunk.document_chunk_number
+            current_chunk_top_index = current_chunk.document_chunk_number[1] if isinstance(current_chunk.document_chunk_number, tuple) else current_chunk.document_chunk_number
+            chunk_bottom_index = chunk.document_chunk_number[0] if isinstance(chunk.document_chunk_number, tuple) else chunk.document_chunk_number
+            chunk_top_index = chunk.document_chunk_number[1] if isinstance(chunk.document_chunk_number, tuple) else chunk.document_chunk_number
+            
+            
+            most_recent_chunk_added = False
+            if chunk_bottom_index == current_chunk_top_index + 1:
+                
+                overlap = find_overlap(current_chunk.text, chunk.text)
+                
+                if overlap > 100:
+                    current_chunk.text += chunk.text[overlap:]
+                else:
+                    current_chunk.text += "\n\n" + chunk.text
+                
+                current_chunk.document_chunk_number = (current_chunk_bottom_index, chunk_top_index)
+            else:
+                most_recent_chunk_added = True
+                new_results.append(current_chunk)
+                current_chunk = chunk
+        
+        if not most_recent_chunk_added:
+            new_results.append(current_chunk)
+        # if not most_recent_chunk_added:
+    return new_results
+          
 
 async def search_hybrid(database: Session,
                         toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -241,7 +294,9 @@ def search_bm25(database: Session,
     try:
         results = database.exec(STMT)
         results = list(results)
-        results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
+        # results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
+        results = list(map(lambda x: convert_query_result(x[:-2]), results))
+        results = group_adjacent_chunks(results)
         database.rollback()
         return results
     except Exception as e:
@@ -293,3 +348,18 @@ def count_chunks(database: Session,
     ).first()
     
     return count
+
+def expand_document_segment(database: Session,
+                            auth : AuthType,
+                            chunk_id: str) -> DocumentChunkDictionary:
+    
+    (_, _) = get_user(database, auth)
+    
+    chunk = database.exec(
+        select(*column_attributes)
+        .where(DocumentChunk.id == chunk_id)
+    ).first()
+    
+    chunk = convert_query_result(chunk)
+    
+    return chunk
