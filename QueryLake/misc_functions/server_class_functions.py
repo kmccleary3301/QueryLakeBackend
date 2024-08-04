@@ -33,7 +33,11 @@ def find_function_calls(text_in: str):
         arguments = {}
         quote_segments = re.finditer(r"[^\\](\".*?[^\\]\"|\'.*?[^\\]\')", call)
         for i, segment in enumerate(list(quote_segments)):
-            arguments[f"arg_{i}"] = segment.group(1)
+            # This is a hack since JSON sometimes can't handle special characters raw.
+            original_string = segment.group(1)
+            # print("Parsing function calls got quote argument:", original_string)
+            
+            arguments[f"arg_{i}"] = json.dumps(original_string)
         
         for key, value in arguments.items():
             call = call.replace(key, f"%{key}")
