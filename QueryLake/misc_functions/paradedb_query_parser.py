@@ -4,7 +4,11 @@ from ..database.sql_db_tables import CHUNK_INDEXED_COLUMNS
 
 VALID_FIELDS = CHUNK_INDEXED_COLUMNS
 
-def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
+def parse_search(text_in: str, catch_all_fields: List[str] = ["text"], return_id_exclusions : bool = False):
+	text_in = text_in.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
+ 
+	id_exclusions = []
+ 
 	TWO_SEQUENCE_SLOP = 2
 	THREE_SEQUENCE_SLOP = 3
     
@@ -80,6 +84,9 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 			term = re.sub(r"\"", " ", term) # Probably not necessary
 			term = f"\"{term.strip()}\""
 		
+		if term.strip() in ["", "\"\""]:
+			continue
+		
 		# Add slop to phrase query.
 		if slop != 1 and term_is_quote_arg and not negative:
 			term = f"{term}~{slop}"
@@ -96,15 +103,14 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 			current_term_sequence = []
 		
 		# If term is negative, add to negative list.
-		if term.strip() != "":
-			if negative:
-				args_parsed_negative.append((term, field))
-			# If the field is specified, it is a necessary argument.
-			elif not field is None:
-				necessary_args.append((term, field))
-			# If term is positive, add it normally.
-			else:
-				args_parsed.append((term, field))
+		if negative:
+			args_parsed_negative.append((term, field))
+		# If the field is specified, it is a necessary argument.
+		elif not field is None:
+			necessary_args.append((term, field))
+		# If term is positive, add it normally.
+		else:
+			args_parsed.append((term, field))
 	
 	term_sequences.append(current_term_sequence)
 	
@@ -136,6 +142,8 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 			n_fields += [f"{catch_all_field}:{e}" for catch_all_field in catch_all_fields]
 		else:
 			n_fields.append(f"{field}:{e}")
+			if field == "id":
+				id_exclusions.append(e.strip("\""))
 	
 	negative_field = " NOT ".join(n_fields)
 	positive_field = " OR ".join(p_fields)
@@ -149,4 +157,7 @@ def parse_search(text_in: str, catch_all_fields: List[str] = ["text"]):
 	else:
 		final_query = single_condition
 	
+	if return_id_exclusions:
+		return final_query, id_exclusions
+ 
 	return final_query

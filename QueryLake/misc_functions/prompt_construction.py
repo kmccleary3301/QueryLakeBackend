@@ -72,7 +72,7 @@ def construct_chat_history_old(max_tokens : int,
     prefix_tokens = token_counter(begin_prefix)
     
     for i in range(1, len(chat_history), 2):
-        if i == len(chat_history) - 1:
+        if i == len(chat_history) - 1: # Last entry is a user question
             new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
             new_entry_formatted = {"role": "user", "content": chat_history[i].content}
         else: 
@@ -82,11 +82,11 @@ def construct_chat_history_old(max_tokens : int,
         token_counts.append(token_counter(new_entry))
         chat_history_new.append(new_entry)
         chat_history_new_formated.append(new_entry_formatted)
-        
-    token_counts = token_counts[::-1]
+    
     
     token_count_total = sys_token_count
     construct_prompt_array, construct_chat_history_array = [], []
+    
     token_counts = token_counts[::-1]
     chat_history_new_formated = chat_history_new_formated[::-1]
     
@@ -97,12 +97,12 @@ def construct_chat_history_old(max_tokens : int,
         token_count_total += token_counts[i]
         construct_prompt_array.append(entry)
         if isinstance(chat_history_new_formated[i], list):
-            construct_chat_history_array.extend(chat_history_new_formated[i])
+            construct_chat_history_array.extend(chat_history_new_formated[i][::-1])
         else:
             construct_chat_history_array.append(chat_history_new_formated[i])
     
     final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + begin_prefix
-    final_result_formatted = [{"role": "system", "content": "system_instruction_prompt"}] + construct_chat_history_array[::-1]
+    final_result_formatted = [{"role": "system", "content": chat_history[0].content}] + construct_chat_history_array[::-1]
     
     if return_chat_history:
         return final_result, final_result_formatted

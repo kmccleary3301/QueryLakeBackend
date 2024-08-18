@@ -8,6 +8,26 @@ from copy import deepcopy
 from .function_run_clean import get_function_call_preview
 import re
 
+# function_call_description_template = """
+# You may call a function to execute an action.
+# Here is an example of a valid function call:
+
+# ```FUNCTION_CALL
+# function_name(arg_1=value1, arg_2=value2)
+# ```
+
+# It must be formatted with the syntax of a python method call,
+# and it must be wrapped as code block with title FUNCTION_CALL.
+# The call MUST begin with the sequence "```FUNCTION_CALL" and MUST end with the sequence "```" to be valid.
+# Due to parser limitations, you must also always specify passed arguments with a keyword/kwargs. (i.e. don't do `func(\"hi\")`)
+# The inner content must be valid python code, and it must be one line.
+# You can only call functions, no other code is allowed.
+
+# Here are your available functions:
+
+# {available_functions}
+# """
+
 function_call_description_template = """
 You may call a python functions to execute an action.
 To do so, you must wrap it in the following template:
@@ -17,6 +37,7 @@ To do so, you must wrap it in the following template:
 It can be any valid python code, as long as it is a function call,
 and it is wrapped as && > ... &&.
 The call MUST begin with the sequence "&& > " and MUST end with the sequence " &&" to be valid.
+Due to parser limitations, you must also always specify passed arguments with a keyword. (i.e. don't do `&& > func(\"hi\") &&`)
 The inner content must be valid python code, and it must be one line.
 
 Here are your available functions:
@@ -26,18 +47,23 @@ Here are your available functions:
 
 
 def find_function_calls(text_in: str):
+    # pattern = r"\`\`\`FUNCTION\_CALL\n([\s\S]*?)\`\`\`"
+    
     pattern = r"\&\& \> ([^\&]*) \&\&"
     function_calls = []
     for match in re.finditer(pattern, text_in):
         call = match.group(1)
+        print(call)
+        
+        call = [e for e in call.split("\n") if e.strip() != ""][0]
         arguments = {}
         quote_segments = re.finditer(r"[^\\](\".*?[^\\]\"|\'.*?[^\\]\')", call)
         for i, segment in enumerate(list(quote_segments)):
             # This is a hack since JSON sometimes can't handle special characters raw.
             original_string = segment.group(1)
-            # print("Parsing function calls got quote argument:", original_string)
             
-            arguments[f"arg_{i}"] = json.dumps(original_string)
+            arguments[f"arg_{i}"] = original_string
+        
         
         for key, value in arguments.items():
             call = call.replace(key, f"%{key}")
@@ -49,28 +75,32 @@ def find_function_calls(text_in: str):
             call = call.replace(match.group(0), f"\"{match.group(1)}\":")
             
         for key, value in arguments.items():
-            call = call.replace(key, value)
+            call = call.replace(key, f"\"{value[1:-1]}\"")
             call = call.replace(f"%{key}", key)
         
         call = call.strip()
         
-        call_split = re.search(r"^([a-zA-Z_]+)\((.*?)\)$", call)
+        call_split = re.search(r"^([a-zA-Z_]+)\((.*?)\)?$", call)
+        
+        assert not call_split is None, f"Failed to parse function call: {{{call}}}, Original call: {text_in}"
         
         try:
-            arguments = json.loads(f"{{{call_split.group(2)}}}")
+            arguments_parsed = json.loads("{" + call_split.group(2) + "}")
+            call_result = {
+                "function": call_split.group(1),
+                "arguments": arguments_parsed
+            }
         except json.decoder.JSONDecodeError:
-            print("Failed to JSON load:", f"{{{call_split.group(2)}}}")
-        
-        call_result = {
-			"function": call_split.group(1),
-			"arguments": arguments
-		}
+            print("Failed to JSON load:", "{" + call_split.group(2) + "}")
+            call_result = {
+                "error": "Failed to parse arguments",
+                "attempt": f"{{{call_split.group(2)}}}"
+            }
         
         function_calls.append(call_result)
-
-    return function_calls
         
-    
+    return function_calls
+     
 
 def construct_functions_available_prompt(functions_available: List[Union[FunctionCallDefinition, dict]]) -> str:
     

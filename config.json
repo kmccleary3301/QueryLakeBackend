@@ -7,8 +7,8 @@
     },
     "enabled_model_classes": {
         "llm": true,
-        "embedding": false,
-        "rerank": false
+        "embedding": true,
+        "rerank": true
     },
     "models": [
         {
@@ -146,6 +146,52 @@
                 "context_wrap": "<<context>>{context}<</context>>",
                 "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
                 "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        },
+        {
+            "name": "Gemma 2 2B Instruct",
+            "id": "gemma-2-2b-instruct",
+            "modelcard": "https://ai.google.dev/gemma#gemma-2",
+            "quantization": "awq",
+            "max_model_len": 8192,
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/gemma-2b-it-AWQ",
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
+                "stop": [ "<end_of_turn>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<start_of_turn>user\nHere are your system instructions for the rest of the conversation:\n{system_instruction}<end_of_turn>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<start_of_turn>user\n{question}<end_of_turn>",
+                "response_wrap": "<start_of_turn>model\n{response}<end_of_turn>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        },
+        {
+            "name": "Phi 3 Mini 128K Instruct",
+            "id": "phi-3-mini-128k-instruct",
+            "modelcard": "https://ai.google.dev/gemma#gemma-2",
+            "quantization": null,
+            "max_model_len": 8192,
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Phi-3-mini-128k-instruct",
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
+                "stop": [ "<|end|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|system|>\n{system_instruction}<|end|>\n",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|user|>\n{question}<|end|>\n",
+                "response_wrap": "<|assistant|>\n{response}<|end|>\n"
             },
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },

@@ -251,7 +251,7 @@ async def create_text_chunks(database : Session,
     flattened_splits = list([e.page_content for e in chain.from_iterable(split_collections)])
     
     if create_embeddings:
-        embeddings_all = await embedding_call(auth, list(map(lambda x: x.page_content, flattened_splits)))
+        embeddings_all = await embedding_call(auth, flattened_splits)
     
     
     db_additions = []
@@ -289,6 +289,7 @@ async def create_text_chunks(database : Session,
                 **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
                 **({"embedding": embeddings[i]} if not embeddings is None else {}),
             )
+            
             database.add(embedding_db_entry)
             # db_additions.append(embedding_db_entry)
             current_chunks_queued += 1

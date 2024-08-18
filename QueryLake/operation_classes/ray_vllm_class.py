@@ -95,16 +95,16 @@ class VLLMDeploymentClass:
         elif "chat_history" in request_dict:
             chat_history = request_dict["chat_history"]
             padding = 2 if (functions_available is None and len(sources) == 0) else (100 + 300 * len(sources) + 300 * len(functions_available))
-            prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
             if len(sources) > 0:
-                chopped_chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
+                chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
                     '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
-                    f"\n</SOURCES>\nEND SYSTEM MESSAGE\n{chopped_chat_history[-1]['content']}")
+                    f"\n</SOURCES>\nEND SYSTEM MESSAGE\n{chat_history[-1]['content']}")
             if not functions_available is None:
-                chopped_chat_history[-1]["content"] = (
+                chat_history[-1]["content"] = (
                     f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
-                    f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n{chopped_chat_history[-1]['content']}"
+                    f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n{chat_history[-1]['content']}"
                 )    
+            prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
             
             return {"formatted_prompt": prompt, "chat_history": chopped_chat_history, "tokens": self.count_tokens(prompt)}
         else:
@@ -163,6 +163,8 @@ class VLLMDeploymentClass:
         
         if not logits_processor_local is None:
             sampling_params.logits_processors = [logits_processor_local]
+        
+        # print(prompt)
         
         results_generator = self.engine.generate(prompt, sampling_params, request_id)
         

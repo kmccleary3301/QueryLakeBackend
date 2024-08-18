@@ -389,7 +389,8 @@ class UmbrellaClass:
                 e.name if isinstance(e, FunctionCallDefinition) else e["name"] 
                 for e in functions_available 
             ]
-            calls = [e for e in calls if e["function"] in calls_possible]
+            
+            calls = [e for e in calls if ("function" in e and e["function"] in calls_possible)]
             call_results = {"function_calls": calls}
             
         

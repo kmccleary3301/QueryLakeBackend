@@ -16,7 +16,7 @@ from ..typing.config import AuthType
 from .single_user_auth import get_user
 
 class DocumentChunkDictionary(BaseModel):
-    id: Union[str, int]
+    id: Union[str, int, List[str], List[int]]
     creation_timestamp: float
     collection_type: Optional[Union[str, None]]
     document_id: Optional[Union[str, None]]
@@ -98,6 +98,7 @@ def group_adjacent_chunks(chunks: List[DocumentChunkDictionary]) -> List[Documen
             chunk_top_index = chunk.document_chunk_number[1] if isinstance(chunk.document_chunk_number, tuple) else chunk.document_chunk_number
             
             
+            
             most_recent_chunk_added = False
             if chunk_bottom_index == current_chunk_top_index + 1:
                 
@@ -109,6 +110,10 @@ def group_adjacent_chunks(chunks: List[DocumentChunkDictionary]) -> List[Documen
                     current_chunk.text += "\n\n" + chunk.text
                 
                 current_chunk.document_chunk_number = (current_chunk_bottom_index, chunk_top_index)
+                if isinstance(current_chunk.id, (int, str)):
+                    current_chunk.id = [current_chunk.id]
+                current_chunk.id.append(chunk.id)
+                
             else:
                 most_recent_chunk_added = True
                 new_results.append(current_chunk)
@@ -177,9 +182,9 @@ async def search_hybrid(database: Session,
     else:
         embedding = [0.0]*1024
     
-    formatted_query = parse_search(query["bm25"], catch_all_fields=["text"])
+    formatted_query, id_exclusions = parse_search(query["bm25"], catch_all_fields=["text"], return_id_exclusions=True)
     
-    # print("Formatted query:", formatted_query)
+    print("Formatted query:", formatted_query)
     
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     
@@ -199,11 +204,13 @@ async def search_hybrid(database: Session,
 	ON m.id = s.id;
 	""").bindparams(
         embedding_in=str(embedding), 
-        limit_bm25=limit_bm25,
-        limit_similarity=limit_similarity,
+        limit_bm25=limit_bm25 + len(id_exclusions),
+        limit_similarity=limit_similarity + len(id_exclusions),
         bm25_weight=bm25_weight,
         similarity_weight=similarity_weight,
     )
+    
+    id_exclusions = set(id_exclusions)
     
     if return_statement:
         return str(STMT.compile(compile_kwargs={"literal_binds": True}))
@@ -212,10 +219,12 @@ async def search_hybrid(database: Session,
         results = database.exec(STMT)
         results = list(results)
         results = list(filter(lambda x: not x[0] is None, results))
+        
+        results = list(filter(lambda x: not x[0] in id_exclusions, results))
+        
         results : List[dict] = list(map(lambda x: convert_query_result(x, return_wrapped=True), results))
         database.rollback()
         
-        results 
         
         if "rerank" in query:
             rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
@@ -235,6 +244,8 @@ async def search_hybrid(database: Session,
             results = sorted(results, key=lambda x: x.rerank_score, reverse=True)
         else:
             results = list(map(lambda x: DocumentChunkDictionary(**x), results))
+        
+        results = group_adjacent_chunks(results)
         
         return results
     except Exception as e:
@@ -272,7 +283,7 @@ def search_bm25(database: Session,
     formatted_query = parse_search(query, catch_all_fields=["text"])
     unique_alias = "temp_alias"
     
-    # print("Formatted query:", formatted_query)
+    print("Formatted query:", formatted_query)
     # print(f'collection_id:IN {collection_string} AND {formatted_query}')
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     
@@ -351,15 +362,20 @@ def count_chunks(database: Session,
 
 def expand_document_segment(database: Session,
                             auth : AuthType,
-                            chunk_id: str) -> DocumentChunkDictionary:
+                            document_id: str,
+                            chunks_to_get: List[int] = []) -> DocumentChunkDictionary:
     
     (_, _) = get_user(database, auth)
     
-    chunk = database.exec(
+    chunks = database.exec(
         select(*column_attributes)
-        .where(DocumentChunk.id == chunk_id)
-    ).first()
+        # select(DocumentChunk)
+        .where(DocumentChunk.document_id == document_id)
+        .where(DocumentChunk.document_chunk_number.in_(chunks_to_get))
+    ).all()
     
-    chunk = convert_query_result(chunk)
+    chunks = list(map(lambda x: convert_query_result(x), list(chunks)))
     
-    return chunk
+    chunks = group_adjacent_chunks(chunks)
+    
+    return chunks
