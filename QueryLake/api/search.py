@@ -192,7 +192,7 @@ async def search_hybrid(database: Session,
 	SELECT {retrieved_fields_string}
 	FROM {CHUNK_CLASS_NAME} m
 	RIGHT JOIN (
-		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.rank_hybrid(
+		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.score_hybrid(
 			bm25_query => paradedb.parse('({collection_spec}) AND ({formatted_query})'),
 			similarity_query => '':embedding_in' <=> embedding',
 			bm25_weight => :bm25_weight,
@@ -287,9 +287,25 @@ def search_bm25(database: Session,
     # print(f'collection_id:IN {collection_string} AND {formatted_query}')
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     
+    
+    # # OLD QUERY; ParadeDB deprecated the highlight function.
+    # STMT = text(f"""
+	# SELECT {retrieved_fields_string_bm25}, 
+    #        paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
+	# FROM search_documentchunk_idx.search(
+    #  	query => paradedb.parse('({collection_spec}) AND {formatted_query}'),
+	# 	offset_rows => :offset,
+	# 	limit_rows => :limit,
+	# 	alias => '{unique_alias}'
+    # )
+ 	# LIMIT :limit;
+	# """).bindparams(
+    #     limit=limit,
+    #     offset=offset,
+    # )
+    
     STMT = text(f"""
-	SELECT {retrieved_fields_string_bm25}, 
-           paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
+	SELECT {retrieved_fields_string_bm25}
 	FROM search_documentchunk_idx.search(
      	query => paradedb.parse('({collection_spec}) AND {formatted_query}'),
 		offset_rows => :offset,
@@ -302,11 +318,14 @@ def search_bm25(database: Session,
         offset=offset,
     )
     
+    
+    
     try:
         results = database.exec(STMT)
         results = list(results)
         # results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
-        results = list(map(lambda x: convert_query_result(x[:-2]), results))
+        # results = list(map(lambda x: convert_query_result(x[:-2]), results))
+        results = list(map(lambda x: convert_query_result(x), results))
         results = group_adjacent_chunks(results)
         database.rollback()
         return results

@@ -33,6 +33,17 @@ class EmbeddingDeployment:
             return_sparse=True,
             max_length=1024
         )
+        
+        inputs_tokenized = self.model.tokenizer(
+            inputs,
+            padding=True,
+            truncation=True,
+            return_tensors='pt',
+            max_length=1024,
+        )["input_ids"].tolist()
+        
+        pad_id = self.model.tokenizer.pad_token_id
+        token_counts = [sum([1 for x in y if x != pad_id]) for y in inputs_tokenized]
         # sparse_vecs = sentence_embeddings['lexical_weights']
         
         # print("Sparse Vector:", sparse_vecs)
@@ -42,7 +53,7 @@ class EmbeddingDeployment:
         m_2 = time.time()
         print("Time taken for batch:", m_2 - m_1)
         
-        return embed_list
+        return [{"embedding": embed_list[i], "token_count": token_counts[i]} for i in range(len(inputs))]
     
     async def run(self, request_dict : Union[dict, List[str]]) -> List[List[float]]:
         

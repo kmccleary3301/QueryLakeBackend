@@ -48,12 +48,12 @@ id_types = {
 
 class UsageTally(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
-    start_timestamp: float = Field(index=True)
-    window: str # "hour" | "day" | "week" | "month"
-    organization_id: Optional[str] = Field(foreign_key="organization.id", index=True)
-    api_key_id: Optional[str] = Field(foreign_key="apikey.id", index=True)
+    start_timestamp: int = Field(index=True)
+    window: str # "hour" | "day" | "month"
+    organization_id: Optional[str] = Field(foreign_key="organization.id", index=True, default=None)
+    api_key_id: Optional[str] = Field(foreign_key="apikey.id", index=True, default=None)
     user_id: Optional[str] = Field(foreign_key="user.id", index=True)
-    value : str # JSON of tallies.
+    value : dict = Field(sa_column=Column(JSONB), default={}) # JSON of tallies.
 
 class ApiKey(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)

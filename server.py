@@ -225,7 +225,24 @@ class UmbrellaClass:
                              inputs : List[str]):
         assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
         (user, user_auth) = api.get_user(self.database, auth)
-        return await self.embedding_handle.run.remote({"text": inputs})
+        result = await self.embedding_handle.run.remote({"text": inputs})
+        
+        
+        
+        if isinstance(result, list):
+            embedding = [e["embedding"] for e in result]
+            total_tokens = sum([e["token_count"] for e in result])
+        else:
+            embedding = result["embedding"]
+            total_tokens = result["token_count"]
+        
+        api.increment_usage_tally(self.database, user_auth, {
+            "embedding": {
+                self.config.default_models.embedding: {"tokens": total_tokens}
+            }
+        })
+        
+        return embedding
     
     async def rerank_call(self, 
                           auth : AuthType,
@@ -239,12 +256,25 @@ class UmbrellaClass:
                 normalize = [normalize for _ in range(len(inputs))]
             assert len(normalize) == len(inputs), \
                 "All input lists must be the same length"
-            return await gather(*[self.rerank_handle.run.remote(
+            result = await gather(*[self.rerank_handle.run.remote(
                 inputs[i],
                 normalize=normalize[i]
             ) for i in range(len(inputs))])
+            scores = [e["score"] for e in result]
+            total_tokens = sum([e["token_count"] for e in result])
+            
         else:
-            return await self.rerank_handle.run.remote(inputs, normalize=normalize)
+            result = await self.rerank_handle.run.remote(inputs, normalize=normalize)
+            scores = result["score"]
+            total_tokens = result["token_count"]
+        
+        api.increment_usage_tally(self.database, user_auth, {
+            "rerank": {
+                self.config.default_models.rerank: {"tokens": total_tokens}
+            }
+        })
+        
+        return scores
     
     async def web_scrape_call(self, 
                               auth : AuthType,

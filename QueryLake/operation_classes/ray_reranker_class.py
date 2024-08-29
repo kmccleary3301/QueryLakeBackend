@@ -60,6 +60,14 @@ class RerankerDeployment:
         with torch.no_grad():
             start_time = time.time()
             tokenized_inputs = self.tokenizer(inputs, padding=True, truncation=True, return_tensors='pt', max_length=512).to(self.device)
+            
+            pad_id = self.tokenizer.pad_token_id
+            
+            token_ids = tokenized_inputs["input_ids"].tolist()
+            token_counts = [sum([1 for x in y if x != pad_id]) for y in token_ids]
+            
+        
+            
             mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
             time_taken_model, time_taken_tokens = time.time() - mid_time, mid_time - start_time
@@ -70,7 +78,7 @@ class RerankerDeployment:
         
         scores = list(map(lambda x: float(scores_normed[x]) if normalize[x] else float(scores[x]), list(range(len(scores)))))
         
-        return scores
+        return [{"score": scores[i], "token_count": token_counts[i]} for i in range(len(scores))]
 
     async def run(self, input: Tuple[str, str], normalize : bool = True) -> List[List[float]]:
         # Fire them all off at once and get the coroutines, but await them as a list.

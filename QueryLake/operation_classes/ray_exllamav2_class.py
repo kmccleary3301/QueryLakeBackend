@@ -3,7 +3,7 @@ import time
 import re, json
 
 from exllamav2 import ExLlamaV2, ExLlamaV2Config, ExLlamaV2Cache, ExLlamaV2Tokenizer
-from exllamav2.generator import ExLlamaV2DynamicGeneratorAsync, ExLlamaV2DynamicJobAsync
+from exllamav2.generator import ExLlamaV2DynamicGenerator, ExLlamaV2DynamicJob
 from QueryLake.misc_functions.vllm_lmformating_modifed_banned_tokens import build_vllm_token_enforcer_tokenizer_data
 from ray import serve
 
@@ -18,7 +18,7 @@ from QueryLake.misc_functions.server_class_functions import construct_functions_
 import os
 
 
-async def generator_wrapper(exl2_generator : ExLlamaV2DynamicJobAsync) -> AsyncIterator:
+async def generator_wrapper(exl2_generator : ExLlamaV2DynamicJob) -> AsyncIterator:
      async for result in exl2_generator:
         print("RESULT:", result)
          
@@ -44,8 +44,8 @@ class ExllamaV2DeploymentClass:
         self.padding : Padding = model_config.padding
         self.default_model_args = self.model_config.default_parameters
         self.context_size = self.model_config.max_model_len
-        print("INITIALIZING VLLM DEPLOYMENT")
-        os.environ["FORCE_CUDA"] = "1"
+        print("INITIALIZING EXLLAMAV2 DEPLOYMENT")
+        # os.environ["FORCE_CUDA"] = "1"
         self.config = ExLlamaV2Config(self.model_config.system_path)
         self.config.arch_compat_overrides()
         self.config.max_seq_len = self.context_size
@@ -54,12 +54,14 @@ class ExllamaV2DeploymentClass:
         self.cache = ExLlamaV2Cache(self.model, max_seq_len=self.context_size, lazy=True)
         self.model.load_autosplit(self.cache, progress = True)
         self.tokenizer = ExLlamaV2Tokenizer(self.config)
-        self.generator = ExLlamaV2DynamicGeneratorAsync(
+        
+        self.generator = ExLlamaV2DynamicGenerator(
             model = self.model,
             cache = self.cache,
             tokenizer = self.tokenizer,
         )
         
+        self.generator.warmup()
         
         # self.engine = AsyncLLMEngine.from_engine_args(args)
         
@@ -69,7 +71,7 @@ class ExllamaV2DeploymentClass:
         # self.special_token_ids = tokenizer_tmp.all_special_ids
         # self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
         # self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine)
-        print("DONE INITIALIZING VLLM DEPLOYMENT")
+        print("DONE INITIALIZING EXLLAMAV2 DEPLOYMENT")
     
     def count_tokens(self, input_string : str):
         return len(self.tokenizer.encode(input_string, add_bos = False))
@@ -90,7 +92,7 @@ class ExllamaV2DeploymentClass:
                 chat_history[-1]["content"] = (
                     f"SYSTEM MESSAGE - PROVIDED SOURCES\n{construct_functions_available_prompt(functions_available)}" + \
                     f"\nEND SYSTEM MESSAGE\n\n{chat_history[-1]['content']}"
-                )    
+                )
             
             
             prompt = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_new_tokens"] + 2)
@@ -146,8 +148,16 @@ class ExllamaV2DeploymentClass:
         
         # results_generator = self.engine.generate(prompt, sampling_params, request_id)
         
-        results_generator = ExLlamaV2DynamicJobAsync(
-            self.generator,
+        
+        
+        # results_generator = ExLlamaV2DynamicJobAsync(
+        #     generator,
+        #     input_ids = self.tokenizer.encode(prompt, add_bos = False),
+        #     **filtered_dict
+        # )
+        
+        
+        job = ExLlamaV2DynamicJob(
             input_ids = self.tokenizer.encode(prompt, add_bos = False),
             **filtered_dict
         )
@@ -156,9 +166,10 @@ class ExllamaV2DeploymentClass:
         # async for r in results_generator:
         #     print(r)
         #     yield r
+        self.generator.enqueue(job)
         
-        
-        return results_generator
+        # return results_generator
+        return job
     
     async def get_result_loop(self, 
                               request_dict : dict, 

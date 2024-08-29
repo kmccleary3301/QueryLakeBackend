@@ -36,7 +36,8 @@ def check_index_created(database: Session):
     return index_exists
 
 def initialize_database_engine() -> Session:
-    engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
+    # engine = create_engine("postgresql://admin:admin@localhost:5432/server_database")
+    engine = create_engine("postgresql://myuser:mypassword@localhost:5432/mydatabase")
     
     SQLModel.metadata.create_all(engine)
     
