@@ -3,7 +3,7 @@ from sqlmodel import Session, select, and_
 from .hashing import *
 from ..typing.config import AuthType, getUserType, AuthType1, AuthType2, AuthType3, AuthType4, AuthInputType, user, getUserAuthType
 from ..database.encryption import aes_decrypt_string, ecc_generate_public_private_key
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from time import time
@@ -34,7 +34,8 @@ def process_input_as_auth_type(auth: AuthInputType) -> AuthType:
 
 
 def get_user(database : Session,
-             auth: AuthInputType) -> Tuple[user, getUserAuthType]:
+             auth : AuthInputType,
+             return_auth_type : bool = False) -> Tuple[user, getUserAuthType]:
     """
     Returns the a user by lookup after verifying, raises an error otherwise.
     The return value must always be a tuple of two items.
@@ -55,7 +56,7 @@ def get_user(database : Session,
             password_hash_truth = retrieved[0].password_hash
             password_hash = hash_function(auth.password_prehash, password_salt, only_salt=True)
             if password_hash == password_hash_truth:
-                return (retrieved[0], auth)
+                return (retrieved[0], auth) if not return_auth_type else (retrieved[0], auth, auth, 1)
             else:
                 raise ValueError("User Verification Failed")
         else:
@@ -66,7 +67,7 @@ def get_user(database : Session,
         key_hash = hash_function(auth.api_key)
         
         statement = select(sql_db_tables.ApiKey).where(sql_db_tables.ApiKey.key_hash == key_hash)
-        retrieved = database.exec(statement).first()
+        retrieved : sql_db_tables.ApiKey = database.exec(statement).first()
         
         assert retrieved is not None, "API Key Not Found"
         
@@ -80,7 +81,7 @@ def get_user(database : Session,
         
         user_auth = AuthType1(username=retrieved.author, password_prehash=user_password_prehash)
         
-        return (user_db_entry, user_auth)
+        return (user_db_entry, user_auth) if not return_auth_type else (user_db_entry, user_auth, retrieved.id, 2)
     
     # Raw Password Login Case
     elif isinstance(auth, AuthType3):
@@ -91,7 +92,8 @@ def get_user(database : Session,
             password_hash_truth = retrieved.password_hash
             password_hash = hash_function(auth.password, password_salt)
             if password_hash == password_hash_truth:
-                return (retrieved, AuthType1(username=auth.username, password_prehash=hash_function(auth.password)))
+                return (retrieved, AuthType1(username=auth.username, password_prehash=hash_function(auth.password))) \
+                    if not return_auth_type else (retrieved, AuthType1(username=auth.username, password_prehash=hash_function(auth.password)), auth, 3)
             else:
                 raise ValueError("Invalid Password.")
         else:
@@ -113,7 +115,9 @@ def get_user(database : Session,
         temp_auth = AuthType1(username=username, password_prehash=pwd_hash)
         assert datetime.now(timezone.utc) < token_expiration, "Your OAuth2 token expired on " + str(token_expiration)
         
-        return get_user(database, temp_auth)
+        user_tuple = get_user(database, temp_auth)
+        
+        return user_tuple if not return_auth_type else tuple([*list(user_tuple), auth, 4])
 
     else:
         raise ValueError("Auth type not recognized.")

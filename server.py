@@ -224,7 +224,7 @@ class UmbrellaClass:
                              auth : AuthType,
                              inputs : List[str]):
         assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
-        (user, user_auth) = api.get_user(self.database, auth)
+        (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         result = await self.embedding_handle.run.remote({"text": inputs})
         
         
@@ -240,7 +240,7 @@ class UmbrellaClass:
             "embedding": {
                 self.config.default_models.embedding: {"tokens": total_tokens}
             }
-        })
+        }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
         
         return embedding
     
@@ -249,7 +249,7 @@ class UmbrellaClass:
                           inputs : Union[List[Tuple[str, str]], Tuple[str, str]],
                           normalize : Union[bool, List[bool]] = True):
         assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
-        (user, user_auth) = api.get_user(self.database, auth)
+        (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         
         if isinstance(inputs, list):
             if not isinstance(normalize, list):
@@ -272,7 +272,7 @@ class UmbrellaClass:
             "rerank": {
                 self.config.default_models.rerank: {"tokens": total_tokens}
             }
-        })
+        }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
         
         return scores
     
@@ -335,7 +335,7 @@ class UmbrellaClass:
         TODO: Move OpenAI calls here for integration.
         TODO: Add optionality via default values to the model parameters.
         """
-        (_, _) = api.get_user(self.database, auth)
+        (_, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         
         if not question is None:
             chat_history = [{"role": "user", "content": question}]
@@ -388,10 +388,19 @@ class UmbrellaClass:
                     print("GENERATOR OUTPUT:", result)
             
             
-            input_token_count = -1
+            # input_token_count = self.llm_count_tokens(model_choice, model_parameters_true["text"])
+            generated_prompt = await self.llm_handles_no_stream[model_choice].generate_prompt.remote(
+                deepcopy(model_parameters_true), 
+                sources=sources, 
+                functions_available=functions_available
+            )
             if only_format_prompt:
-                return await self.llm_handles_no_stream[model_choice].generate_prompt.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
+                return generated_prompt
+            input_token_count = generated_prompt["tokens"]
             
+            
+        
+        
             
         
         if "n" in model_parameters and model_parameters["n"] > 1:
@@ -401,13 +410,54 @@ class UmbrellaClass:
             # print(results)
             return [e.text for e in results.outputs]
         
+        increment_usage_args = {
+            "database": self.database, 
+            "auth": user_auth,
+            **({"api_key_id": original_auth} if auth_type == 2 else {})
+        }
+        
+        
+        
+        # total_output_tokens = 0
+        # async def on_new_token_wrapped(text_input):
+        #     nonlocal total_output_tokens
+        #     if not on_new_token is None:
+        #         if inspect.iscoroutinefunction(on_new_token):
+        #             on_new_token(text_input)
+        #         else:
+        #             on_new_token(text_input)
+        #     total_output_tokens += 1
+        
+        # def on_finish():
+        #     api.increment_usage_tally(self.database, user_auth, {
+        #         "llm": {
+        #             model_choice: {
+        #                 "input_tokens": input_token_count,
+        #                 "output_tokens": total_output_tokens
+        #             }
+        #         }
+        #     }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
+        
+        
         if return_stream_response:
             return StreamingResponse(
-                stream_results_tokens(gen, self.llm_configs[model_choice], on_new_token=on_new_token, encode_output=False, stop_sequences=stop_sequences),
+                stream_results_tokens(
+                    gen, 
+                    self.llm_configs[model_choice],
+                    on_new_token=on_new_token, 
+                    encode_output=False, 
+                    stop_sequences=stop_sequences
+                ),
+                # background=on_finish
             )
         else:
             results = []
-            async for result in stream_results_tokens(gen, self.llm_configs[model_choice], on_new_token=on_new_token, stop_sequences=stop_sequences):
+            async for result in stream_results_tokens(
+                gen, 
+                self.llm_configs[model_choice],
+                on_new_token=on_new_token, 
+                stop_sequences=stop_sequences
+            ):
                 results.append(result)
         
         text_outputs = "".join(results)
@@ -422,7 +472,6 @@ class UmbrellaClass:
             
             calls = [e for e in calls if ("function" in e and e["function"] in calls_possible)]
             call_results = {"function_calls": calls}
-            
         
         return {"output": text_outputs, "output_token_count": len(results), "input_token_count": input_token_count, **call_results}
     

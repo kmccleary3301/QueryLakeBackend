@@ -4,6 +4,7 @@ import json, inspect
 from pydantic import BaseModel
 from ..typing.function_calling import FunctionCallDefinition
 from ..typing.config import Model
+from ..api.usage_tracking import increment_usage_tally
 from copy import deepcopy
 from .function_run_clean import get_function_call_preview
 import re
@@ -136,6 +137,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                                 ) -> AsyncGenerator[bytes, None]:
     
     num_returned, tokens_returned, stop_queue, hold_queue = 0, [], [], False
+    tokens_generated = 0
     
     async def new_token_call(text_input):
         nonlocal tokens_returned
@@ -161,6 +163,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
     
     async for request_output in results_generator:
         
+        tokens_generated += 1
         if model_config.engine == "vllm":
             text_outputs = [output.text for output in request_output.outputs]
             assert len(text_outputs) == 1
@@ -189,7 +192,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                 stop_queue_full = "".join(stop_queue)
                 if (any([stop_sequence in stop_queue_full for stop_sequence in stop_sequences])):
                     print("Stopping sequence found:", stop_queue_full)
-                    return
+                    break
                 elif (check_stop_sequence(stop_queue_full)):
                     continue
                 else:
@@ -201,6 +204,19 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
         if not hold_queue:
             await new_token_call(text_output)
             yield yield_function(text_output)
+    
+    # On finish
+    # increment_usage_tally(
+    #     usage_increment={
+    #         "llm": {
+    #             model_config.id: {
+    #                 "input_tokens": input_token_count,
+    #                 "output_tokens": tokens_generated,
+    #             }
+    #         }
+    #     }
+    #     **increment_usage_args
+    # )
             
             
 async def consume_deployment_response(results_generator: DeploymentResponseGenerator) -> List[str]:

@@ -49,7 +49,7 @@ id_types = {
 class UsageTally(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     start_timestamp: int = Field(index=True)
-    window: str # "hour" | "day" | "month"
+    window: str = Field(index=True) # "hour" | "day" | "month"
     organization_id: Optional[str] = Field(foreign_key="organization.id", index=True, default=None)
     api_key_id: Optional[str] = Field(foreign_key="apikey.id", index=True, default=None)
     user_id: Optional[str] = Field(foreign_key="user.id", index=True)
