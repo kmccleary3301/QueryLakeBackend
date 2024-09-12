@@ -1,14 +1,11 @@
 import os
 from ..database import sql_db_tables
-from sqlmodel import Session, select, and_
+from sqlmodel import Session, select, delete, and_
 import time
 from .user_auth import *
 from .hashing import random_hash
 from ..typing.config import AuthType
 from ..misc_functions.function_run_clean import file_size_as_string
-
-server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-# user_db_path = server_dir+"/user_db/files/"
 
 def fetch_document_collections_belonging_to(database : Session, 
                                             auth : AuthType, 
@@ -214,7 +211,6 @@ def fetch_collection_documents(database : Session,
     
     return results
 
-
 def modify_document_collection(database : Session,
                                 auth : AuthType,
                                 collection_hash_id : str,
@@ -252,3 +248,52 @@ def modify_document_collection(database : Session,
     # return {"success": True}
     return True
 
+def delete_document_collection(database : Session, 
+                               auth : AuthType,
+                               collection_id : str,):
+    (user, user_auth) = get_user(database, auth)
+    
+    
+    # Organization collection first
+    collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_id)).first()
+    
+    # Organization collection
+    if not collection is None:
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+
+        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
+                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
+
+        assert len(memberships) > 0, "User has no membership in organization."
+        assert memberships[0].role in ["owner", "admin"], f"User of role `{memberships[0].role}` is not authorized to delete collections, must be owner or admin."
+    
+    # User collection
+    if collection is None:
+        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == collection_id)).first()
+        if not collection is None:
+            assert collection.author_user_name == user_auth.username, "User not authorized"
+    
+    # TODO: Global collection case.
+    
+    assert not collection is None, "Collection not found"
+    
+    # Wipe the chunks for all documents in the collection.
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.collection_id == collection_id))
+    if isinstance(collection, sql_db_tables.organization_document_collection):
+        # Wipe the documents
+        database.exec(delete(sql_db_tables.document_raw).where(sql_db_tables.document_raw.organization_document_collection_hash_id == collection_id))
+        # Wipe the zip blobs for the document bytes
+        database.exec(delete(sql_db_tables.document_zip_blob).where(sql_db_tables.document_zip_blob.organization_document_collection_hash_id == collection_id))
+    elif isinstance(collection, sql_db_tables.user_document_collection):
+        # Wipe the documents
+        database.exec(delete(sql_db_tables.document_raw).where(sql_db_tables.document_raw.user_document_collection_hash_id == collection_id))
+        # Wipe the zip blobs for the document bytes
+        database.exec(delete(sql_db_tables.document_zip_blob).where(sql_db_tables.document_zip_blob.user_document_collection_hash_id == collection_id))
+    
+    database.commit()
+    
+    return True
+    
+    
+    
+    

@@ -4,7 +4,7 @@ import os, sys
 import re
 from fastapi import UploadFile
 from ..database import sql_db_tables
-from sqlmodel import Session, select, and_
+from sqlmodel import Session, select, and_, delete
 import time
 from ..database import encryption
 from io import BytesIO
@@ -27,10 +27,6 @@ from ..misc_functions.function_run_clean import file_size_as_string
 import asyncio
 import bisect
 import concurrent.futures
-
-server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
-
-
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -419,12 +415,15 @@ async def upload_archive(database : Session,
 
 def delete_document(database : Session, 
                     auth : AuthType,
-                    hash_id: str):
+                    hash_id: Union[List[str], str] = None,
+                    hash_ids: Union[List[str], str] = None):
     """
     Authorizes that user has permission to delete document, then does so.
     """
     (user, user_auth) = get_user(database, auth)
 
+    assert not hash_id is None or not hash_ids is None, "No hash_id or hash_ids provided"
+    
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
 
     if not document.user_document_collection_hash_id is None:
@@ -440,11 +439,7 @@ def delete_document(database : Session,
         
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
 
-    document_embeddings = database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id)).all()
-    for e in document_embeddings:
-        database.delete(e)
-    database.commit()
-    
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id))
     
     database.delete(document)
 
@@ -505,28 +500,6 @@ def get_document_secure(database : Session,
     if return_document:
         return document
     return {"password": document_password, "hash_id": document.id}
-
-# async def query_vector_db(database : Session,
-#                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-#                           auth : AuthType,
-#                           query: str,
-#                           collection_hash_ids: List[str],
-#                           k : int = 10,
-#                           use_rerank : bool = False,
-#                           minimum_relevance : float = 0.0):
-#     """
-#     Query from the vector database.
-#     """
-#     (_, _) = get_user(database, auth)
-#     results = await query_database(database, 
-#                                    auth,
-#                                    toolchain_function_caller, 
-#                                    query, 
-#                                    collection_hash_ids, 
-#                                    k=k, 
-#                                    use_rerank=use_rerank,
-#                                    minimum_relevance=minimum_relevance)
-#     return {"result": results}
 
 def craft_document_access_token(database : Session, 
                                 public_key: str,

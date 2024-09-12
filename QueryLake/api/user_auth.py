@@ -26,15 +26,6 @@ from ..misc_functions.toolchain_state_management import run_sequence_action_on_o
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # manager = LoginManager(SECRET_KEY, tokenUrl='/auth/token', use_cookie=True)
 
-server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-1])
-upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
-# user_db_path = server_dir+"/user_db/files/"
-with open(upper_server_dir+"config.json", 'r', encoding='utf-8') as f:
-    file_read = f.read()
-    f.close()
-
-GLOBAL_SETTINGS = json.loads(file_read)
-
 def add_user(
     database : Session,
     toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
