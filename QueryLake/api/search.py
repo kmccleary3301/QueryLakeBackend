@@ -14,6 +14,7 @@ from ..misc_functions.paradedb_query_parser import parse_search
 from ..database.sql_db_tables import CHUNK_CLASS_NAME, DocumentChunk
 from ..typing.config import AuthType
 from .single_user_auth import get_user
+from .collections import assert_collections_viewable
 
 class DocumentChunkDictionary(BaseModel):
     id: Union[str, int, List[str], List[int]]
@@ -166,6 +167,8 @@ async def search_hybrid(database: Session,
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
     
+    assert_collections_viewable(database, auth, collection_ids)
+    
     if web_search:
         collection_ids.append(["WEB"])
     
@@ -274,6 +277,8 @@ def search_bm25(database: Session,
     
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
+    
+    assert_collections_viewable(database, auth, collection_ids)
     
     if web_search:
         collection_ids.append(["WEB"])

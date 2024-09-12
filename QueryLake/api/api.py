@@ -1,4 +1,3 @@
-from .chat_sessions import *
 from .collections import *
 from .document import *
 from .hashing import *
@@ -47,6 +46,7 @@ excluded_member_function_descriptions = [
     
     # Documents
     "upload_document_to_collection",
+    "assert_collections_viewable",
     
     # Toolchains
     "save_toolchain_session",

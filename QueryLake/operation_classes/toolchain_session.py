@@ -127,10 +127,12 @@ class ToolchainSession():
     
     def convert_all_files_in_dict(self, input_dict : Union[dict, ToolChainSessionFile, list], to_bytes : bool = False):
         
-        assert isinstance(input_dict, (dict, list, ToolChainSessionFile)), f"Input of type {str(type(input_dict))} is not a dictionary, list, or file pointer"
-        
         if isinstance(input_dict, list):
             return [self.convert_all_files_in_dict(e, to_bytes=to_bytes) for e in input_dict]
+        elif isinstance(input_dict, ToolChainSessionFile) and to_bytes:
+            return self.get_file_bytes(input_dict)
+        elif not isinstance(input_dict, dict):
+            return input_dict
         
         if "type" in input_dict and input_dict["type"] == "<<||TOOLCHAIN_SESSION_FILE||>>":
             try:

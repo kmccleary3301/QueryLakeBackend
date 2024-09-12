@@ -294,6 +294,52 @@ def delete_document_collection(database : Session,
     
     return True
     
+
+def assert_collections_viewable(database : Session, 
+                                auth : AuthType,
+                                collection_ids : List[str]):
+    """
+    Ensure that the given user can view the collections.
+    """
+    (user, user_auth) = get_user(database, auth)
+    
+    organization_collections = list(database.exec(
+        select(sql_db_tables.organization_document_collection)
+        .where(sql_db_tables.organization_document_collection.id.in_(collection_ids))
+    ).all())
+    user_collections = list(database.exec(
+        select(sql_db_tables.user_document_collection)
+        .where(sql_db_tables.user_document_collection.id.in_(collection_ids))
+    ).all())
+    
+    if len(organization_collections) > 0:
+        organization_ids = list(map(lambda x: x.author_organization_id, organization_collections))
+        # organizations = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+        # for collection in organization_collections:
+        memberships : List[sql_db_tables.organization_membership] = list(database.exec(
+            select(sql_db_tables.organization_membership)
+            .where(and_(sql_db_tables.organization_membership.organization_id.in_(organization_ids),
+                    sql_db_tables.organization_membership.user_name == auth.username))
+        ).first())
+        
+        membership_lookup = {x.organization_id: x for x in memberships}
+        viewables = {
+            org_collection.id: org_collection.author_organization_id in membership_lookup 
+            for org_collection in organization_collections
+        }
+        assert all(list(viewables.values())), f"You are not authorized to view the following organization collections: {str([k for k, v in viewables.items() if not v])}"
+    
+    if len(user_collections) > 0:
+        viewables = {
+            user_collection.id: user_collection.author_user_name == user.name or user_collection.public
+            for user_collection in user_collections
+        }
+        assert all(list(viewables.values())), f"You are not authorized to view the following user collections: {str([k for k, v in viewables.items() if not v])}"
+
+        # assert not membership is None, "User not authorized to view collection"
+    
+    return organization_collections + user_collections
+    
     
     
     
