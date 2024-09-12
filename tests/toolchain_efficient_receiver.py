@@ -102,7 +102,9 @@ async def wait_for_command_finish(websocket : Connection, toolchain_state : dict
             final_output = response
         
         if "trace" in response:
+            print("ERROR RECIEVED")
             print(response["trace"])
+            return
             
         elif "state" in response:
             toolchain_state = response["state"]

@@ -416,8 +416,6 @@ async def upload_archive(database : Session,
     
     # results = await asyncio.gather(*coroutines)
     return results
-    
-
 
 def delete_document(database : Session, 
                     auth : AuthType,
@@ -469,6 +467,8 @@ def get_document_secure(database : Session,
 
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
     
+    assert not document is None, "Document not found"
+    
     if not document.user_document_collection_hash_id is None:
         
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == document.user_document_collection_hash_id)).first()
@@ -498,10 +498,9 @@ def get_document_secure(database : Session,
     elif not document.toolchain_session_id is None:
         private_key_encryption_salt = user.private_key_encryption_salt
         user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
-
         user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-
         document_password = encryption.ecc_decrypt_string(user_private_key, document.encryption_key_secure)
+    
     
     if return_document:
         return document
@@ -605,9 +604,6 @@ async def fetch_document(database : Session,
     
     document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
     assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
-    
-    
-    
 
     fetch_parameters = get_document_secure(**{
         "database" : database, 
@@ -617,15 +613,44 @@ async def fetch_document(database : Session,
     
     password = fetch_parameters["password"]
 
-    # def yield_single_file():
-    #     with py7zr.SevenZipFile(path, mode='r', password=password) as z:
-    #         file = z.read()
-    #         keys = list(file.keys())
-    #         print(keys)
-    #         file_name = keys[0]
-    #         file = file[file_name]
-    #         yield file.getbuffer().tobytes()
-    # return StreamingResponse(yield_single_file())
+    file_io = aes_decrypt_zip_file(
+        database, 
+        password,
+        fetch_parameters["hash_id"]
+    )
+    
+    print("fetch_document got", type(file_io), "with size", len(file_io.getvalue()))
+    
+    return StreamingResponse(file_io)
+
+
+async def fetch_toolchain_document(database : Session,
+                                   auth: AuthType,
+                                   document_hash_id: str):
+    """
+    Decrypt document in memory for the user's viewing.
+    Return as a streaming response of bytes.
+    """
+    # print("Fetching document with auth:", document_auth_access)
+    
+    document_auth_access = {}
+    # print(json.dumps(document_auth_access, indent=4))
+
+    document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
+
+    print("Document Request Access Auth:", document_auth_access)
+    
+    document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
+    assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
+
+    fetch_parameters = get_document_secure(**{
+        "database" : database, 
+        "auth" : document_auth_access["auth"],
+        "hash_id": document_auth_access["hash_id"],
+    })
+    
+    password = fetch_parameters["password"]
+
     file_io = aes_decrypt_zip_file(
         database, 
         password,
@@ -638,20 +663,23 @@ async def fetch_document(database : Session,
 
 def ocr_pdf_file(database : Session,
                  auth : AuthType,
-                 file: bytes):
+                 file: Union[bytes, BytesIO]):
     """
+    TODO: OCR capabilities should be in a deployment class.
+    
     OCR a pdf file and return the raw text.
     """
+    
     (user, user_auth) = get_user(database, auth)
     ocr_bytes_target = BytesIO()
     ocr_bytes_target.seek(0)
 
+    assert isinstance(file, (bytes, BytesIO)), "File must be bytes or BytesIO object"
+    
     if isinstance(file, bytes):
-        print("File is bytes!")
         file_input : BytesIO = BytesIO(file)
         file_input.seek(0)
-    else:
-        print("File is type", type(file), "not bytes!")
+    elif isinstance(file, BytesIO):
         file_input = file
     
     # with contextlib.redirect_stdout(io.StringIO()):

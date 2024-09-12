@@ -24,6 +24,23 @@ from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
 from ..database.sql_db_tables import document_raw
 
+
+
+def convert_files_in_dict(input_dict : dict, 
+                          database : Session,
+                          auth : AuthType):
+    assert isinstance(input_dict, dict), f"Input of type {str(type(input_dict))} is not a dictionary"
+    if "type" in input_dict and input_dict["type"] == "<<||TOOLCHAIN_SESSION_FILE||>>":
+        try:
+            return ToolChainSessionFile(**input_dict)
+        except:
+            pass
+    for key, value in input_dict.items():
+        if isinstance(value, dict):
+            input_dict[key] = convert_files_in_dict(value, database, auth)
+    return input_dict
+
+
 class ToolchainSession():
     def __init__(self,
                  database : Session,
@@ -97,6 +114,7 @@ class ToolchainSession():
         Get the bytes of a file from the toolchain session.
         """
         database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.id == file_pointer.document_hash_id)).first()
+        assert not database_obj is None, f"File \'{file_pointer.document_hash_id}\' not found in database."
         assert database_obj.toolchain_session_id == self.session_hash, f"Retrieved file \'{file_pointer.document_hash_id}\' does not belong to this toolchain session."
         
         # return database_obj.file_data
@@ -106,6 +124,27 @@ class ToolchainSession():
         file_bytes = aes_decrypt_zip_file(self.database, document_args["password"], document_args["hash_id"])
         
         return file_bytes
+    
+    def convert_all_files_in_dict(self, input_dict : Union[dict, ToolChainSessionFile, list], to_bytes : bool = False):
+        
+        assert isinstance(input_dict, (dict, list, ToolChainSessionFile)), f"Input of type {str(type(input_dict))} is not a dictionary, list, or file pointer"
+        
+        if isinstance(input_dict, list):
+            return [self.convert_all_files_in_dict(e, to_bytes=to_bytes) for e in input_dict]
+        
+        if "type" in input_dict and input_dict["type"] == "<<||TOOLCHAIN_SESSION_FILE||>>":
+            try:
+                toolchain_file_pointer = ToolChainSessionFile(**input_dict)
+                toolchain_file = self.get_file_bytes(toolchain_file_pointer)
+                return toolchain_file if to_bytes else toolchain_file_pointer
+            except:
+                pass
+        for key, value in input_dict.items():
+            if isinstance(value, (dict, list)):
+                input_dict[key] = self.convert_all_files_in_dict(value, to_bytes=to_bytes)
+            elif isinstance(value, ToolChainSessionFile) and to_bytes:
+                input_dict[key] = self.get_file_bytes(value)
+        return input_dict
     
     async def create_streaming_callables(self, 
                                          node : toolchainNode,
@@ -215,11 +254,11 @@ class ToolchainSession():
                 if node_input_arg.key in user_provided_arguments:
                     
                     # Special case for file uploads. Should only be used for `file_upload_event`, although this isn't enforced.
-                    if node_input_arg.key == "<<FILE>>":
-                        db_file = self.database.exec(select(document_raw).where(document_raw.id == user_provided_arguments[node_input_arg.key])).first()
-                        node_inputs[node_input_arg.key] = ToolChainSessionFile(name=db_file.file_name, document_hash_id=db_file.id)
-                    else:
-                        node_inputs[node_input_arg.key] = user_provided_arguments[node_input_arg.key]
+                    # if node_input_arg.key == "<<FILE>>":
+                    #     db_file = self.database.exec(select(document_raw).where(document_raw.id == user_provided_arguments[node_input_arg.key])).first()
+                    #     node_inputs[node_input_arg.key] = ToolChainSessionFile(name=db_file.file_name, document_hash_id=db_file.id)
+                    # else:
+                    node_inputs[node_input_arg.key] = user_provided_arguments[node_input_arg.key]
                     
             elif not node_input_arg.from_state is None:
                 # For now, optionality will not be supported for state arguments. May change in the future.
@@ -521,7 +560,7 @@ class ToolchainSession():
             })
             
             node_outputs = await run_function_safe(get_function, {
-                **pop_files_in_dict(self.get_file_bytes, node_inputs), 
+                **self.convert_all_files_in_dict(node_inputs, to_bytes=True), 
                 "stream_callables": stream_callables
             })
             

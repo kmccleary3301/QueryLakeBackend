@@ -3,7 +3,7 @@
     "id": "test_file_upload",
     "category": "Test",
     "initial_state": {
-        "title": "Chat",
+        "title": "File Upload",
         "chat_history": []
     },
     "nodes": [
@@ -15,21 +15,11 @@
                     "from_user": true
                 },
                 {
-                    "key": "<<FILE>>",
+                    "key": "file_upload",
                     "from_user": true
                 }
             ],
             "feed_mappings": [
-                {
-                    "destination": "<<FILES>>",
-                    "sequence": [
-                        {
-                            "type": "createAction",
-                            "route" : [ "single_upload" ]
-                        }
-                    ],
-                    "getFromInputs": { "route": [ "<<FILE>>" ] }
-                },
                 {
                     "destination": "ocr",
                     "sequence": [
@@ -38,7 +28,7 @@
                             "route" : [ "file" ]
                         }
                     ],
-                    "getFromInputs": { "route": [ "<<FILE>>" ] }
+                    "getFromInputs": { "route": [ "file_upload" ] }
                 }
             ]
         },
@@ -47,18 +37,11 @@
             "api_function": "ocr_pdf_file",
             "input_arguments": [
                 {
-                    "key": "database",
-                    "from_server": true
-                },
-                {
                     "key": "auth",
                     "from_user": true
                 },
                 {
-                    "key": "file",
-                    "from_files": {
-                        "route": [ "single_upload" ]
-                    }
+                    "key": "file"
                 }
             ],
             "feed_mappings": [

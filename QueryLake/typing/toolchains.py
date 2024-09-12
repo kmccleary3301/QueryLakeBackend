@@ -403,29 +403,29 @@ class ToolChainSessionFile(BaseModel):
     """
     This is effectively a pointer to a file in the database so that it can be retrieved.
     """
-    type: Optional[Literal["<<||TOOLCHAIN_SESSION_FILE||>>"]] = "<<||TOOLCHAIN_SESSION_FILE||>>"
-    name: str
+    type: Literal["<<||TOOLCHAIN_SESSION_FILE||>>"] = "<<||TOOLCHAIN_SESSION_FILE||>>"
+    name: Optional[str] = None
     document_hash_id: str
 
-stateValue.update_forward_refs()
-getNodeInput.update_forward_refs()
-getNodeOutput.update_forward_refs()
-getFile.update_forward_refs()
-indexRouteRetrieved.update_forward_refs()
-# valueFromBranchingState.update_forward_refs()
+stateValue.model_rebuild()
+getNodeInput.model_rebuild()
+getNodeOutput.model_rebuild()
+getFile.model_rebuild()
+indexRouteRetrieved.model_rebuild()
+# valueFromBranchingState.model_rebuild()()
 
-# valueObj.update_forward_refs()
+# valueObj.model_rebuild()()
 
-createAction.update_forward_refs()
-deleteAction.update_forward_refs()
-updateAction.update_forward_refs()
-appendAction.update_forward_refs()
-# deleteListElementsAction.update_forward_refs()
-# insertListElementAction.update_forward_refs()
-operatorAction.update_forward_refs()
-insertAction.update_forward_refs()
+createAction.model_rebuild()
+deleteAction.model_rebuild()
+updateAction.model_rebuild()
+appendAction.model_rebuild()
+# deleteListElementsAction.model_rebuild()()
+# insertListElementAction.model_rebuild()()
+operatorAction.model_rebuild()
+insertAction.model_rebuild()
 
-chatWindowMapping.update_forward_refs()
+chatWindowMapping.model_rebuild()
 
 
 if __name__ == "__main__":
