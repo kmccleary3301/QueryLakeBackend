@@ -133,6 +133,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                                 model_config: Model,
                                 encode_output : bool = False,
                                 on_new_token: Awaitable[Callable[[str], None]] = None,
+                                increment_token_count: Callable[[], None] = None,
                                 stop_sequences: List[str] = None,
                                 ) -> AsyncGenerator[bytes, None]:
     
@@ -148,6 +149,8 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                 on_new_token(text_input)
         
         tokens_returned.append(text_input)
+        
+    
     
     def check_stop_sequence(text_in):
         if text_in == "":
@@ -184,6 +187,8 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                         if len(last_valid) > 0:
                             await new_token_call(last_valid)
                             yield yield_function(last_valid)
+                            if not increment_token_count is None:
+                                increment_token_count()
                         stop_queue.append(text_output[i:])
                         hold_queue = True
                         break
@@ -204,19 +209,8 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
         if not hold_queue:
             await new_token_call(text_output)
             yield yield_function(text_output)
-    
-    # On finish
-    # increment_usage_tally(
-    #     usage_increment={
-    #         "llm": {
-    #             model_config.id: {
-    #                 "input_tokens": input_token_count,
-    #                 "output_tokens": tokens_generated,
-    #             }
-    #         }
-    #     }
-    #     **increment_usage_args
-    # )
+            if not increment_token_count is None:
+                increment_token_count()
             
             
 async def consume_deployment_response(results_generator: DeploymentResponseGenerator) -> List[str]:

@@ -6,7 +6,6 @@ from typing import Annotated, Callable, Any
 import json, os
 from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
 from starlette.requests import Request
-from fastapi.responses import StreamingResponse
 from sqlmodel import Session, SQLModel, create_engine, select
 import inspect
 import re
@@ -19,6 +18,7 @@ from threading import Timer
 
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse, FileResponse, Response
+from starlette.background import BackgroundTask
 from starlette.testclient import TestClient
 
 import re, json
@@ -27,7 +27,6 @@ from pydantic import BaseModel
 
 from fastapi import FastAPI, WebSocket, BackgroundTasks
 from starlette.requests import Request
-from starlette.responses import StreamingResponse, Response
 from starlette.websockets import WebSocketDisconnect
 
 from ray import serve, get
@@ -416,27 +415,21 @@ class UmbrellaClass:
             **({"api_key_id": original_auth} if auth_type == 2 else {})
         }
         
+        total_output_tokens = 0
+        def increment_token_count():
+            nonlocal total_output_tokens
+            total_output_tokens += 1
         
-        
-        # total_output_tokens = 0
-        # async def on_new_token_wrapped(text_input):
-        #     nonlocal total_output_tokens
-        #     if not on_new_token is None:
-        #         if inspect.iscoroutinefunction(on_new_token):
-        #             on_new_token(text_input)
-        #         else:
-        #             on_new_token(text_input)
-        #     total_output_tokens += 1
-        
-        # def on_finish():
-        #     api.increment_usage_tally(self.database, user_auth, {
-        #         "llm": {
-        #             model_choice: {
-        #                 "input_tokens": input_token_count,
-        #                 "output_tokens": total_output_tokens
-        #             }
-        #         }
-        #     }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
+        def on_finish():
+            nonlocal total_output_tokens, input_token_count, user_auth, original_auth, auth_type
+            api.increment_usage_tally(self.database, user_auth, {
+                "llm": {
+                    model_choice: {
+                        "input_tokens": input_token_count,
+                        "output_tokens": total_output_tokens
+                    }
+                }
+            }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
         
         
         if return_stream_response:
@@ -444,21 +437,24 @@ class UmbrellaClass:
                 stream_results_tokens(
                     gen, 
                     self.llm_configs[model_choice],
-                    on_new_token=on_new_token, 
+                    on_new_token=on_new_token,
+                    increment_token_count=increment_token_count,
                     encode_output=False, 
                     stop_sequences=stop_sequences
                 ),
-                # background=on_finish
+                background=BackgroundTask(on_finish)
             )
         else:
             results = []
             async for result in stream_results_tokens(
                 gen, 
                 self.llm_configs[model_choice],
-                on_new_token=on_new_token, 
+                on_new_token=on_new_token,
+                increment_token_count=increment_token_count,
                 stop_sequences=stop_sequences
             ):
                 results.append(result)
+            on_finish()
         
         text_outputs = "".join(results)
         
