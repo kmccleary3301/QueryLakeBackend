@@ -57,6 +57,7 @@ excluded_member_function_descriptions = [
     # Cryptography
     "aes_decrypt_zip_file",
     "aes_encrypt_zip_file",
+    "aes_delete_file_from_zip_blob",
     
     # Usage Tracking
     "increment_merge_dictionaries",

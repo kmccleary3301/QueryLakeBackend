@@ -13,7 +13,7 @@ from .hashing import *
 from threading import Thread
 from ..vector_database.embeddings import chunk_documents
 from ..vector_database.document_parsing import parse_PDFs
-from ..database.encryption import aes_decrypt_zip_file
+from ..database.encryption import aes_decrypt_zip_file, aes_delete_file_from_zip_blob
 # from chromadb.api import ClientAPI
 import time
 import json
@@ -426,6 +426,8 @@ def delete_document(database : Session,
     
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
 
+    assert not document is None, "Document not found"
+    
     if not document.user_document_collection_hash_id is None:
         collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == document.user_document_collection_hash_id)).first()
         assert collection.author_user_name == user_auth.username, "User not authorized"
@@ -441,12 +443,13 @@ def delete_document(database : Session,
 
     database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id))
     
+    aes_delete_file_from_zip_blob(database, document.id)
+    
     database.delete(document)
 
     collection.document_count -= 1
     database.commit()
     
-    # return {"success": True}
     return True
 
 def get_document_secure(database : Session, 

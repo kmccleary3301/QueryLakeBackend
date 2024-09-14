@@ -132,10 +132,9 @@ def aes_encrypt_zip_file_dict(key : str,
 def aes_decrypt_zip_file(database: Session,
                          key : str, 
                          document_id : str,
-                         toolchain_file : bool = False):
+                         toolchain_file : bool = False) -> BytesIO:
     """
-    Returns dictionary with structure of archive.
-    Each file value is a BytesIO object.
+    Extracts a file from a blob in the database, decrypts it using the key, and returns the file as a BytesIO object.
     """
     
     document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
@@ -160,8 +159,33 @@ def aes_decrypt_zip_file(database: Session,
     file_bytes = file_model.file_data
     
     with py7zr.SevenZipFile(BytesIO(file_bytes), mode='r', password=key) as z:
-        file_data = z.read()[directory]
+        file_data = z._extract(targets=[directory], return_dict=True)[directory] # Much faster than z.read()
         return file_data
+
+def aes_delete_file_from_zip_blob(database: Session,
+                                  document_id : str):
+    """
+    Couldn't figure out an efficient way to delete a file using py7zr.
+    Instead, we lower the file count on the blob table by 1.
+    If the counter reaches 0, we delete the blob from the database.
+    
+    The py7zr library doesn't seem to support r+w mode, so we can't do it efficiently.
+    """
+    document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
+    document_blob = database.exec(select(document_zip_blob).where(document_zip_blob.id == document.blob_id)).first()
+    assert document_blob is not None, "Document blob not found in database."
+    directory = document.blob_dir
+    assert not directory is None, "Document doesn't contain a blob directory."
+
+    if document_blob is None:
+        raise FileNotFoundError("Document id not found in database.")
+    
+    document_blob.file_count -= 1
+    document.blob_id = None
+    
+    if document_blob.file_count <= 0:
+        database.delete(document_blob)
+    database.commit()
 
 # def save_file_aes(file_path : str, encryption_key : str) -> None:
 

@@ -290,6 +290,8 @@ def delete_document_collection(database : Session,
         # Wipe the zip blobs for the document bytes
         database.exec(delete(sql_db_tables.document_zip_blob).where(sql_db_tables.document_zip_blob.user_document_collection_hash_id == collection_id))
     
+    database.delete(collection)
+    
     database.commit()
     
     return True
