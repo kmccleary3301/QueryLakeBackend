@@ -1,7 +1,50 @@
 {
-	"name": "File Upload Test",
+	"name": "File Upload OCR Test",
     "id": "test_file_upload",
     "category": "Test",
+    "display_configuration": {
+        "split": "none",
+        "size": 100,
+        "align": "center",
+        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8 pt-4",
+        "footer": {
+            "align": "justify",
+            "tailwind": "pb-2",
+            "mappings": [
+                {
+                    "display_as": "file-upload",
+                    "hooks": [
+                        {
+                            "hook": "on_upload",
+                            "target_event": "user_file_upload_event",
+                            "fire_index": 1,
+                            "target_route": "file_upload",
+                            "store": false
+                        }
+                    ],
+                    "config": [
+                        {
+                            "name": "multiple",
+                            "value": false
+                        }
+                    ],
+                    "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
+                }
+            ]
+        },
+        "mappings": [
+            {
+                "display_route": [
+                    "output"
+                ],
+                "display_as": "text"
+            },
+            {
+                "display_route": [],
+                "display_as": "current-event-display"
+            }
+        ]
+    },
     "initial_state": {
         "title": "File Upload",
         "chat_history": []

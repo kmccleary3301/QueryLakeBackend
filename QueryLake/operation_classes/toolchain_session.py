@@ -392,8 +392,7 @@ class ToolchainSession():
         self.log_event("STATE DIFF CALL ENTERED", {})
         
         append_routes, append_state, update_state = dict_diff_append_and_update(current_state, previous_state)
-        delete_state = dict_diff_deleted(previous_state, current_state)
-        
+        delete_state = dict_diff_deleted(current_state, previous_state)
         update_state_values = {
             "append_routes": append_routes,
             "append_state": append_state,

@@ -649,7 +649,7 @@ def ocr_pdf_file(database : Session,
     (user, user_auth) = get_user(database, auth)
     ocr_bytes_target = BytesIO()
     ocr_bytes_target.seek(0)
-
+    
     assert isinstance(file, (bytes, BytesIO)), "File must be bytes or BytesIO object"
     
     if isinstance(file, bytes):

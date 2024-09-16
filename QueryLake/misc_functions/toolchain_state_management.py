@@ -608,6 +608,8 @@ def dict_diff_deleted(d1 : dict, d2 : dict) -> dict:
     The strings are top-level keys that have been fully deleted, 
     while the dicts specify new routes. Any value in the dict should 
     follow this same structure of strings and new dicts.
+    
+    Intended to give instructions for constructing d1 given d2 but only the deletions.
     """
     assert isinstance(d1, dict) and isinstance(d2, dict), "dict_diff_deleted called with non-dict type"
     
@@ -627,6 +629,8 @@ def dict_diff_append_and_update(d1 : dict, d2 : dict) -> Tuple[List[List[Union[s
     It also finds differences in dictionaries that need to be updated.
     It returns three values as a tuple of (diff_route, diff_append, diff_update).
     diff_route contains the routes at which to insert the diff_append values to avoid confusion.
+    
+    Intended to give instructions for constructing d1 given d2 sans the deletions.
     """
     
     assert isinstance(d1, dict) and isinstance(d2, dict), "dict_diff_append_and_update called with non-dict type"

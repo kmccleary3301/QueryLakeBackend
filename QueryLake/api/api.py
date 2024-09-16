@@ -62,6 +62,12 @@ excluded_member_function_descriptions = [
     # Usage Tracking
     "increment_merge_dictionaries",
     "increment_usage_tally",
+    
+    # Other
+    "Field",
+    "delete",
+    "text",
+    "find_overlap"
 ]
 
 exposed_api = [
