@@ -129,10 +129,6 @@ def get_usage_tally(
     )
     retrieved = list(statement.all())
     
-    print("RETRIEVED", len(retrieved))
-    
-    
-    
     if len(retrieved) > 0:
         return retrieved
     else:
