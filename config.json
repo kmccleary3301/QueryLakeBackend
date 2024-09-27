@@ -15,7 +15,6 @@
             "name": "Mistral 7B Instruct",
             "id": "mistral-7b-instruct-v0.1",
             "modelcard": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1",
-            "quantization": "awq",
             "max_model_len": 8192,
             "system_path": "/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ",
             "default_parameters": {
@@ -38,7 +37,6 @@
             "name": "LLaMA 3 8B Instruct",
             "id": "llama-3-8b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
-            "quantization": "awq",
             "max_model_len": 8192,
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/llama-3-8b-instruct-awq",
             "default_parameters": {
@@ -61,7 +59,6 @@
             "name": "LLaMA 3 8B Instruct Grounded",
             "id": "llama-3-8b-instruct-grounded",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
-            "quantization": null,
             "max_model_len": 8192,
             "system_path": "/home/kmccleary/projects/rag_project/RVA_implementations/Llama-3-8B-Instruct-Grounded-V1",
             "default_parameters": {
@@ -84,7 +81,6 @@
             "name": "LLaMA 3.1 8B Instruct",
             "id": "llama-3.1-8b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
-            "quantization": "awq",
             "max_model_len": 32768,
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-8B-Instruct-AWQ",
             "default_parameters": {
@@ -153,7 +149,6 @@
             "name": "Gemma 2 2B Instruct",
             "id": "gemma-2-2b-instruct",
             "modelcard": "https://ai.google.dev/gemma#gemma-2",
-            "quantization": "awq",
             "max_model_len": 8192,
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/gemma-2b-it-AWQ",
             "default_parameters": {
@@ -176,7 +171,6 @@
             "name": "Phi 3 Mini 128K Instruct",
             "id": "phi-3-mini-128k-instruct",
             "modelcard": "https://ai.google.dev/gemma#gemma-2",
-            "quantization": null,
             "max_model_len": 8192,
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Phi-3-mini-128k-instruct",
             "default_parameters": {

@@ -20,7 +20,15 @@ from typing import List, Union
 from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.4}, max_replicas_per_node=1)
+@serve.deployment(
+    ray_actor_options={"num_gpus": 0.001}, 
+    # max_replicas_per_node=1
+    autoscaling_config={
+        "min_replicas": 0,
+        "max_replicas": 3,
+        "target_num_ongoing_requests_per_replica": 5,
+    },
+)
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,

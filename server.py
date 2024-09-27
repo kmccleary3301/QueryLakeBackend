@@ -774,7 +774,11 @@ class UmbrellaClass:
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-GLOBAL_CONFIG, TOOLCHAINS = Config.parse_file('config.json'), {}
+
+with open("config.json", 'r', encoding='utf-8') as f:
+    GLOBAL_CONFIG = f.read()
+    f.close()
+GLOBAL_CONFIG, TOOLCHAINS = Config.model_validate_json(GLOBAL_CONFIG), {}
 
 default_toolchain = "chat_session_normal"
 
@@ -808,8 +812,7 @@ if GLOBAL_CONFIG.enabled_model_classes.llm:
         LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice.bind(
             model_config=model_entry,
             model=model_entry.system_path, 
-            max_model_len=model_entry.max_model_len, 
-            quantization=model_entry.quantization
+            max_model_len=model_entry.max_model_len,
         )
 
 default_embedding_model = GLOBAL_CONFIG.other_local_models.embedding_models[0]

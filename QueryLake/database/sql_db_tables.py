@@ -302,7 +302,6 @@ class model(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     name: str = Field(index=True)
     path_on_server: str
-    quantization: Optional[str] = Field(default=None) # Only qunatization supported by vLLM, "awq" | "gptq" | "squeezellm"
     default_settings: str #This will be a stringified JSON that will be parsed out kwargs on load.
 
     # Let's store wrappers as something like prepend_string+"\<system_instruction}\>"+append_string,
