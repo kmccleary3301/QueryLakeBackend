@@ -43,16 +43,16 @@ def F(x):
 
     return result
 
-@serve.deployment(
-    ray_actor_options={"num_gpus": 0.08, "num_cpus": 2}, 
-    # num_replicas=1
-    autoscaling_config={
-        "min_replicas": 0,
-        "max_replicas": 3,
-        "downscale_delay_s": 5,
-        "target_num_ongoing_requests_per_replica": 32,
-    }
-)
+# @serve.deployment(
+#     ray_actor_options={"num_gpus": 0.08, "num_cpus": 2}, 
+#     # num_replicas=1
+#     autoscaling_config={
+#         "min_replicas": 0,
+#         "max_replicas": 3,
+#         "downscale_delay_s": 5,
+#         "target_num_ongoing_requests_per_replica": 32,
+#     }
+# )
 class RerankerDeployment:
     def __init__(self, model_key: str):
         print("INITIALIZING RERANKER DEPLOYMENT")

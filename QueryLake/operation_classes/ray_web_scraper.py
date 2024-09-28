@@ -690,7 +690,18 @@ class Document:
 # It would allow us to skip everything but html and js.
 # See: https://stackoverflow.com/questions/49031428/how-to-disable-css-in-python-selenium-using-chromedriver-using-chromeoptions
 
-@serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=1)
+# @serve.deployment(ray_actor_options={"num_gpus": 0, "num_cpus": 1}, num_replicas=1)
+@serve.deployment(
+    ray_actor_options={"num_gpus": 0, "num_cpus": 1}, 
+    # max_replicas_per_node=1, 
+    max_ongoing_requests=12,
+    autoscaling_config={
+        "min_replicas": 0,
+        "max_replicas": 2,
+        "downscale_delay_s": 600,
+        "target_num_ongoing_requests_per_replica": 12,
+    }
+)
 class WebScraperDeployment:
     def __init__(self):
         chrome_options = webdriver.ChromeOptions()

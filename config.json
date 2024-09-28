@@ -267,14 +267,34 @@
             {
                 "name": "BAAI M2 Reranker",
                 "id": "bge-reranker-v2-m3",
-                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-reranker-v2-m3"
+                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-reranker-v2-m3",
+                "deployment_config": {
+                    "ray_actor_options": { "num_gpus": 0.08, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 2,
+                        "downscale_delay_s": 5,
+                        "target_num_ongoing_requests_per_replica": 128
+                    }
+                }
             }
         ],
         "embedding_models": [
             {
                 "name": "BAAI M2 Embedding",
                 "id": "bge-m3",
-                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-m3"
+                "source": "/home/kmccleary/projects/QueryLake/ai_models/bge-m3",
+                "deployment_config": {
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_num_ongoing_requests_per_replica": 128
+                    }
+                }
             }
         ]
     }

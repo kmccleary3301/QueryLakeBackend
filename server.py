@@ -136,8 +136,8 @@ class UmbrellaClass:
                  toolchains: Dict[str, ToolChain],
                  web_scraper_handle: DeploymentHandle,
                  llm_handles: Dict[str, DeploymentHandle] = {},
-                 embedding_handle: DeploymentHandle = None,
-                 rerank_handle: DeploymentHandle = None,
+                 embedding_handles: Dict[str, DeploymentHandle] = None,
+                 rerank_handles: Dict[str, DeploymentHandle] = None,
                  ):
         
         print("INITIALIZING UMBRELLA CLASS")
@@ -151,8 +151,8 @@ class UmbrellaClass:
         ) for k, handle in llm_handles.items()} if self.config.enabled_model_classes.llm else {}
         self.llm_configs : Dict[str, Model] = { config.id : config for config in self.config.models }
         
-        self.embedding_handle = embedding_handle
-        self.rerank_handle = rerank_handle
+        self.embedding_handles = embedding_handles
+        self.rerank_handles = rerank_handles
         self.web_scraper_handle = web_scraper_handle
         
         self.database, self.engine = initialize_database_engine()
@@ -221,12 +221,14 @@ class UmbrellaClass:
     
     async def embedding_call(self, 
                              auth : AuthType,
-                             inputs : List[str]):
+                             inputs : List[str],
+                             model: str = None):
         assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
+        if model is None:
+            model = self.config.default_models.embedding
+        assert model in self.embedding_handles, "Model choice not available"
         (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
-        result = await self.embedding_handle.run.remote({"text": inputs})
-        
-        
+        result = await self.embedding_handles[model].run.remote({"text": inputs})
         
         if isinstance(result, list):
             embedding = [e["embedding"] for e in result]
@@ -246,8 +248,12 @@ class UmbrellaClass:
     async def rerank_call(self, 
                           auth : AuthType,
                           inputs : Union[List[Tuple[str, str]], Tuple[str, str]],
-                          normalize : Union[bool, List[bool]] = True):
+                          normalize : Union[bool, List[bool]] = True,
+                          model: str = None):
         assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
+        if model is None:
+            model = self.config.default_models.rerank
+        assert model in self.rerank_handles, "Model choice not available"
         (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         
         if isinstance(inputs, list):
@@ -255,7 +261,7 @@ class UmbrellaClass:
                 normalize = [normalize for _ in range(len(inputs))]
             assert len(normalize) == len(inputs), \
                 "All input lists must be the same length"
-            result = await gather(*[self.rerank_handle.run.remote(
+            result = await gather(*[self.rerank_handles[model].run.remote(
                 inputs[i],
                 normalize=normalize[i]
             ) for i in range(len(inputs))])
@@ -263,7 +269,7 @@ class UmbrellaClass:
             total_tokens = sum([e["token_count"] for e in result])
             
         else:
-            result = await self.rerank_handle.run.remote(inputs, normalize=normalize)
+            result = await self.rerank_handles[model].run.remote(inputs, normalize=normalize)
             scores = result["score"]
             total_tokens = result["token_count"]
         
@@ -396,11 +402,6 @@ class UmbrellaClass:
             if only_format_prompt:
                 return generated_prompt
             input_token_count = generated_prompt["tokens"]
-            
-            
-        
-        
-            
         
         if "n" in model_parameters and model_parameters["n"] > 1:
             results = []
@@ -826,25 +827,37 @@ if GLOBAL_CONFIG.enabled_model_classes.llm:
             max_model_len=model_entry.max_model_len,
         )
 
-default_embedding_model = GLOBAL_CONFIG.other_local_models.embedding_models[0]
-for embedding_model in GLOBAL_CONFIG.other_local_models.embedding_models:
-    if embedding_model.id == GLOBAL_CONFIG.default_models.embedding:
-        default_embedding_model = embedding_model
-        break
+embedding_models = {}
+if GLOBAL_CONFIG.enabled_model_classes.embedding:
+    for embedding_model in GLOBAL_CONFIG.other_local_models.embedding_models:
+        class_choice_decorated : serve.Deployment = serve.deployment(
+            _func_or_class=EmbeddingDeployment,
+            name="embedding"+":"+embedding_model.id,
+            **embedding_model.deployment_config
+        )
+        embedding_models[embedding_model.id] = class_choice_decorated.bind(
+            model_key=embedding_model.source
+        )
 
-default_rerank_model = GLOBAL_CONFIG.other_local_models.rerank_models[0]
-for rerank_model in GLOBAL_CONFIG.other_local_models.rerank_models:
-    if rerank_model.id == GLOBAL_CONFIG.default_models.rerank:
-        default_rerank_model = rerank_model
-        break
+rerank_models = {}
+if GLOBAL_CONFIG.enabled_model_classes.rerank:
+    for rerank_model in GLOBAL_CONFIG.other_local_models.rerank_models:
+        class_choice_decorated : serve.Deployment = serve.deployment(
+            _func_or_class=RerankerDeployment,
+            name="rerank"+":"+rerank_model.id,
+            **rerank_model.deployment_config
+        )
+        rerank_models[rerank_model.id] = class_choice_decorated.bind(
+            model_key=rerank_model.source
+        )
 
 deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,
     toolchains=TOOLCHAINS,
     web_scraper_handle=WebScraperDeployment.bind(),
     llm_handles=LOCAL_MODEL_BINDINGS,
-    embedding_handle=EmbeddingDeployment.bind(model_key=default_embedding_model.source) if GLOBAL_CONFIG.enabled_model_classes.embedding else None,
-    rerank_handle=RerankerDeployment.bind(model_key=default_rerank_model.source) if GLOBAL_CONFIG.enabled_model_classes.rerank else None,
+    embedding_handles=embedding_models,
+    rerank_handles=rerank_models
 )
 
 if __name__ == "__main__":

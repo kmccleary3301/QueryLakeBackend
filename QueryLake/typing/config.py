@@ -57,7 +57,7 @@ class LocalModel(BaseModel):
     name: str
     id: str
     source: str
-    deployment_config: Optional[dict] = None
+    deployment_config: Optional[dict] = {}
 
 class OtherLocalModelsField(BaseModel):
     rerank_models: List[LocalModel]
