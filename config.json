@@ -12,6 +12,7 @@
     },
     "models": [
         {
+            "disabled": true,
             "name": "Mistral 7B Instruct",
             "id": "mistral-7b-instruct-v0.1",
             "modelcard": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1",
@@ -34,6 +35,7 @@
             "default_system_instruction": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
         },
         {
+            "disabled": true,
             "name": "LLaMA 3 8B Instruct",
             "id": "llama-3-8b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
@@ -55,7 +57,8 @@
             },
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
-        {
+        {   
+            "disabled": true,
             "name": "LLaMA 3 8B Instruct Grounded",
             "id": "llama-3-8b-instruct-grounded",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
@@ -81,8 +84,19 @@
             "name": "LLaMA 3.1 8B Instruct",
             "id": "llama-3.1-8b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
-            "max_model_len": 32768,
-            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-8B-Instruct-AWQ",
+            "max_model_len": 16384,
+            "engine_args": {"gpu_memory_utilization": 0.2},
+            "deployment_config": {
+                "ray_actor_options": { "num_gpus": 0.2 },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 0.05,
+                    "target_num_ongoing_requests_per_replica": 5
+                }
+            },
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
             "default_parameters": {
                 "max_tokens": 4096, 
                 "temperature": 0.5, 
@@ -100,6 +114,7 @@
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
         {
+            "disabled": true,
             "name": "LLaMA 3.1 8B Instruct EXL2",
             "id": "llama-3.1-8b-instruct-exl2-2.5bpw",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
@@ -126,11 +141,21 @@
             "name": "LLaMA 3.1 70B Instruct",
             "id": "llama-3.1-70b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
-            "engine": "exllamav2",
-            "max_model_len": 32768,
-            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Llama-3.1-70B-Instruct-exl2",
+            "max_model_len": 8192,
+            "engine_args": {"gpu_memory_utilization": 0.6},
+            "deployment_config": {
+                "ray_actor_options": { "num_gpus": 0.6 },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 1,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 0.05,
+                    "target_num_ongoing_requests_per_replica": 5
+                }
+            },
+            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16",
             "default_parameters": {
-                "max_new_tokens": 4096, 
+                "max_tokens": 4096, 
                 "temperature": 0.5, 
                 "top_k": 20,
                 "top_p": 0.9,
@@ -146,14 +171,15 @@
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
         {
+            "disabled": true,
             "name": "Gemma 2 2B Instruct",
             "id": "gemma-2-2b-instruct",
             "modelcard": "https://ai.google.dev/gemma#gemma-2",
             "max_model_len": 8192,
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/gemma-2b-it-AWQ",
             "default_parameters": {
-                "max_tokens": 4096, 
-                "temperature": 0.5, 
+                "max_tokens": 4096,
+                "temperature": 0.5,
                 "top_k": 20,
                 "top_p": 0.9,
                 "token_repetition_penalty": 1.15,
@@ -168,6 +194,7 @@
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
         {
+            "disabled": true,
             "name": "Phi 3 Mini 128K Instruct",
             "id": "phi-3-mini-128k-instruct",
             "modelcard": "https://ai.google.dev/gemma#gemma-2",
@@ -190,6 +217,7 @@
             "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
         },
         {
+            "disabled": true,
             "name": "Mistral 7B Instruct (v0.3)",
             "id": "mistral-7b-instruct-v0.3",
             "modelcard": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3",

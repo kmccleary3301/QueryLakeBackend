@@ -20,15 +20,15 @@ from typing import List, Union
 from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
 
-@serve.deployment(
-    ray_actor_options={"num_gpus": 0.001}, 
-    # max_replicas_per_node=1
-    autoscaling_config={
-        "min_replicas": 0,
-        "max_replicas": 3,
-        "target_num_ongoing_requests_per_replica": 5,
-    },
-)
+# @serve.deployment(
+#     ray_actor_options={"num_gpus": 0.001}, 
+#     # max_replicas_per_node=1
+#     autoscaling_config={
+#         "min_replicas": 0,
+#         "max_replicas": 3,
+#         "target_num_ongoing_requests_per_replica": 5,
+#     },
+# )
 class VLLMDeploymentClass:
     def __init__(self,
                  model_config : Model,
@@ -70,11 +70,17 @@ class VLLMDeploymentClass:
         self.padding : Padding = model_config.padding
         self.default_model_args = self.model_config.default_parameters
         
-        args = AsyncEngineArgs(
+        engine_args_make = {
             **kwargs,
-            # enforce_eager=True, # Save VRAM by disabling CUDA graphs
-            gpu_memory_utilization=0.4, # This should match the ray GPU allocation
-            disable_log_requests=True # Had to mute this thing because it was spamming the logs.
+            "gpu_memory_utilization": 0.4, # This should match the ray GPU allocation
+            "enforce_eager": True,
+            "disable_log_requests": True,  # Had to mute this thing because it was spamming the logs.
+            **(self.model_config.engine_args if not self.model_config.engine_args is None else {})
+        }
+        
+        args = AsyncEngineArgs(
+            
+            **engine_args_make
         )
         self.context_size = args.max_model_len
         

@@ -31,6 +31,9 @@ class Model(BaseModel):
     max_model_len: int
     padding: Padding
     default_system_instruction: str
+    disabled: Optional[bool] = False
+    engine_args: Optional[dict] = {}
+    deployment_config: Optional[dict] = None
 
 class ExternalModelProviders(BaseModel):
     name: str
@@ -54,6 +57,7 @@ class LocalModel(BaseModel):
     name: str
     id: str
     source: str
+    deployment_config: Optional[dict] = None
 
 class OtherLocalModelsField(BaseModel):
     rerank_models: List[LocalModel]

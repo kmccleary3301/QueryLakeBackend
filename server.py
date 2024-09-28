@@ -799,17 +799,28 @@ for toolchain_file in toolchain_files_list:
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 
 ENGINE_CLASSES = {"vllm": VLLMDeploymentClass, "exllamav2": ExllamaV2DeploymentClass}
+ENGINE_CLASS_NAMES = {"vllm": "vllm", "exllamav2": "exl2"}
 
 if GLOBAL_CONFIG.enabled_model_classes.llm:
     for model_entry in GLOBAL_CONFIG.models:
         
         # TODO: This will all be deprecated once we switch to ray clusters.
         # Only deploy the default model.
-        if not model_entry.id == GLOBAL_CONFIG.default_models.llm:
+        # if not model_entry.id == GLOBAL_CONFIG.default_models.llm:
+        #     continue
+        if model_entry.disabled:
+            continue
+        elif model_entry.deployment_config is None:
+            print("CANNOT DEPLOY; No deployment config for enabled model:", model_entry.id)
             continue
         class_choice = ENGINE_CLASSES[model_entry.engine]
+        class_choice_decorated : serve.Deployment = serve.deployment(
+            _func_or_class=class_choice,
+            name=ENGINE_CLASS_NAMES[model_entry.engine]+":"+model_entry.id,
+            **model_entry.deployment_config
+        )
         
-        LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice.bind(
+        LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice_decorated.bind(
             model_config=model_entry,
             model=model_entry.system_path, 
             max_model_len=model_entry.max_model_len,

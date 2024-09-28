@@ -10,7 +10,17 @@ from asyncio import gather
 from FlagEmbedding import BGEM3FlagModel
 import time
 
-@serve.deployment(ray_actor_options={"num_gpus": 0.1, "num_cpus": 2}, max_replicas_per_node=1, max_ongoing_requests=128)
+@serve.deployment(
+    ray_actor_options={"num_gpus": 0.04, "num_cpus": 2}, 
+    # max_replicas_per_node=1, 
+    max_ongoing_requests=128,
+    autoscaling_config={
+        "min_replicas": 0,
+        "max_replicas": 3,
+        "downscale_delay_s": 5,
+        "target_num_ongoing_requests_per_replica": 128,
+    }
+)
 class EmbeddingDeployment:
     def __init__(self, model_key: str):
         print("INITIALIZING EMBEDDING DEPLOYMENT")
