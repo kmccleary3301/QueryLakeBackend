@@ -5,3 +5,4 @@ db_data
 toolchain_sessions_logs
 tmp
 models
+config.json
