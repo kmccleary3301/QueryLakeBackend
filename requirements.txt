@@ -1,5 +1,7 @@
 # langchain
 # llama-cpp-python
+huggingface_hub[cli]
+colorama
 uvicorn
 fastapi
 sse_starlette
@@ -15,8 +17,7 @@ sqlmodel
 py7zr
 eciespy
 python-multipart
-chromadb
-ray
+ray[serve]
 transformers
 markdownify
 pypdf2
@@ -29,7 +30,7 @@ lm-format-enforcer
 vllm
 readability-lxml
 selenium
-psycopg2
+# psycopg2
 fastapi-login
 FlagEmbedding
 pgvector

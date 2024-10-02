@@ -699,7 +699,7 @@ class Document:
         "min_replicas": 0,
         "max_replicas": 2,
         "downscale_delay_s": 600,
-        "target_num_ongoing_requests_per_replica": 12,
+        "target_ongoing_requests": 12,
     }
 )
 class WebScraperDeployment:

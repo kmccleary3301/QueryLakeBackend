@@ -12,75 +12,6 @@
     },
     "models": [
         {
-            "disabled": true,
-            "name": "Mistral 7B Instruct",
-            "id": "mistral-7b-instruct-v0.1",
-            "modelcard": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1",
-            "max_model_len": 8192,
-            "system_path": "/home/kyle_m/QueryLake_Development/llm_models/Mistral-7B-Instruct-v0.1-AWQ",
-            "default_parameters": {
-                "max_tokens": 1000, 
-                "temperature": 0.5, 
-                "top_k": 20,
-                "top_p": 0.9,
-                "repetition_penalty": 1.15,
-                "stop": [ "<|im_end|>" ]
-            },
-            "padding": {
-                "system_instruction_wrap": "<|im_start|>system\n{system_instruction}<|im_end|>\n",
-                "context_wrap": "<<context>>{context}<</context>>",
-                "question_wrap": "<|im_start|>user\n{question}<|im_end|>\n",
-                "response_wrap": "<|im_start|>assistant\n{response}<|im_end|>\n"
-            },
-            "default_system_instruction": "You are a general answering assistant that can comply with any request.\n\nYou always answer with markdown formatting. You will be penalized if you do not answer with markdown when it would be possible.\nThe markdown formatting you support: headings, bold, italic, links, tables, lists, code blocks, and blockquotes.\nYou do not support images and never include images. You will be penalized if you render images.\n\nAlways use markdown code blocks for code, and always use MathJax with LaTeX formatting for pure math expressions.\nFor example code would look like:\n```python\n*Python code here\n```\nAnd math expressions would look like:\n$$P(y|x) = \\frac{{P(x|y) \\cdot P(y)}}{{P(x)}}$$"
-        },
-        {
-            "disabled": true,
-            "name": "LLaMA 3 8B Instruct",
-            "id": "llama-3-8b-instruct",
-            "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
-            "max_model_len": 8192,
-            "system_path": "/home/kmccleary/projects/QueryLake/ai_models/llama-3-8b-instruct-awq",
-            "default_parameters": {
-                "max_tokens": 4096, 
-                "temperature": 0.5, 
-                "top_k": 20,
-                "top_p": 0.9,
-                "repetition_penalty": 1.15,
-                "stop": [ "<|eot_id|>" ]
-            },  
-            "padding": {
-                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
-                "context_wrap": "<<context>>{context}<</context>>",
-                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
-                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
-            },
-            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
-        },
-        {   
-            "disabled": true,
-            "name": "LLaMA 3 8B Instruct Grounded",
-            "id": "llama-3-8b-instruct-grounded",
-            "modelcard": "https://ai.meta.com/blog/meta-llama-3/",
-            "max_model_len": 8192,
-            "system_path": "/home/kmccleary/projects/rag_project/RVA_implementations/Llama-3-8B-Instruct-Grounded-V1",
-            "default_parameters": {
-                "max_tokens": 4096, 
-                "temperature": 0.5, 
-                "top_k": 20,
-                "top_p": 0.9,
-                "repetition_penalty": 1.15,
-                "stop": [ "<|eot_id|>" ]
-            },
-            "padding": {
-                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
-                "context_wrap": "<<context>>{context}<</context>>",
-                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
-                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
-            },
-            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
-        },
-        {
             "name": "LLaMA 3.1 8B Instruct",
             "id": "llama-3.1-8b-instruct",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
@@ -92,8 +23,8 @@
                     "min_replicas": 0,
                     "max_replicas": 3,
                     "downscale_delay_s": 5,
-                    "downscaling_factor": 0.05,
-                    "target_num_ongoing_requests_per_replica": 5
+                    "downscaling_factor": 0.00001,
+                    "target_ongoing_requests": 5
                 }
             },
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
@@ -150,7 +81,7 @@
                     "max_replicas": 1,
                     "downscale_delay_s": 5,
                     "downscaling_factor": 0.05,
-                    "target_num_ongoing_requests_per_replica": 5
+                    "target_ongoing_requests": 5
                 }
             },
             "system_path": "/home/kmccleary/projects/QueryLake/ai_models/Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16",
@@ -275,7 +206,7 @@
                         "min_replicas": 0,
                         "max_replicas": 2,
                         "downscale_delay_s": 5,
-                        "target_num_ongoing_requests_per_replica": 128
+                        "target_ongoing_requests": 128
                     }
                 }
             }
@@ -292,7 +223,7 @@
                         "min_replicas": 0,
                         "max_replicas": 3,
                         "downscale_delay_s": 5,
-                        "target_num_ongoing_requests_per_replica": 128
+                        "target_ongoing_requests": 128
                     }
                 }
             }
