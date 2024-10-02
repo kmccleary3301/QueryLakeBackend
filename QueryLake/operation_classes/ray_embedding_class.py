@@ -9,6 +9,7 @@ import torch
 from asyncio import gather
 from FlagEmbedding import BGEM3FlagModel
 import time
+from ..typing.config import LocalModel
 
 # @serve.deployment(
 #     ray_actor_options={"num_gpus": 0.04, "num_cpus": 2}, 
@@ -22,13 +23,13 @@ import time
 #     }
 # )
 class EmbeddingDeployment:
-    def __init__(self, model_key: str):
+    def __init__(self, model_card : LocalModel):
         print("INITIALIZING EMBEDDING DEPLOYMENT")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_key)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_card.system_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
         # self.model = AutoModel.from_pretrained(model_key).to(self.device)
-        self.model = BGEM3FlagModel(model_key, use_fp16=True, device=self.device) 
+        self.model = BGEM3FlagModel(model_card.system_path, use_fp16=True, device=self.device) 
         print("DONE INITIALIZING EMBEDDING DEPLOYMENT")
 
     @serve.batch(max_batch_size=128, batch_wait_timeout_s=1)

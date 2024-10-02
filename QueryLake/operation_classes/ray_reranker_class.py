@@ -10,6 +10,7 @@ from math import exp
 from ray import serve
 import itertools
 from asyncio import gather
+from ..typing.config import LocalModel
 
 
 def modified_sigmoid(x : Union[torch.Tensor, float]):
@@ -54,12 +55,14 @@ def F(x):
 #     }
 # )
 class RerankerDeployment:
-    def __init__(self, model_key: str):
+    def __init__(self, model_card : LocalModel):
         print("INITIALIZING RERANKER DEPLOYMENT")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_key)
+        
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_card.system_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_key).to(self.device)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_card.system_path).to(self.device)
         print("DONE INITIALIZING RERANKER DEPLOYMENT")
         # self.model = FlagReranker(model_key, use_fp16=True)
     

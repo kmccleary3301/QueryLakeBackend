@@ -19,6 +19,8 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from typing import List, Union
 from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
+from huggingface_hub import snapshot_download
+import os
 
 # @serve.deployment(
 #     ray_actor_options={"num_gpus": 0.001}, 
@@ -78,9 +80,9 @@ class VLLMDeploymentClass:
             **(self.model_config.engine_args if not self.model_config.engine_args is None else {})
         }
         
-        args = AsyncEngineArgs(
-            
-            **engine_args_make
+        args = AsyncEngineArgs( 
+            **engine_args_make,
+            model=self.model_config.system_path,
         )
         self.context_size = args.max_model_len
         

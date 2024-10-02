@@ -773,7 +773,10 @@ class UmbrellaClass:
                 toolchain_session = None
                 del toolchain_session
 
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
+
+SERVER_DIR = os.path.dirname(os.path.realpath(__file__))
+# print("SERVER DIR:", SERVER_DIR)
+os.chdir(SERVER_DIR)
 
 
 with open("config.json", 'r', encoding='utf-8') as f:
@@ -820,10 +823,8 @@ if GLOBAL_CONFIG.enabled_model_classes.llm:
             name=ENGINE_CLASS_NAMES[model_entry.engine]+":"+model_entry.id,
             **model_entry.deployment_config
         )
-        
         LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice_decorated.bind(
             model_config=model_entry,
-            model=model_entry.system_path, 
             max_model_len=model_entry.max_model_len,
         )
 
@@ -836,7 +837,7 @@ if GLOBAL_CONFIG.enabled_model_classes.embedding:
             **embedding_model.deployment_config
         )
         embedding_models[embedding_model.id] = class_choice_decorated.bind(
-            model_key=embedding_model.source
+            model_card=embedding_model
         )
 
 rerank_models = {}
@@ -848,7 +849,7 @@ if GLOBAL_CONFIG.enabled_model_classes.rerank:
             **rerank_model.deployment_config
         )
         rerank_models[rerank_model.id] = class_choice_decorated.bind(
-            model_key=rerank_model.source
+            model_card=rerank_model
         )
 
 deployment = UmbrellaClass.bind(

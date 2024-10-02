@@ -1,0 +1,138 @@
+{
+    "default_toolchain": "test_chat_session_normal_streaming",
+    "default_models": {
+        "llm": "llama-3.1-8b-instruct",
+        "embedding": "bge-m3",
+        "rerank": "bge-reranker-v2-m3"
+    },
+    "enabled_model_classes": {
+        "llm": true,
+        "embedding": true,
+        "rerank": true
+    },
+    "models": [
+        {
+            "name": "LLaMA 3.1 8B Instruct (AQLM PV 2BPW)",
+            "id": "llama-3.1-8b-instruct",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "source": "ISTA-DASLab/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
+            "max_model_len": 16384,
+            "engine_args": {"gpu_memory_utilization": 0.2},
+            "deployment_config": {
+                "ray_actor_options": { "num_gpus": 0.2 },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 0.00001,
+                    "target_ongoing_requests": 5
+                }
+            },
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [ "<|eot_id|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        },
+        {
+            "name": "LLaMA 3.1 70B Instruct (AQLM PV 2BPW)",
+            "id": "llama-3.1-70b-instruct",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "source": "ISTA-DASLab/Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16",
+            "max_model_len": 8192,
+            "engine_args": {"gpu_memory_utilization": 0.6},
+            "deployment_config": {
+                "ray_actor_options": { "num_gpus": 0.6 },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 1,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 0.05,
+                    "target_ongoing_requests": 5
+                }
+            },
+            "default_parameters": {
+                "max_tokens": 4096, 
+                "temperature": 0.5, 
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
+                "stop": [ "<|eot_id|>" ]
+            },
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]"
+        }
+    ],
+    "external_model_providers": {
+        "openai": [
+            {
+                "name": "GPT-4 Turbo",
+                "id": "gpt-4-1106-preview",
+                "context": 128000,
+                "modelcard": "https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo"
+            },
+            {
+                "name": "GPT-3.5 Turbo",
+                "id": "gpt-3.5-turbo-1106",
+                "context": 16384,
+                "modelcard": "https://platform.openai.com/docs/models/gpt-3-5"
+            }
+        ]
+    },
+    "providers": [
+        "OpenAI",
+        "Anthropic",
+        "Serper.dev"
+    ],
+    "other_local_models": {
+        "rerank_models": [
+            {
+                "name": "BAAI M2 Reranker",
+                "id": "bge-reranker-v2-m3",
+                "source": "BAAI/bge-reranker-v2-m3",
+                "deployment_config": {
+                    "ray_actor_options": { "num_gpus": 0.08, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 2,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            }
+        ],
+        "embedding_models": [
+            {
+                "name": "BAAI M2 Embedding",
+                "id": "bge-m3",
+                "source": "BAAI/bge-m3",
+                "deployment_config": {
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            }
+        ]
+    }
+}

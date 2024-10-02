@@ -24,9 +24,10 @@ class Padding(BaseModel):
 class Model(BaseModel):
     name: str
     id : str
+    source : str
     engine: Optional[Literal["vllm", "exllamav2"]] = "vllm"
     modelcard: str
-    system_path: str
+    system_path: Optional[str] = None
     default_parameters: Dict[str, Any]
     max_model_len: int
     padding: Padding
@@ -57,6 +58,7 @@ class LocalModel(BaseModel):
     name: str
     id: str
     source: str
+    system_path: Optional[str] = None
     deployment_config: Optional[dict] = {}
 
 class OtherLocalModelsField(BaseModel):
