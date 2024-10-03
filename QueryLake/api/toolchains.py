@@ -12,7 +12,6 @@ from fastapi import UploadFile
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 from threading import Thread
-from chromadb.api import ClientAPI
 # from ..models.model_manager import LLMEnsemble
 import time
 from ..api.document import get_file_bytes, get_document_secure

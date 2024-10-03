@@ -30,12 +30,14 @@ lm-format-enforcer
 vllm
 readability-lxml
 selenium
-# psycopg2
+psycopg2-binary
 fastapi-login
 FlagEmbedding
 pgvector
 python-jose
 passlib
 lxml_html_clean
+exllamav2
+peft
 # pluggy
 # rich
