@@ -60,7 +60,12 @@ I recommend using the presets for now, as custom model additions are under devel
 
 ## Start
 
-To
+I recommend starting a head node for ray clusters first. This initiates the ray dashboard, and may make it easier to connect serve deployments in the future. you can do so as follows:
+
+
+```bash
+ray start --head --port=6379 --dashboard-host 0.0.0.0
+```
 
 To start the server, run 
 
