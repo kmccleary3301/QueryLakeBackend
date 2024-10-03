@@ -19,4 +19,4 @@ sudo docker volume prune -y
 # sudo docker volume prune
 
 # Start the Docker container
-sudo docker-compose -f "$(dirname "$0")/docker-compose-only-db.yml" up -d
+sudo docker compose -f "$(dirname "$0")/docker-compose-only-db.yml" up -d

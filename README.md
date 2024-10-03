@@ -10,7 +10,7 @@ conda create --name QueryLake python=3.10
 conda activate QueryLake
 ```
 
-After this, install pytorch using [this webpage](https://pytorch.org/).
+After this, install pytorch using the ***conda*** installation instructions on [this webpage](https://pytorch.org/).
 Then continue with the following command.
 
 ```
@@ -41,7 +41,7 @@ sudo apt install libtesseract-dev
 
 ## Database
 
-The database is a ParadeDB container. To initialize it, you must have docker and docker-compose installed.
+The database is a ParadeDB container. To initialize it, you must have docker and docker-compose installed (use [these instructions](https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository)).
 Once these are installed, you can run the following to start or completely reset the database:
 
 ```bash
