@@ -173,20 +173,20 @@ async def upload_document(database : Session,
     database.commit()
     if await_embedding:
         await chunk_documents(toolchain_function_caller,
-                                     database,
-                                     auth, 
-                                     [file_data_bytes], 
-                                     [new_db_file.id], 
-                                     [file_name],
-                                     create_embeddings=create_embeddings)
+                              database,
+                              auth, 
+                              [file_data_bytes], 
+                              [new_db_file.id], 
+                              [file_name],
+                              create_embeddings=create_embeddings)
     else:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
-                                                   database,
-                                                   auth, 
-                                                   [file_data_bytes], 
-                                                   [new_db_file.id], 
-                                                   [file_name],
-                                                   create_embeddings=create_embeddings))
+                                            database,
+                                            auth, 
+                                            [file_data_bytes], 
+                                            [new_db_file.id], 
+                                            [file_name],
+                                            create_embeddings=create_embeddings))
     
     time_taken = time.time() - time_start
 

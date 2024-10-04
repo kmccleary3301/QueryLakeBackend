@@ -673,8 +673,20 @@ class UmbrellaClass:
         await ws.accept()
         
         toolchain_session : ToolchainSession = None
+        old_toolchain_state = None
         
         await ws.send_text((json.dumps({"success": True})).encode("utf-8"))
+        
+        async def reset_session_state():
+            """
+            For when there is an error, restore the toolchain 
+            session to its previous state before an event was called.
+            """
+            nonlocal toolchain_session, ws, old_toolchain_state
+            if not toolchain_session is None and not old_toolchain_state is None:
+                toolchain_session.state = deepcopy(old_toolchain_state)
+                await ws.send_text(json.dumps({"state": toolchain_session.state}))
+                old_toolchain_state = None
         
         try:
             while True:
@@ -729,20 +741,21 @@ class UmbrellaClass:
                         }
                     
                     elif command == "toolchain/file_upload_event_call":
+                        old_toolchain_state = deepcopy(toolchain_session.state)
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_file_upload_event_call)
                         result = await api.toolchain_file_upload_event_call(**true_args, session=toolchain_session)
-                    
                     # Entries are deprecated.
                     # elif command == "toolchain/entry":
                     #     true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_entry_call)
                     #     result = await api.toolchain_entry_call(**true_args, session=toolchain_session)
 
                     elif command == "toolchain/event":
+                        old_toolchain_state = deepcopy(toolchain_session.state)
                         true_args = clean_function_arguments_for_api(system_args, arguments, function_object=api.toolchain_event_call)
                         event_result = await api.toolchain_event_call(**true_args, system_args=system_args, session=toolchain_session)
                         result = {"event_result": event_result}
                         toolchain_session.first_event_fired = True
-                    
+                        
                     if toolchain_session.first_event_fired:
                         print("SAVING TOOLCHAIN")
                         await api.save_toolchain_session(self.database, toolchain_session)
@@ -752,15 +765,18 @@ class UmbrellaClass:
                     
                     del result
                     
+                    old_toolchain_state = None
                     # await api.save_toolchain_session(self.database, toolchain_session)
                 
                 except WebSocketDisconnect:
                     raise WebSocketDisconnect
                 except Exception as e:
+                    print("Error in websocket:", str(e))
                     error_message = str(e)
                     stack_trace = traceback.format_exc()
                     await ws.send_text(json.dumps({"error": error_message, "trace": stack_trace}))
-                    await ws.send_text((json.dumps({"ACTION": "END_WS_CALL_ERROR"})).encode("utf-8"))
+                    await ws.send_text((json.dumps({"ACTION": "END_WS_CALL_ERROR"})))
+                    await reset_session_state()
         except WebSocketDisconnect as e:
             print("Websocket disconnected")
             if not toolchain_session is None:
