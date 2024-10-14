@@ -673,4 +673,26 @@ def ocr_pdf_file(database : Session,
         "pdf_text": text
     }
 
-
+def trigger_database_sql_error(database : Session,
+                               auth: AuthType):
+    """
+    Trigger a SQL error for testing purposes.
+    """
+    
+    _, _ = get_user(database, auth)
+    new_text_chunk = sql_db_tables.DocumentChunk(
+        id="test",
+        document_name="test.py",
+        text="test"
+    )
+    new_text_chunk.id = "ERROR_TEST"
+    new_text_chunk_2 = sql_db_tables.DocumentChunk(
+        id="test",
+        document_name="test.py",
+        text="test"
+    )
+    new_text_chunk_2.id = "ERROR_TEST"
+    database.add(new_text_chunk)
+    database.add(new_text_chunk_2)
+    database.commit()
+    return True

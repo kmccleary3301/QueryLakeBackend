@@ -485,11 +485,13 @@ class UmbrellaClass:
         assert function_name in API_FUNCTIONS_ALLOWED, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
     
-    @fastapi_app.post("/upload_document/{rest_of_path:path}")
-    async def upload_document_new(self, req : Request, rest_of_path: str, file : UploadFile):
+    @fastapi_app.post("/upload_document")
+    async def upload_document_new(self, req : Request, file : UploadFile):
         try:
-            file_name = file.filename
+            
+            # We have to take the arguments in the header, because the body is the file.
             arguments = json.loads(req.query_params._dict["parameters"])
+            file_name = file.filename
             file_ext = file_name.split(".")[-1]
             if file_ext in ["zip", "7z", "rar", "tar"]:
                 target_func, target_func_str = api.upload_archive, "upload_archive"
@@ -502,11 +504,12 @@ class UmbrellaClass:
                 **self.default_function_arguments,
                 "file": file,
             }, arguments, target_func_str)
-            self.database.rollback()
             return {"success": True, "result": await target_func(**true_arguments)}
         
         except Exception as e:
+            # if isinstance(e, InFailedSqlTransaction):
             self.database.rollback()
+            self.database.flush()
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_msg = {"success": False, "note": error_message, "trace": stack_trace}
@@ -539,6 +542,9 @@ class UmbrellaClass:
             
             return args_get
         except Exception as e:
+            if isinstance(e, InFailedSqlTransaction):
+                self.database.flush()
+                self.database.rollback()
             error_message = str(e)
             stack_trace = traceback.format_exc()
             return_dict = {"success": False, "error": error_message, "trace": stack_trace}
@@ -614,8 +620,8 @@ class UmbrellaClass:
                 return {"success": True, "result": args_get}
         except Exception as e:
             
-            if isinstance(e, InFailedSqlTransaction):
-                self.database.rollback()
+            self.database.rollback()
+            self.database.flush()
             
             error_message = str(e)
             stack_trace = traceback.format_exc()
@@ -772,6 +778,9 @@ class UmbrellaClass:
                     raise WebSocketDisconnect
                 except Exception as e:
                     print("Error in websocket:", str(e))
+                    self.database.rollback()
+                    self.database.flush()
+                    
                     error_message = str(e)
                     stack_trace = traceback.format_exc()
                     await ws.send_text(json.dumps({"error": error_message, "trace": stack_trace}))
