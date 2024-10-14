@@ -131,7 +131,7 @@ def aes_encrypt_zip_file_dict(key : str,
 
 def aes_decrypt_zip_file(database: Session,
                          key : str, 
-                         document_id : str,
+                         document_id : Union[str, BytesIO],
                          toolchain_file : bool = False) -> BytesIO:
     """
     Extracts a file from a blob in the database, decrypts it using the key, and returns the file as a BytesIO object.
@@ -139,26 +139,32 @@ def aes_decrypt_zip_file(database: Session,
     
     document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
     
-    if toolchain_file:
+    if toolchain_file and not isinstance(document_id, BytesIO):
         statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
         file_model = database.exec(statement).first()
         directory = "file"
-    else:
+        if file_model is None:
+            raise FileNotFoundError("Document id not found in database.")
+        file_bytes = file_model.file_data
+        file_bytes_io = BytesIO(file_bytes)
+    elif not isinstance(document_id, BytesIO):
         document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
         document_blob = database.exec(select(document_zip_blob).where(document_zip_blob.id == document.blob_id)).first()
         assert document_blob is not None, "Document blob not found in database."
         file_model = document_blob
         directory = document.blob_dir
         assert not directory is None, "Document doesn't contain a blob directory."
-        
+        if file_model is None:
+            raise FileNotFoundError("Document id not found in database.")
+        file_bytes = file_model.file_data
+        file_bytes_io = BytesIO(file_bytes)
+    elif isinstance(document_id, BytesIO):
+        file_bytes_io = document_id
+        directory = "metadata.json"
+    else:
+        raise ValueError("Document id must be a string or BytesIO object.")
     
-    
-    if file_model is None:
-        raise FileNotFoundError("Document id not found in database.")
-    
-    file_bytes = file_model.file_data
-    
-    with py7zr.SevenZipFile(BytesIO(file_bytes), mode='r', password=key) as z:
+    with py7zr.SevenZipFile(file_bytes_io, mode='r', password=key) as z:
         file_data = z._extract(targets=[directory], return_dict=True)[directory] # Much faster than z.read()
         return file_data
 

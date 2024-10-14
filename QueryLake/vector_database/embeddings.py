@@ -9,7 +9,7 @@ from .text_chunking.document_class import Document
 from ..database.sql_db_tables import document_raw, DocumentChunk, DocumentEmbeddingDictionary
 from ..api.hashing import random_hash, hash_function
 from ..api.single_user_auth import get_user
-from typing import List, Callable, Any, Union, Awaitable, Tuple
+from typing import List, Callable, Any, Union, Awaitable, Tuple, Literal
 from numpy import ndarray
 import numpy as np
 from re import sub, split
@@ -111,16 +111,24 @@ def split_list(input_list : list, n : int) -> List[list]:
 async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                           database : Session,
                           auth : AuthType,
-                          document_bytes_list : List[bytes], 
                           document_db_entries: List[Union[str, document_raw]],
                           document_names : List[str],
-                          create_embeddings : bool = True,):
+                          document_bytes_list : List[bytes] = None, 
+                          document_texts : List[str] = None,
+                          document_metadata : List[Union[dict, Literal[None]]] = None,
+                          create_embeddings : bool = True):
     """
     Add document batch to postgres vector database using embeddings.
     """
     
-    assert len(document_db_entries) == len(document_bytes_list) and len(document_db_entries) == len(document_names),\
-        "Length of document_bytes_list, document_db_entries, and document_names must be the same."
+    assert not document_bytes_list is None or not document_texts is None, "Either document_bytes_list or document_texts must be provided."
+    
+    if not document_bytes_list is None:
+        assert len(document_db_entries) == len(document_bytes_list) and len(document_db_entries) == len(document_names),\
+            "Length of document_bytes_list, document_db_entries, and document_names must be the same."
+    else:
+        assert len(document_db_entries) == len(document_texts) and len(document_db_entries) == len(document_names),\
+            "Length of document_texts, document_db_entries, and document_names must be the same."
 
     text_segment_collections = []
     real_db_entries = []
@@ -131,9 +139,6 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
         
         document_db_entry = document_db_entries[i]
         document_name = document_names[i]
-        document_bytes = document_bytes_list[i]
-        
-        assert isinstance(document_bytes, bytes), "Document bytes must be a bytes object."
         
         if isinstance(document_db_entry, str):
             document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry)).first()
@@ -144,19 +149,29 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
         
         file_extension = document_name.split(".")[-1]
         
-        if file_extension in ["pdf"]:
-            text_chunks = parse_PDFs(document_bytes)
-        elif file_extension in ["txt", "md", "json"]:
-            text = document_bytes.decode("utf-8").split("\n")
-            text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
+        if document_texts is None:
+            document_bytes = document_bytes_list[i]
+            assert isinstance(document_bytes, bytes), "Document bytes must be a bytes object."
+            
+            if file_extension in ["pdf"]:
+                text_chunks = parse_PDFs(document_bytes)
+            elif file_extension in ["txt", "md", "json"]:
+                text = document_bytes.decode("utf-8").split("\n")
+                text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
+            else:
+                raise ValueError(f"File extension `{file_extension}` not supported for scanning, only [pdf, txt, md, json] are supported at this time.")
         else:
-            raise ValueError(f"File extension `{file_extension}` not supported, only [pdf, txt, md, json] are supported at this time.")
+            text = document_texts[i].split("\n")
+            text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
 
         text_segment_collections.append(text_chunks)
     
+    if document_metadata is None:
+        document_metadata = [None]*len(document_db_entries)
     # try:
     await create_text_chunks(database, auth, toolchain_function_caller, text_segment_collections, 
-                            real_db_entries, document_names, create_embeddings=create_embeddings)
+                            real_db_entries, document_names, document_metadata=document_metadata,
+                            create_embeddings=create_embeddings)
     # except Exception as e:
     #     print("Got error, engine URL was:", engine_2.url)
     #     raise e
@@ -169,6 +184,7 @@ async def create_text_chunks(database : Session,
                              text_segment_collections : List[List[Tuple[str, dict]]],
                              document_sql_entries : List[document_raw], 
                              document_names: List[str],
+                             document_metadata : List[Union[dict, Literal[None]]],
                              create_embeddings : bool = True):
     """
     Given a set of text chunks, possibly pairs with metadata, create embeddings for the
@@ -254,7 +270,10 @@ async def create_text_chunks(database : Session,
         embeddings_all = await embedding_call(auth, flattened_splits)
     
     
-    db_additions = []
+    db_additions, document_md_lookup = [], {}
+    
+    for i, doc in enumerate(document_sql_entries):
+        document_md_lookup[doc.id] = document_metadata[i]
     
     for seg_i in range(len(text_segment_collections)):
         document_sql_entry = document_sql_entries[seg_i]
@@ -262,6 +281,7 @@ async def create_text_chunks(database : Session,
         document_name = document_names[seg_i]
         splits : List[Document] = split_collections[seg_i]
         current_split_size = len(splits)
+        document_metadata = document_md_lookup[document_sql_entry.id]
         
         embeddings = None
         if create_embeddings:
@@ -273,7 +293,10 @@ async def create_text_chunks(database : Session,
             assert isinstance(chunk_md, dict), "Metadata must be a dictionary."
             parent_doc_md = document_sql_entry.md
             assert isinstance(parent_doc_md, dict), "Parent document metadata must be a dictionary."
-            
+            document_md_make = {
+                **(document_metadata if not document_metadata is None else {}),
+                **parent_doc_md,
+            }
             
             embedding_db_entry = DocumentChunk(
                 # collection_type=collection_type,
@@ -284,14 +307,13 @@ async def create_text_chunks(database : Session,
                 document_name=document_name,
                 document_integrity=document_sql_entry.integrity_sha256,
                 md=chunk_md,
-                document_md=parent_doc_md,
+                document_md=document_md_make,
                 text=chunk.page_content,
                 **({"website_url": document_sql_entry.website_url} if not document_sql_entry.website_url is None else {}),
                 **({"embedding": embeddings[i]} if not embeddings is None else {}),
             )
             
             database.add(embedding_db_entry)
-            # db_additions.append(embedding_db_entry)
             current_chunks_queued += 1
             if current_chunks_queued >= 9999:
                 database.commit()

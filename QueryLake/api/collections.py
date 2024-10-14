@@ -206,6 +206,7 @@ def fetch_collection_documents(database : Session,
         "title": x.file_name,
         "hash_id": x.id,
         "size": file_size_as_string(x.size_bytes),
+        "md": x.md,
         "finished_processing": x.finished_processing,
     }, list(documents)))
     
@@ -297,9 +298,10 @@ def delete_document_collection(database : Session,
     return True
     
 
-def assert_collections_viewable(database : Session, 
-                                auth : AuthType,
-                                collection_ids : List[str]):
+def assert_collections_priviledge(database : Session, 
+                                  auth : AuthType,
+                                  collection_ids : List[str],
+                                  modifying : bool = False):
     """
     Ensure that the given user can view the collections.
     """
@@ -313,6 +315,7 @@ def assert_collections_viewable(database : Session,
         select(sql_db_tables.user_document_collection)
         .where(sql_db_tables.user_document_collection.id.in_(collection_ids))
     ).all())
+    
     
     if len(organization_collections) > 0:
         organization_ids = list(map(lambda x: x.author_organization_id, organization_collections))
@@ -329,6 +332,12 @@ def assert_collections_viewable(database : Session,
             org_collection.id: org_collection.author_organization_id in membership_lookup 
             for org_collection in organization_collections
         }
+        if modifying:
+            viewables = {
+                org_collection.id: membership_lookup[org_collection.author_organization_id].role in ["owner", "admin", "member"]
+                for org_collection in organization_collections
+            }
+        
         assert all(list(viewables.values())), f"You are not authorized to view the following organization collections: {str([k for k, v in viewables.items() if not v])}"
     
     if len(user_collections) > 0:

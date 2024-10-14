@@ -485,20 +485,22 @@ class UmbrellaClass:
         assert function_name in API_FUNCTIONS_ALLOWED, f"Invalid API Function '{function_name}' Called"
         return getattr(api, function_name)
     
+    @fastapi_app.post("/update_documents")
     @fastapi_app.post("/upload_document")
     async def upload_document_new(self, req : Request, file : UploadFile):
+        endpoint = req.scope['path']
         try:
             
             # We have to take the arguments in the header, because the body is the file.
             arguments = json.loads(req.query_params._dict["parameters"])
             file_name = file.filename
             file_ext = file_name.split(".")[-1]
-            if file_ext in ["zip", "7z", "rar", "tar"]:
+            if endpoint.strip() == "/update_documents":
+                target_func, target_func_str = api.update_documents, "update_documents"
+            elif file_ext in ["zip", "7z", "rar", "tar"]:
                 target_func, target_func_str = api.upload_archive, "upload_archive"
             else:
                 target_func, target_func_str = api.upload_document, "upload_document"
-            
-            print("Calling:", target_func_str, "with file:", file_name)
             
             true_arguments = clean_function_arguments_for_api({
                 **self.default_function_arguments,

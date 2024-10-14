@@ -21,12 +21,14 @@ import py7zr, zipfile
 from fastapi.responses import StreamingResponse
 import ocrmypdf
 from ..typing.config import AuthType
+from ..typing.api_inputs import DocumentModifierArgs
 import contextlib
 import io
 from ..misc_functions.function_run_clean import file_size_as_string
 import asyncio
 import bisect
 import concurrent.futures
+from .collections import assert_collections_priviledge
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -36,6 +38,7 @@ async def upload_document(database : Session,
                           file_name : str = None,
                           collection_type : str = "user",
                           return_file_hash : bool = False,
+                          scan_text : bool = False,
                           create_embeddings : bool = True,
                           await_embedding : bool = False) -> dict:
     """
@@ -175,17 +178,17 @@ async def upload_document(database : Session,
         await chunk_documents(toolchain_function_caller,
                               database,
                               auth, 
-                              [file_data_bytes], 
                               [new_db_file.id], 
                               [file_name],
+                              document_bytes_list=[file_data_bytes], 
                               create_embeddings=create_embeddings)
     else:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
                                             auth, 
-                                            [file_data_bytes], 
                                             [new_db_file.id], 
                                             [file_name],
+                                            document_bytes_list=[file_data_bytes], 
                                             create_embeddings=create_embeddings))
     
     time_taken = time.time() - time_start
@@ -207,10 +210,11 @@ async def upload_document(database : Session,
 async def upload_archive(database : Session,
                          toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                          auth : AuthType, 
-                         file : UploadFile, 
+                         file : UploadFile,
                          collection_hash_id : str, 
                          collection_type : str = "user",
                          return_file_hash : bool = False,
+                         scan_text : Union[bool, List[bool]] = True,
                          create_embeddings : bool = True,
                          await_embedding : bool = False):
     """
@@ -219,8 +223,7 @@ async def upload_archive(database : Session,
     The files must all be in the top level directory of the zip archive.
     """
     
-    
-    print("Adding document to collection")
+    print("Extracting document archive and adding to collection")
     collection_type_lookup = {
         "user": "user_document_collection_hash_id", 
         "organization": "organization_document_collection_hash_id",
@@ -359,7 +362,8 @@ async def upload_archive(database : Session,
     database.add(new_file_blob)
     database.commit()
     
-    results, new_doc_ids, new_doc_db_entries = [], [], []
+    results, new_doc_ids = [], []
+    new_doc_db_entries : List[sql_db_tables.document_raw] = []
     
     for i in range(len(files_retrieved)):
         file_integrity = sha256(files_retrieved_bytes[i]).hexdigest()
@@ -380,38 +384,181 @@ async def upload_archive(database : Session,
             **collection_author_kwargs
         )
         database.add(new_db_file)
-        results.append({
-            "hash_id": new_db_file.id, 
-            "title": file_name, 
-            "size": file_size_as_string(file_size), 
-            "finished_processing": new_db_file.finished_processing
-        })
+        
         new_doc_ids.append(new_db_file.id)
         new_doc_db_entries.append(new_db_file)
     
+    # Increment the doc count
     collection.document_count += len(new_doc_ids)
-    
+    # Commit the docs, before we start chunking them.
     database.commit()
     
-    if await_embedding:
+    if isinstance(scan_text, bool):
+        scan_text = [scan_text]*len(new_doc_ids)
+    
+    scannables = [i for i in range(len(new_doc_ids)) if scan_text[i]]
+    
+    if await_embedding and len(scannables) > 0:
         await chunk_documents(toolchain_function_caller,
                               database,
                               auth, 
-                              files_retrieved_bytes, 
-                              new_doc_db_entries, 
-                              files_retrieved_names,
+                              [new_doc_db_entries[i] for i in scannables], 
+                              [files_retrieved_names[i] for i in scannables],
+                              document_bytes_list=[files_retrieved_bytes[i] for i in scannables], 
                               create_embeddings=create_embeddings)
-    else:
+    elif len(scannables) > 0:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
                                             auth,
-                                            files_retrieved_bytes, 
-                                            new_doc_db_entries, 
-                                            files_retrieved_names,
+                                            [new_doc_db_entries[i] for i in scannables], 
+                                            [files_retrieved_names[i] for i in scannables],
+                                            document_bytes_list=[files_retrieved_bytes[i] for i in scannables], 
                                             create_embeddings=create_embeddings))
     
-    # results = await asyncio.gather(*coroutines)
+    for i, new_db_file in enumerate(new_doc_db_entries):
+        database.refresh(new_db_file)
+        results.append({
+            "hash_id": new_db_file.id, 
+            "title": files_retrieved_names[i], 
+            "size": file_size_as_string(len(files_retrieved_bytes[i])), 
+            "finished_processing": new_db_file.finished_processing
+        })
+    
     return results
+
+async def update_documents(database : Session,
+                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+                           auth : AuthType,
+                           data : List[dict] = None,
+                           file: Union[List[str], UploadFile] = None,
+                           create_embeddings : bool = True,
+                           await_embedding : bool = False):
+    """
+    Set the text for a given document in the database,
+    and perform text chunking, and optionally embedding.
+    
+    
+    You can upload a zipped JSONL file or a data field with the same content.
+    """
+    
+    (user, user_auth) = get_user(database, auth)
+    
+    if not file is None:
+        file_name = file.filename
+        file_ext = file_name.split(".")[-1]
+        file.file.seek(0)
+        file_data_bytes = file.file.read()
+        
+        file_bytes_io = BytesIO(file_data_bytes)
+        files_retrieved : List[BytesIO] = []
+        files_retrieved_bytes : List[bytes] = []
+        files_retrieved_names, coroutines = [], []
+        
+        if file_ext == "7z":
+            file_raw : BytesIO = aes_decrypt_zip_file(database, None, file_bytes_io)
+            data = [json.loads(line) for line in file_raw.getvalue().decode().split("\n") if len(line) > 0]
+        elif file_ext == "zip":
+            with zipfile.ZipFile(file_bytes_io, 'r') as z:
+                zip_file_list = z.namelist()
+                with z.open("metadata.jsonl", "r") as file:
+                    file_entry_bytes = file.read()
+                    file_raw = BytesIO(file_entry_bytes)
+                    file.close()
+                z.close()
+            data = [json.loads(line) for line in file_raw.getvalue().decode().split("\n") if len(line) > 0]
+        elif file_ext == "jsonl":
+            data = [json.loads(line) for line in file_data_bytes.decode().split("\n") if len(line) > 0]
+        else:
+            raise ValueError(f"File extension `{file_ext}` not supported for archival, only .7z, .zip, and .jsonl")
+    else:
+        assert not data is None, "Must provide data or file"
+        data = [data] if not isinstance(data, list) else data
+
+    data : List[DocumentModifierArgs] = [(DocumentModifierArgs(**entry) if not isinstance(entry, DocumentModifierArgs) else entry) for entry in data ]
+    
+    print(json.dumps([e.model_dump() for e in data], indent=4))
+    
+    assert len(data) > 0, "No data provided"
+    assert len(data) < 1000, "Too many documents to update at once"
+    
+    unique_doc_ids = list(set([entry.document_id for entry in data]))
+    documents = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id.in_(unique_doc_ids))).all())
+    document_chunks = list(database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(unique_doc_ids))).all())
+    document_collection_ids = list(set([c.collection_id for c in document_chunks]))
+    assert_collections_priviledge(database, auth, document_collection_ids, modifying=True)
+    
+    documents = {document.id: document for document in documents}
+    data_entries_lookup = {entry.document_id: entry for entry in data}
+    
+    
+    document_chunk_lookup : Dict[str, List[sql_db_tables.DocumentChunk]] = {document_id: [] for document_id in unique_doc_ids}
+    for chunk in document_chunks:
+        document_chunk_lookup[chunk.document_id].append(chunk)
+    
+    documents_to_clear_chunks = [
+        entry.document_id
+        for entry in data
+        if (not entry.text is None) or (not entry.scan is None)
+    ]
+    
+    # For updates to text or scan triggers, delete all prior chunks in the database.
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(documents_to_clear_chunks)))
+    
+    text_updates, text_update_doc_ids = {}, []
+    
+    for entry in data:
+        if not entry.text is None:
+            text_updates[entry.document_id] = entry.text
+            text_update_doc_ids.append(entry.document_id)
+    
+    for entry in data:
+        document = documents[entry.document_id]
+        
+        if not entry.metadata is None:
+            document.md = {
+                **document.md,
+                **entry.metadata
+            }
+            # TODO: Try to fix the auto-update trigger or find another way to get this to work.
+            for chunk in document_chunk_lookup[document.id]:
+                chunk.document_md = document.md
+    
+    text_update_doc_ids = list(set(text_update_doc_ids))
+    chunking_docs = [documents[doc_id] for doc_id in text_update_doc_ids]
+    chunking_texts = [text_updates[doc_id] for doc_id in text_update_doc_ids]
+    chunking_names = [documents[doc_id].file_name for doc_id in text_update_doc_ids]
+    chunking_metadata = [
+        data_entries_lookup[doc_id].metadata 
+        if not data_entries_lookup[doc_id].metadata is None
+        else None
+        for doc_id in text_update_doc_ids 
+    ]
+    
+    # Run chunking on manually set texts.
+    if await_embedding and len(chunking_docs) > 0:
+        await chunk_documents(toolchain_function_caller,
+                              database,
+                              auth,
+                              chunking_docs,
+                              chunking_names,
+                              document_texts=chunking_texts,
+                              document_metadata=chunking_metadata,
+                              create_embeddings=create_embeddings)
+    elif len(chunking_docs) > 0:
+        asyncio.create_task(chunk_documents(toolchain_function_caller,
+                                            database,
+                                            auth, 
+                                            chunking_docs,
+                                            chunking_names,
+                                            document_texts=chunking_texts,
+                                            document_metadata=chunking_metadata,
+                                            create_embeddings=create_embeddings))       
+
+    
+    
+    database.commit()
+    return True
+        
 
 def delete_document(database : Session, 
                     auth : AuthType,
