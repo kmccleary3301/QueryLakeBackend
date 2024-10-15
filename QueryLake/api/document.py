@@ -1,10 +1,10 @@
 from hashlib import sha256
-from typing import List, Callable, Awaitable, Dict, Any, Union
+from typing import List, Callable, Awaitable, Dict, Any, Union, Literal
 import os, sys
 import re
 from fastapi import UploadFile
 from ..database import sql_db_tables
-from sqlmodel import Session, select, and_, delete
+from sqlmodel import Session, select, and_, delete, update
 import time
 from ..database import encryption
 from io import BytesIO
@@ -36,9 +36,9 @@ async def upload_document(database : Session,
                           file : Union[UploadFile, BytesIO], 
                           collection_hash_id : str, 
                           file_name : str = None,
-                          collection_type : str = "user",
+                          collection_type : Literal["global", "organization", "user", "toolchain_session"] = "user",
                           return_file_hash : bool = False,
-                          scan_text : bool = False,
+                          scan_text : bool = True,
                           create_embeddings : bool = True,
                           await_embedding : bool = False) -> dict:
     """
@@ -57,6 +57,7 @@ async def upload_document(database : Session,
     }
 
     assert collection_type in ["global", "organization", "user", "toolchain_session"]
+    assert isinstance(scan_text, bool), "scan_text must be a boolean"
 
     if collection_type == "global":
         public = True
@@ -174,7 +175,7 @@ async def upload_document(database : Session,
         collection.document_count += 1
     database.add(new_db_file)
     database.commit()
-    if await_embedding:
+    if await_embedding and scan_text:
         await chunk_documents(toolchain_function_caller,
                               database,
                               auth, 
@@ -182,7 +183,7 @@ async def upload_document(database : Session,
                               [file_name],
                               document_bytes_list=[file_data_bytes], 
                               create_embeddings=create_embeddings)
-    else:
+    elif scan_text:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
                                             auth, 
@@ -213,8 +214,7 @@ async def upload_archive(database : Session,
                          file : UploadFile,
                          collection_hash_id : str, 
                          collection_type : str = "user",
-                         return_file_hash : bool = False,
-                         scan_text : Union[bool, List[bool]] = True,
+                         scan_text : bool = True,
                          create_embeddings : bool = True,
                          await_embedding : bool = False):
     """
@@ -393,26 +393,21 @@ async def upload_archive(database : Session,
     # Commit the docs, before we start chunking them.
     database.commit()
     
-    if isinstance(scan_text, bool):
-        scan_text = [scan_text]*len(new_doc_ids)
-    
-    scannables = [i for i in range(len(new_doc_ids)) if scan_text[i]]
-    
-    if await_embedding and len(scannables) > 0:
+    if await_embedding and scan_text:
         await chunk_documents(toolchain_function_caller,
                               database,
                               auth, 
-                              [new_doc_db_entries[i] for i in scannables], 
-                              [files_retrieved_names[i] for i in scannables],
-                              document_bytes_list=[files_retrieved_bytes[i] for i in scannables], 
+                              new_doc_db_entries, 
+                              files_retrieved_names,
+                              document_bytes_list=files_retrieved_bytes, 
                               create_embeddings=create_embeddings)
-    elif len(scannables) > 0:
+    elif scan_text:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
-                                            auth,
-                                            [new_doc_db_entries[i] for i in scannables], 
-                                            [files_retrieved_names[i] for i in scannables],
-                                            document_bytes_list=[files_retrieved_bytes[i] for i in scannables], 
+                                            auth, 
+                                            new_doc_db_entries, 
+                                            files_retrieved_names,
+                                            document_bytes_list=files_retrieved_bytes, 
                                             create_embeddings=create_embeddings))
     
     for i, new_db_file in enumerate(new_doc_db_entries):
@@ -439,6 +434,18 @@ async def update_documents(database : Session,
     
     
     You can upload a zipped JSONL file or a data field with the same content.
+    If uploading a zip/7zip file, the file must be named `metadata.jsonl`.
+    Each entry must match the following scheme:
+    ```python
+        document_id: str
+        scan: Optional[bool] = False
+        text: Optional[str] = None
+        metadata: Optional[Dict[str, Any]] = None
+    ```
+    `scan` indicates whether to start scanning the file to extract text, chunk it, and put it into the database.
+    `text` allows you to manually set the text of the document, and takes priority over `scan` if it is provided.
+    `metadata` allows you to set the metadata of the document.
+    
     """
     
     (user, user_auth) = get_user(database, auth)
@@ -450,16 +457,12 @@ async def update_documents(database : Session,
         file_data_bytes = file.file.read()
         
         file_bytes_io = BytesIO(file_data_bytes)
-        files_retrieved : List[BytesIO] = []
-        files_retrieved_bytes : List[bytes] = []
-        files_retrieved_names, coroutines = [], []
         
         if file_ext == "7z":
-            file_raw : BytesIO = aes_decrypt_zip_file(database, None, file_bytes_io)
+            file_raw : BytesIO = aes_decrypt_zip_file(database, None, file_bytes_io, file_name="metadata.jsonl")
             data = [json.loads(line) for line in file_raw.getvalue().decode().split("\n") if len(line) > 0]
         elif file_ext == "zip":
             with zipfile.ZipFile(file_bytes_io, 'r') as z:
-                zip_file_list = z.namelist()
                 with z.open("metadata.jsonl", "r") as file:
                     file_entry_bytes = file.read()
                     file_raw = BytesIO(file_entry_bytes)
@@ -483,25 +486,32 @@ async def update_documents(database : Session,
     
     unique_doc_ids = list(set([entry.document_id for entry in data]))
     documents = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id.in_(unique_doc_ids))).all())
-    document_chunks = list(database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(unique_doc_ids))).all())
-    document_collection_ids = list(set([c.collection_id for c in document_chunks]))
+    # document_chunks = list(database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(unique_doc_ids))).all())
+    # document_collection_ids = list(set([c.collection_id for c in document_chunks]))
+    document_collection_ids = list(set([getattr(d, c) for c in [
+        "user_document_collection_hash_id", 
+        "organization_document_collection_hash_id",
+        "global_document_collection_hash_id",
+        "toolchain_session_id"
+    ] for d in documents if not getattr(d, c) is None]))
+    print("Document Collection IDs:", document_collection_ids)
+    
     assert_collections_priviledge(database, auth, document_collection_ids, modifying=True)
     
     documents = {document.id: document for document in documents}
     data_entries_lookup = {entry.document_id: entry for entry in data}
     
     
-    document_chunk_lookup : Dict[str, List[sql_db_tables.DocumentChunk]] = {document_id: [] for document_id in unique_doc_ids}
-    for chunk in document_chunks:
-        document_chunk_lookup[chunk.document_id].append(chunk)
+    # document_chunk_lookup : Dict[str, List[sql_db_tables.DocumentChunk]] = {document_id: [] for document_id in unique_doc_ids}
+    # for chunk in document_chunks:
+    #     document_chunk_lookup[chunk.document_id].append(chunk)
     
+    # For updates to text or scan triggers, delete all prior chunks in the database.
     documents_to_clear_chunks = [
         entry.document_id
         for entry in data
         if (not entry.text is None) or (not entry.scan is None)
     ]
-    
-    # For updates to text or scan triggers, delete all prior chunks in the database.
     database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(documents_to_clear_chunks)))
     
     text_updates, text_update_doc_ids = {}, []
@@ -520,8 +530,14 @@ async def update_documents(database : Session,
                 **entry.metadata
             }
             # TODO: Try to fix the auto-update trigger or find another way to get this to work.
-            for chunk in document_chunk_lookup[document.id]:
-                chunk.document_md = document.md
+            # This is efficient.
+            database.exec(
+                update(sql_db_tables.DocumentChunk)
+                .where(sql_db_tables.DocumentChunk.document_id == document.id)
+                .values(document_md=document.md)
+            )
+            # for chunk in document_chunk_lookup[document.id]:
+            #     chunk.document_md = document.md
     
     text_update_doc_ids = list(set(text_update_doc_ids))
     chunking_docs = [documents[doc_id] for doc_id in text_update_doc_ids]
@@ -552,9 +568,7 @@ async def update_documents(database : Session,
                                             chunking_names,
                                             document_texts=chunking_texts,
                                             document_metadata=chunking_metadata,
-                                            create_embeddings=create_embeddings))       
-
-    
+                                            create_embeddings=create_embeddings))
     
     database.commit()
     return True

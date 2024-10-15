@@ -132,9 +132,12 @@ def aes_encrypt_zip_file_dict(key : str,
 def aes_decrypt_zip_file(database: Session,
                          key : str, 
                          document_id : Union[str, BytesIO],
-                         toolchain_file : bool = False) -> BytesIO:
+                         toolchain_file : bool = False,
+                         file_name : str = None) -> BytesIO:
     """
     Extracts a file from a blob in the database, decrypts it using the key, and returns the file as a BytesIO object.
+    
+    Secondary use is extracting a file from a BytesIO 7zip file directly, specify the file with `file_name`.
     """
     
     document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
@@ -160,7 +163,7 @@ def aes_decrypt_zip_file(database: Session,
         file_bytes_io = BytesIO(file_bytes)
     elif isinstance(document_id, BytesIO):
         file_bytes_io = document_id
-        directory = "metadata.json"
+        directory = file_name
     else:
         raise ValueError("Document id must be a string or BytesIO object.")
     
