@@ -68,6 +68,7 @@ def check_gpus():
     return gpus
 
 def custom_setup(config_current : Config, default_models : Config, gpus : list):
+    SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
     enable_llms = input(f"Would you like to enable LLMs? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
     # if enable_llms == 'y' or enable_llms == '':
     enable_llms = (enable_llms == 'y')
@@ -93,7 +94,7 @@ def custom_setup(config_current : Config, default_models : Config, gpus : list):
         
         while True:
             try:
-                huggingface_hub.snapshot_download(new_model, cache_dir="/home/kmccleary/projects/QueryLake/ai_models/test_tmp")
+                huggingface_hub.snapshot_download(new_model, cache_dir="models")
                 print(f"{Fore.GREEN}Added model {Fore.BLUE}{new_model.split('/')[-1]} {Fore.GREEN}to config file.")
                 break
             except huggingface_hub.errors.RepositoryNotFoundError:
@@ -106,6 +107,7 @@ def custom_setup(config_current : Config, default_models : Config, gpus : list):
                 print(f"{Fore.RED}Done adding models.")
                 break
         # huggingface_hub.snapshot_download(new_model, cache_dir="/home/kmccleary/projects/QueryLake/ai_models/test_tmp")
+        huggingface_hub.snapshot_download(new_model, cache_dir="models")
         
         # print("\n", end="")
         
