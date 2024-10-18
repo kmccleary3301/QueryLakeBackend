@@ -22,6 +22,87 @@ from QueryLake.misc_functions.server_class_functions import construct_functions_
 from huggingface_hub import snapshot_download
 import os
 
+from typing import List, Union, Optional, Dict, Any
+from vllm.entrypoints.llm import ChatCompletionMessageParam, cast, is_list_of, TokensPrompt, TextPrompt, parse_chat_messages, MistralTokenizer
+from vllm.entrypoints.llm import apply_mistral_chat_template, apply_hf_chat_template
+from vllm.transformers_utils.tokenizer import AnyTokenizer
+from vllm.config import ModelConfig
+from copy import deepcopy
+from QueryLake.misc_functions.toolchain_state_management import safe_serialize
+
+def encode_chat(
+    llm_engine: AsyncLLMEngine,
+    tokenizer: AnyTokenizer,
+	messages: Union[List[ChatCompletionMessageParam],
+                        List[List[ChatCompletionMessageParam]]],
+	chat_template: Optional[str] = None,
+	add_generation_prompt: bool = True,
+	continue_final_message: bool = False,
+	tools: Optional[List[Dict[str, Any]]] = None,
+	mm_processor_kwargs: Optional[Dict[str, Any]] = None,
+):
+    list_of_messages: List[List[ChatCompletionMessageParam]]
+
+    # Handle multi and single conversations
+    if is_list_of(messages, list):
+        # messages is List[List[...]]
+        list_of_messages = cast(List[List[ChatCompletionMessageParam]],
+                                messages)
+    else:
+        # messages is List[...]
+        list_of_messages = [
+            cast(List[ChatCompletionMessageParam], messages)
+        ]
+
+    prompts: List[Union[TokensPrompt, TextPrompt]] = []
+
+    for msgs in list_of_messages:
+
+        # NOTE: _parse_chat_message_content_parts() currently doesn't
+        # handle mm_processor_kwargs, since there is no implementation in
+        # the chat message parsing for it.
+        model_config: ModelConfig = llm_engine.engine.get_model_config()
+
+        conversation, mm_data = parse_chat_messages(
+            msgs, model_config, tokenizer)
+
+        prompt_data: Union[str, List[int]]
+        if isinstance(tokenizer, MistralTokenizer):
+            prompt_data = apply_mistral_chat_template(
+                tokenizer,
+                messages=msgs,
+                chat_template=chat_template,
+                add_generation_prompt=add_generation_prompt,
+                continue_final_message=continue_final_message,
+                tools=tools,
+            )
+        else:
+            prompt_data = apply_hf_chat_template(
+                tokenizer,
+                conversation=conversation,
+                chat_template=chat_template,
+                add_generation_prompt=add_generation_prompt,
+                continue_final_message=continue_final_message,
+                tools=tools,
+            )
+
+        prompt: Union[TokensPrompt, TextPrompt]
+        if is_list_of(prompt_data, int):
+            prompt = TokensPrompt(prompt_token_ids=prompt_data)
+        else:
+            prompt = TextPrompt(prompt=prompt_data)
+
+        if mm_data is not None:
+            prompt["multi_modal_data"] = mm_data
+
+        if mm_processor_kwargs is not None:
+            prompt["mm_processor_kwargs"] = mm_processor_kwargs
+
+        prompts.append(prompt)
+	
+    return prompts
+
+
 # @serve.deployment(
 #     ray_actor_options={"num_gpus": 0.001}, 
 #     # max_replicas_per_node=1
@@ -33,8 +114,8 @@ import os
 # )
 class VLLMDeploymentClass:
     def __init__(self,
-                 model_config : Model,
-                 **kwargs):
+                       model_config : Model,
+                       **kwargs):
         """
         Construct a VLLM deployment.
 
@@ -95,6 +176,8 @@ class VLLMDeploymentClass:
         # self.special_token_ids = tokenizer_tmp.all_special_ids
         # self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
         self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine)
+        
+        self.vllm_model_config = self.engine.engine.get_model_config()
         print("DONE INITIALIZING VLLM DEPLOYMENT")
     
     def count_tokens(self, input_string : str):
@@ -103,26 +186,76 @@ class VLLMDeploymentClass:
     def generate_prompt(self, 
                         request_dict : dict,
                         sources : List[dict] = [],
-                        functions_available: List[Union[FunctionCallDefinition, dict]] = None):
+                        functions_available: List[Union[FunctionCallDefinition, dict]] = None,
+                        get_multi_modal_history: bool = False):
         if "prompt" in request_dict:
             prompt = request_dict["prompt"]
             
             return {"formatted_prompt": prompt, "tokens": self.count_tokens(prompt)}
         elif "chat_history" in request_dict:
             chat_history = request_dict["chat_history"]
+            chat_history = [
+                e if not isinstance(e["content"], str) else {
+                    **e, 
+                    "content": [
+                        {"type": "text", "text": e["content"]}
+                    ]
+                }
+                for e in chat_history
+            ]
+            
             padding = 2 if (functions_available is None and len(sources) == 0) else (100 + 300 * len(sources) + 300 * len(functions_available))
             if len(sources) > 0:
-                chat_history[-1]["content"] = ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
+                new_entry = {
+                    "type": "text",
+                    "content": ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
                     '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
-                    f"\n</SOURCES>\nEND SYSTEM MESSAGE\n{chat_history[-1]['content']}")
+                    f"\n</SOURCES>\nEND SYSTEM MESSAGE\n")
+                }
+                chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
             if not functions_available is None:
-                chat_history[-1]["content"] = (
-                    f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
-                    f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n{chat_history[-1]['content']}"
-                )    
-            prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
+                new_entry = {
+                    "type": "text",
+                    "content": f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
+                    f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n"
+                }
+                chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
             
+            # TODO: Re-implement chopping/wrapping chat history since it no longer works.
+            # TODO: Count tokens for multimodal inputs.
+            multi_modal_input = any([e["type"] != "text" for c in chat_history for e in c["content"]])
+            stripped_chat_history = [{**e, "content": [c for c in e["content"] if c["type"] == "text"]} for e in chat_history]
+            # Join text messages into a single string if that's all there is.
+            for i in range(len(stripped_chat_history)):
+                if isinstance(stripped_chat_history[i]["content"], list) and all([e["type"] == "text" for e in stripped_chat_history[i]["content"]]):
+                    stripped_chat_history[i]["content"] = " ".join([e["text"] for e in stripped_chat_history[i]["content"]])
+            
+            if multi_modal_input:
+                prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, stripped_chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
+                return {
+                    "formatted_prompt": prompt,
+                    "chat_history": chopped_chat_history, 
+                    **({"chat_history_multi_modal": chat_history} if get_multi_modal_history else {}),
+                    "tokens": 100
+                }
+            
+            
+            
+            # Try normal chat formatting.
+            try:
+                prompt = self.tokenizer.apply_chat_template(stripped_chat_history, add_generation_prompt=True, continue_final_message=False)
+                return {"formatted_prompt": prompt, "chat_history": chopped_chat_history, "tokens": self.count_tokens(prompt)}
+            except:
+                pass
+            
+            # Normal chat history without multi-modal
+            prompt, chopped_chat_history = construct_chat_history(self.model_config, self.count_tokens, stripped_chat_history, request_dict["max_tokens"] - padding , return_chat_history=True)
             return {"formatted_prompt": prompt, "chat_history": chopped_chat_history, "tokens": self.count_tokens(prompt)}
+            
+            # print("Chat history:", json.dumps(chat_history, indent=4))
+            
+            
+            
         else:
             raise ValueError("Request dictionary must contain either 'prompt' or 'chat_history' key. Got: " + str(request_dict.keys()))
     
@@ -131,9 +264,11 @@ class VLLMDeploymentClass:
                         sources : List[dict] = [],
                         functions_available: List[Union[FunctionCallDefinition, dict]] = None):
         
-        prompt = self.generate_prompt(request_dict, sources, functions_available)["formatted_prompt"]
+        generate_prompt_dict = self.generate_prompt(request_dict, sources, functions_available, get_multi_modal_history=True)
+        prompt = generate_prompt_dict["formatted_prompt"]
         
-        assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
+        
+        # assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
         
         request_id = random_uuid()
         
@@ -180,7 +315,9 @@ class VLLMDeploymentClass:
         if not logits_processor_local is None:
             sampling_params.logits_processors = [logits_processor_local]
         
-        # print(prompt)
+        if "chat_history_multi_modal" in generate_prompt_dict:
+            pre_encode_prompt = generate_prompt_dict["chat_history_multi_modal"]
+            prompt = encode_chat(self.engine, self.tokenizer, pre_encode_prompt)[0]
         
         results_generator = self.engine.generate(prompt, sampling_params, request_id)
         
