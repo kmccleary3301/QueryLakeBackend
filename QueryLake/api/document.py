@@ -319,6 +319,7 @@ async def upload_archive(database : Session,
     elif file_ext == "zip":
         with zipfile.ZipFile(file_bytes_io, 'r') as z:
             zip_file_list = z.namelist()
+            assert len(zip_file_list) <= 10000, "zip archive must contain <= 10,000 files"
             
             for name in zip_file_list:
                 if not name.endswith('/'):
