@@ -40,7 +40,8 @@ async def upload_document(database : Session,
                           return_file_hash : bool = False,
                           scan_text : bool = True,
                           create_embeddings : bool = True,
-                          await_embedding : bool = False) -> dict:
+                          await_embedding : bool = False,
+                          document_metadata : dict = None) -> dict:
     """
     Upload file to server. Possibly with encryption.
     Can be a user document, organization document, or global document, or a toolchain_session document.
@@ -163,7 +164,12 @@ async def upload_document(database : Session,
         # file_data=encrypted_bytes,
         blob_id=new_file_blob.id,
         blob_dir="file",
-        md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": len(file_data_bytes)},
+        md={
+            "file_name": file_name, 
+            "integrity_sha256": file_integrity, 
+            "size_bytes": len(file_data_bytes),
+            **(document_metadata if not document_metadata is None else {})
+        },
         **collection_author_kwargs
     )
     
