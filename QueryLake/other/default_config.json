@@ -19,12 +19,15 @@
             "max_model_len": 16384,
             "engine_args": {"gpu_memory_utilization": 0.2},
             "deployment_config": {
-                "ray_actor_options": { "num_gpus": 0.2 },
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
                 "autoscaling_config": {
                     "min_replicas": 0,
                     "max_replicas": 3,
                     "downscale_delay_s": 5,
-                    "downscaling_factor": 0.00001,
+                    "downscaling_factor": 1e-05,
                     "target_ongoing_requests": 5
                 }
             },
@@ -52,6 +55,7 @@
             "max_model_len": 4096,
             "engine_args": {"gpu_memory_utilization": 0.4, "trust_remote_code": true},
             "deployment_config": {
+                "vram_required": 19656,
                 "ray_actor_options": { "num_gpus": 0.4 },
                 "autoscaling_config": {
                     "min_replicas": 0,
@@ -85,6 +89,7 @@
             "max_model_len": 16384,
             "engine_args": {"gpu_memory_utilization": 0.2},
             "deployment_config": {
+                "vram_required": 9828,
                 "ray_actor_options": { "num_gpus": 0.2 },
                 "autoscaling_config": {
                     "min_replicas": 0,
@@ -118,6 +123,7 @@
             "max_model_len": 8192,
             "engine_args": {"gpu_memory_utilization": 0.6},
             "deployment_config": {
+                "vram_required": 29484,
                 "ray_actor_options": { "num_gpus": 0.6 },
                 "autoscaling_config": {
                     "min_replicas": 0,
@@ -172,6 +178,7 @@
                 "id": "bge-reranker-v2-m3",
                 "source": "BAAI/bge-reranker-v2-m3",
                 "deployment_config": {
+                    "vram_required": 3931,
                     "ray_actor_options": { "num_gpus": 0.08, "num_cpus": 2 },
                     "autoscaling_config": {
                         "max_ongoing_requests": 128,
@@ -189,6 +196,7 @@
                 "id": "bge-m3",
                 "source": "BAAI/bge-m3",
                 "deployment_config": {
+                    "vram_required": 1965,
                     "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
                     "autoscaling_config": {
                         "max_ongoing_requests": 128,
