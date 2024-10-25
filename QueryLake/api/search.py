@@ -30,6 +30,11 @@ class DocumentChunkDictionary(BaseModel):
     md: dict
     document_md: dict
     text: str
+    embedding: Optional[List[float]] = None
+    
+    hybrid_score: Optional[float] = None
+    bm25_score: Optional[float] = None
+    similarity_score: Optional[float] = None
     
 class DocumentChunkDictionaryReranked(DocumentChunkDictionary):
     rerank_score: float
@@ -53,7 +58,7 @@ chunk_dict_arguments = [
 
 field_strings_no_rerank = [e for e in chunk_dict_arguments if e not in ["rerank_score"]]
 column_attributes = [getattr(DocumentChunk, e) for e in field_strings_no_rerank]
-retrieved_fields_string = ", ".join(["m."+e for e in field_strings_no_rerank])
+retrieved_fields_string = ", ".join([f"{DocumentChunk.__tablename__}."+e for e in field_strings_no_rerank])
 retrieved_fields_string_bm25 = ", ".join(field_strings_no_rerank)
 
 
@@ -185,35 +190,71 @@ async def search_hybrid(database: Session,
     else:
         embedding = [0.0]*1024
     
-    formatted_query, id_exclusions = parse_search(query["bm25"], catch_all_fields=["text"], return_id_exclusions=True)
+    formatted_query, strong_where_clause = parse_search(query["bm25"], catch_all_fields=["text"])
     
     print("Formatted query:", formatted_query)
     
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
+    collection_spec_new = f"""collection_id IN ({str(collection_ids)[1:-1]})"""
+    similarity_constraint = f"WHERE(id @@@ paradedb.parse('({collection_spec}) AND ({strong_where_clause})')" \
+        if not strong_where_clause is None else \
+        f"WHERE {collection_spec_new}"
     
+    
+    
+    # STMT = text(f"""
+	# SELECT {retrieved_fields_string}
+	# FROM {CHUNK_CLASS_NAME} m
+	# RIGHT JOIN (
+	# 	SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.score_hybrid(
+	# 		bm25_query => paradedb.parse('({collection_spec}) AND ({formatted_query})'),
+	# 		similarity_query => '':embedding_in' <=> embedding',
+	# 		bm25_weight => :bm25_weight,
+	# 		similarity_weight => :similarity_weight,
+	# 		bm25_limit_n => :limit_bm25,
+	# 		similarity_limit_n => :limit_similarity
+	# 	)
+	# ) s
+	# ON m.id = s.id;
+	# """).bindparams(
+    #     embedding_in=str(embedding), 
+    #     limit_bm25=limit_bm25 + len(id_exclusions),
+    #     limit_similarity=limit_similarity + len(id_exclusions),
+    #     bm25_weight=bm25_weight,
+    #     similarity_weight=similarity_weight,
+    # )
     STMT = text(f"""
-	SELECT {retrieved_fields_string}
-	FROM {CHUNK_CLASS_NAME} m
-	RIGHT JOIN (
-		SELECT * FROM search_{CHUNK_CLASS_NAME}_idx.score_hybrid(
-			bm25_query => paradedb.parse('({collection_spec}) AND ({formatted_query})'),
-			similarity_query => '':embedding_in' <=> embedding',
-			bm25_weight => :bm25_weight,
-			similarity_weight => :similarity_weight,
-			bm25_limit_n => :limit_bm25,
-			similarity_limit_n => :limit_similarity
-		)
-	) s
-	ON m.id = s.id;
+	WITH semantic_search AS (
+        SELECT id, RANK () OVER (ORDER BY embedding <=> :embedding_in) AS rank
+        FROM {DocumentChunk.__tablename__}
+        
+        ORDER BY embedding <=> :embedding_in 
+        LIMIT :limit_similarity
+    ),
+    bm25_search AS (
+        SELECT id, RANK () OVER (ORDER BY paradedb.score(id) DESC) as rank
+        FROM {DocumentChunk.__tablename__} 
+        WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
+        LIMIT :limit_bm25
+    )
+    SELECT
+        COALESCE(semantic_search.id, bm25_search.id) AS id,
+        COALESCE(1.0 / (60 + semantic_search.rank), 0.0) AS semantic_score,
+        COALESCE(1.0 / (60 + bm25_search.rank), 0.0) AS bm25_score,
+        COALESCE(1.0 / (60 + semantic_search.rank), 0.0) +
+        COALESCE(1.0 / (60 + bm25_search.rank), 0.0) AS score,
+        {retrieved_fields_string}
+    FROM semantic_search
+    FULL OUTER JOIN bm25_search ON semantic_search.id = bm25_search.id
+    JOIN {DocumentChunk.__tablename__} ON {DocumentChunk.__tablename__}.id = COALESCE(semantic_search.id, bm25_search.id)
+    ORDER BY score DESC, text;
 	""").bindparams(
         embedding_in=str(embedding), 
-        limit_bm25=limit_bm25 + len(id_exclusions),
-        limit_similarity=limit_similarity + len(id_exclusions),
-        bm25_weight=bm25_weight,
-        similarity_weight=similarity_weight,
+        limit_bm25=limit_bm25,
+        limit_similarity=limit_similarity,
+        # bm25_weight=bm25_weight,
+        # similarity_weight=similarity_weight,
     )
-    
-    id_exclusions = set(id_exclusions)
     
     if return_statement:
         return str(STMT.compile(compile_kwargs={"literal_binds": True}))
@@ -223,11 +264,18 @@ async def search_hybrid(database: Session,
         results = list(results)
         results = list(filter(lambda x: not x[0] is None, results))
         
-        results = list(filter(lambda x: not x[0] in id_exclusions, results))
+        # results = list(filter(lambda x: not x[0] in id_exclusions, results))
         
-        results : List[dict] = list(map(lambda x: convert_query_result(x, return_wrapped=True), results))
+        results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_query_result(x[4:]), results))
+        
+        for i, chunk in enumerate(results):
+            results_made[i].bm25_score = float(chunk[1])
+            results_made[i].similarity_score = float(chunk[2])
+            results_made[i].hybrid_score = float(chunk[3])
+        
+        results = sorted(results_made, key=lambda x: x.hybrid_score, reverse=True)
+        
         database.rollback()
-        
         
         if "rerank" in query:
             rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
@@ -240,17 +288,14 @@ async def search_hybrid(database: Session,
             ])
             
             results : List[DocumentChunkDictionaryReranked] = list(map(lambda x: DocumentChunkDictionaryReranked(
-                **results[x], 
+                **results[x].model_dump(), 
                 rerank_score=rerank_scores[x]
             ), list(range(len(results)))))
-            
             results = sorted(results, key=lambda x: x.rerank_score, reverse=True)
-        else:
-            results = list(map(lambda x: DocumentChunkDictionary(**x), results))
         
         results = group_adjacent_chunks(results)
-        
         return results
+        
     except Exception as e:
         database.rollback()
         raise e
@@ -262,6 +307,7 @@ def search_bm25(database: Session,
                 limit: int = 10,
                 offset: int = 0,
                 web_search : bool = False,
+                return_statement : bool = False,
                 ) -> List[DocumentChunkDictionary]:
     
     (_, _) = get_user(database, auth)
@@ -273,7 +319,7 @@ def search_bm25(database: Session,
         "limit must be an int between 0 and 200"
     
     assert (isinstance(offset, int) and offset >= 0), \
-        "offset must be an int greater than 0"
+        "offset must be an int greater than or equal to 0"
     
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
@@ -285,18 +331,16 @@ def search_bm25(database: Session,
     
     collection_string = str(collection_ids).replace("'", "")
     
-    formatted_query = parse_search(query, catch_all_fields=["text"])
+    formatted_query, strong_where_clause = parse_search(query, catch_all_fields=["text"])
     unique_alias = "temp_alias"
     
     print("Formatted query:", formatted_query)
     # print(f'collection_id:IN {collection_string} AND {formatted_query}')
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
+    # collection_spec = f"""collection_id IN ({str(collection_ids)[1:-1]})"""
     
-    
-    # # OLD QUERY; ParadeDB deprecated the highlight function.
     # STMT = text(f"""
-	# SELECT {retrieved_fields_string_bm25}, 
-    #        paradedb.highlight(id, field => 'text', alias => '{unique_alias}'), paradedb.rank_bm25(id, alias => '{unique_alias}')
+	# SELECT {retrieved_fields_string_bm25}
 	# FROM search_documentchunk_idx.search(
     #  	query => paradedb.parse('({collection_spec}) AND {formatted_query}'),
 	# 	offset_rows => :offset,
@@ -310,30 +354,36 @@ def search_bm25(database: Session,
     # )
     
     STMT = text(f"""
-	SELECT {retrieved_fields_string_bm25}
-	FROM search_documentchunk_idx.search(
-     	query => paradedb.parse('({collection_spec}) AND {formatted_query}'),
-		offset_rows => :offset,
-		limit_rows => :limit,
-		alias => '{unique_alias}'
-    )
- 	LIMIT :limit;
-	""").bindparams(
+    SELECT id, paradedb.score(id) AS score, {retrieved_fields_string}
+    FROM {DocumentChunk.__tablename__}
+    WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
+    ORDER BY score DESC
+    LIMIT :limit
+    OFFSET :offset;
+    """).bindparams(
         limit=limit,
         offset=offset,
     )
     
     
+    if return_statement:
+        return str(STMT.compile(compile_kwargs={"literal_binds": True}))
     
     try:
         results = database.exec(STMT)
         results = list(results)
         # results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
         # results = list(map(lambda x: convert_query_result(x[:-2]), results))
-        results = list(map(lambda x: convert_query_result(x), results))
-        results = group_adjacent_chunks(results)
+        results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_query_result(x[2:]), results))
+        
+        for i, chunk in enumerate(results):
+            results_made[i].bm25_score = float(chunk[1])
+    
+        # TODO: find out why SQL isn't ordering them properly.
+        results_made = sorted(results_made, key=lambda x: 0 if x.bm25_score is None else x.bm25_score, reverse=True)
+        results_made = group_adjacent_chunks(results_made)
         database.rollback()
-        return results
+        return results_made
     except Exception as e:
         database.rollback()
         raise e
@@ -387,19 +437,37 @@ def count_chunks(database: Session,
 def expand_document_segment(database: Session,
                             auth : AuthType,
                             document_id: str,
-                            chunks_to_get: List[int] = []) -> DocumentChunkDictionary:
+                            chunks_to_get: List[int] = [],
+                            group_chunks: bool = True,
+                            return_embeddings: bool = False) -> DocumentChunkDictionary:
+    """
+    Get the document chunks for a specific document, in the order specified by the chunks_to_get list.
+    i.e. chunks_to_get = [0, 1, 2, 3] will return the first four chunks of the document.
+    
+    *   group chunks: If True, will group adjacent chunks together into single results, with their chunk numbers as a range, i.e. [0, 3].
+    *   return_embeddings: If True, will return the embeddings as a list of floats. 
+            doesn't stack perfectly with group chunks, but will still work.
+    """
     
     (_, _) = get_user(database, auth)
     
-    chunks = database.exec(
-        select(*column_attributes)
-        # select(DocumentChunk)
+    chunks = list(database.exec(
+        # select(*(column_attributes))
+        # select(*(column_attributes + [getattr(DocumentChunk, "embedding")]))
+        select(DocumentChunk)
         .where(DocumentChunk.document_id == document_id)
         .where(DocumentChunk.document_chunk_number.in_(chunks_to_get))
-    ).all()
+    ).all())
     
-    chunks = list(map(lambda x: convert_query_result(x), list(chunks)))
+    chunk_tuples = list(map(lambda c: tuple([getattr(c, e) for e in field_strings_no_rerank]), chunks))
+    chunks_return = list(map(lambda x: convert_query_result(x), chunk_tuples))
+    # chunks_return = list(map(lambda x: convert_query_result(x[:-1]), chunks))
     
-    chunks = group_adjacent_chunks(chunks)
+    if return_embeddings:
+        for i, chunk in enumerate(chunks):
+            chunks_return[i].embedding = chunk.embedding.tolist()
     
-    return chunks
+    if group_chunks:
+        chunks_return = group_adjacent_chunks(chunks_return)
+    
+    return chunks_return

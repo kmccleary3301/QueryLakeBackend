@@ -8,10 +8,9 @@ from sqlalchemy import event, text
 from sqlalchemy.sql import func
 
 from sqlmodel import Session, create_engine, UUID
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import Vector, HalfVector
 from sqlalchemy import Column
 from ..api.hashing import random_hash
-import pgvector
 from sqlalchemy import Column, DDL, event, text
 from pydantic import BaseModel
 import re
@@ -78,7 +77,8 @@ class DocumentChunk(SQLModel, table=True):
     collection_id: Optional[str] = Field(index=True, default=None)
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None, index=True)
-    embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None)
+    # embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Full 32-bit Precision
+    embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Half Precision
     private: bool = Field(default=False)
     
     document_md: dict = Field(sa_column=Column(JSONB), default={})
@@ -99,20 +99,20 @@ ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
 CHUNK_CLASS_NAME = ORIGINAL_CHUNK_CLASS_NAME
 CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "website_url", "collection_id", "md", "document_md"]
 
-CREATE_BM25_INDEX_SQL = """
-CALL paradedb.create_bm25(
-	index_name => 'search_&CHUNK_CLASS_NAME&_idx',
-	table_name => '&CHUNK_CLASS_NAME&',
-	key_field => 'id',
-	text_fields => '{
-		"text": {"tokenizer": {"type": "en_stem"}},
-        "document_id": {},
-        "website_url": {},
-        "collection_id": {}
-	}',
-    json_fields => '{"md": {}, "document_md": {}}'
-);
-""".replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
+# CREATE_BM25_INDEX_SQL = """
+# CALL paradedb.create_bm25(
+# 	index_name => 'search_&CHUNK_CLASS_NAME&_idx',
+# 	table_name => '&CHUNK_CLASS_NAME&',
+# 	key_field => 'id',
+# 	text_fields => '{
+# 		"text": {"tokenizer": {"type": "en_stem"}},
+#         "document_id": {},
+#         "website_url": {},
+#         "collection_id": {}
+# 	}',
+#     json_fields => '{"md": {}, "document_md": {}}'
+# );
+# """.replace("&CHUNK_CLASS_NAME&", CHUNK_CLASS_NAME)
 
 # CREATE_BM25_INDEX_SQL = """
 # CALL paradedb.create_bm25(
