@@ -119,7 +119,15 @@ def group_adjacent_chunks(chunks: List[DocumentChunkDictionary]) -> List[Documen
                 if isinstance(current_chunk.id, (int, str)):
                     current_chunk.id = [current_chunk.id]
                 current_chunk.id.append(chunk.id)
-                
+                keys_set = ["bm25_score", "similarity_score", "hybrid_score"] + (["rerank_score"] \
+                        if isinstance(current_chunk, DocumentChunkDictionaryReranked) and \
+                            isinstance(chunk, DocumentChunkDictionaryReranked)
+                        else []
+                )
+                for key in keys_set:
+                    if not any([getattr(chunk, key) is None, getattr(current_chunk, key) is None]):
+                        max_value = max([0 if e is None else e for e in [getattr(chunk, key), getattr(current_chunk, key)]])
+                        setattr(current_chunk, key, max_value)
             else:
                 most_recent_chunk_added = True
                 new_results.append(current_chunk)
@@ -144,6 +152,7 @@ async def search_hybrid(database: Session,
                         return_statement : bool = False,
                         web_search : bool = False,
                         rerank : bool = False,
+                        group_chunks : bool = True,
                         ) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
     
@@ -227,7 +236,7 @@ async def search_hybrid(database: Session,
 	WITH semantic_search AS (
         SELECT id, RANK () OVER (ORDER BY embedding <=> :embedding_in) AS rank
         FROM {DocumentChunk.__tablename__}
-        
+        {similarity_constraint}
         ORDER BY embedding <=> :embedding_in 
         LIMIT :limit_similarity
     ),
@@ -269,13 +278,15 @@ async def search_hybrid(database: Session,
         results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_query_result(x[4:]), results))
         
         for i, chunk in enumerate(results):
-            results_made[i].bm25_score = float(chunk[1])
-            results_made[i].similarity_score = float(chunk[2])
+            results_made[i].similarity_score = float(chunk[1])
+            results_made[i].bm25_score = float(chunk[2])
             results_made[i].hybrid_score = float(chunk[3])
         
-        results = sorted(results_made, key=lambda x: x.hybrid_score, reverse=True)
         
-        database.rollback()
+        if group_chunks:
+            results_made = group_adjacent_chunks(results_made)
+        
+        results = sorted(results_made, key=lambda x: x.hybrid_score, reverse=True)
         
         if "rerank" in query:
             rerank_call : Awaitable[Callable] = toolchain_function_caller("rerank")
@@ -283,8 +294,8 @@ async def search_hybrid(database: Session,
             rerank_scores = await rerank_call(auth, [
                 (
                     query["rerank"], 
-                    doc["text"]
-                ) if len(doc["text"]) > 0 else 0 for doc in results 
+                    doc.text
+                ) if len(doc.text) > 0 else 0 for doc in results 
             ])
             
             results : List[DocumentChunkDictionaryReranked] = list(map(lambda x: DocumentChunkDictionaryReranked(
@@ -293,7 +304,7 @@ async def search_hybrid(database: Session,
             ), list(range(len(results)))))
             results = sorted(results, key=lambda x: x.rerank_score, reverse=True)
         
-        results = group_adjacent_chunks(results)
+        database.rollback()
         return results
         
     except Exception as e:
@@ -320,6 +331,9 @@ def search_bm25(database: Session,
     
     assert (isinstance(offset, int) and offset >= 0), \
         "offset must be an int greater than or equal to 0"
+    
+    assert isinstance(query, str), \
+        "query must be a string"
     
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
@@ -380,8 +394,9 @@ def search_bm25(database: Session,
             results_made[i].bm25_score = float(chunk[1])
     
         # TODO: find out why SQL isn't ordering them properly.
-        results_made = sorted(results_made, key=lambda x: 0 if x.bm25_score is None else x.bm25_score, reverse=True)
+        # I think it's because of us grouping them.
         results_made = group_adjacent_chunks(results_made)
+        results_made = sorted(results_made, key=lambda x: 0 if x.bm25_score is None else x.bm25_score, reverse=True)
         database.rollback()
         return results_made
     except Exception as e:

@@ -62,8 +62,9 @@ class LocalModel(BaseModel):
     deployment_config: Optional[dict] = {}
 
 class OtherLocalModelsField(BaseModel):
-    rerank_models: List[LocalModel]
-    embedding_models: List[LocalModel]
+    rerank_models: Optional[List[LocalModel]] = []
+    embedding_models: Optional[List[LocalModel]] = []
+    surya_models: Optional[List[LocalModel]] = []
 
 class ConfigDefaultModels(BaseModel):
     llm: str
@@ -74,6 +75,7 @@ class ConfigEnabledModelClasses(BaseModel):
     llm: bool
     rerank: bool
     embedding: bool
+    surya: bool
 
 class Config(BaseModel):
     default_toolchain: str

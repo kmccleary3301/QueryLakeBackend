@@ -147,7 +147,7 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
         assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
         real_db_entries.append(document_db_entry)
         
-        file_extension = document_name.split(".")[-1]
+        file_extension = document_name.split(".")[-1].lower()
         
         if document_texts is None:
             document_bytes = document_bytes_list[i]

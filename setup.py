@@ -25,7 +25,8 @@ DEFAULT_CONFIG = Config(**{
     "enabled_model_classes": {
         "llm": False,
         "embedding": False,
-        "rerank": False
+        "rerank": False,
+        "surya": False
     },
     "models": [],
     "external_model_providers": {
@@ -38,7 +39,8 @@ DEFAULT_CONFIG = Config(**{
     ],
     "other_local_models": {
         "rerank_models": [],
-        "embedding_models": []
+        "embedding_models": [],
+        "surya_models": []
     }
 })
 
@@ -125,81 +127,128 @@ def custom_setup(config_current : Config, default_models : Config, gpus : list):
                     
                     
 def premade_models_setup(config_current : Config, default_models : Config, gpus : list):
-    enable_llms = input(f"Would you like to enable LLMs? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
-    # if enable_llms == 'y' or enable_llms == '':
-    enable_llms = (enable_llms == 'y')
-    print(f"{Fore.GREEN if enable_llms else Fore.RED}LLMs will{'' if enable_llms else ' not'} be enabled.")
+    model_classes = [
+        ("llm", "LLMs", "models", default_models.models),
+        ("embedding", "Embeddings", "embedding_models", default_models.other_local_models.embedding_models),
+        ("rerank", "Rerank models", "rerank_models", default_models.other_local_models.rerank_models),
+        ("surya", "Surya Document models", "surya_models", default_models.other_local_models.surya_models)
+    ]
     
-    models_wanted = []
-    if enable_llms:
-        print(f"\nPlease select models from the following list:")
-        max_numbers = len(default_models.models)
-        max_digits = len(str(max_numbers))
-        
-        for i, model in enumerate(default_models.models):
-            digit = str(i + 1).rjust(max_digits, ' ')
-            print(f"[{digit}] {Fore.BLUE}{model.name}")
-        models_wanted = input(
-            "\nPlease enter the models you want to enable, separated by commas " + \
-            f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
-        )
-        models_wanted = [int(e) for e in models_wanted.split(" ") if e.strip() != ""]
-        print("Models wanted:", models_wanted)
-        
-        models_wanted : List[Model] = [default_models.models[i - 1] for i in models_wanted]
-        print("Models wanted:", [e.name for e in models_wanted])
+    
+    
+    for (s_1, s_2, current_attr_field, models_field) in model_classes:
+        enable_get = input(f"Would you like to enable {s_2}? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
+        # if enable_llms == 'y' or enable_llms == '':
+        enable_get = (enable_get == 'y')
+        print(f"{Fore.GREEN if enable_get else Fore.RED}{s_2} will{'' if enable_get else ' not'} be enabled.")
         
         
-    config_current.enabled_model_classes.llm = enable_llms
-    config_current.models = models_wanted
-    
-    enable_embeddings = input(f"Would you like to enable embeddings? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
-    # if enable_llms == 'y' or enable_llms == '':
-    enable_embeddings = (enable_embeddings == 'y')
-    print(f"{Fore.GREEN if enable_embeddings else Fore.RED}Embeddings will{'' if enable_embeddings else ' not'} be enabled.")
-    
-    models_wanted_e = []
-    if enable_embeddings:
-        print(f"\nPlease select models from the following list:")
-        max_numbers = len(default_models.other_local_models.embedding_models)
-        max_digits = len(str(max_numbers))
         
-        for i, model in enumerate(default_models.other_local_models.embedding_models):
-            digit = str(i + 1).rjust(max_digits, ' ')
-            print(f"[{digit}] {Fore.BLUE}{model.name}")
-        models_wanted_e : str = input(
-            "\nPlease enter the models you want to enable, separated by commas " + \
-            f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
-        )
-        models_wanted_e = [int(e) for e in models_wanted_e.split(" ") if e.strip() != ""]
-        models_wanted_e : List[LocalModel] = [default_models.other_local_models.embedding_models[i - 1] for i in models_wanted_e]
-    
-    config_current.enabled_model_classes.embedding = enable_embeddings
-    config_current.other_local_models.embedding_models = models_wanted_e
-    
-    
-    enable_rerank = input(f"Would you like to enable rerank models? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
-    enable_rerank = (enable_rerank == 'y')
-    print(f"{Fore.GREEN if enable_rerank else Fore.RED}Rerank models will{'' if enable_rerank else ' not'} be enabled.")
-    
-    models_wanted_r = []
-    if enable_rerank:
-        print(f"\nPlease select models from the following list:")
-        max_numbers = len(default_models.other_local_models.rerank_models)
-        max_digits = len(str(max_numbers))
+        models_wanted = []
+        if enable_get:
+            print(f"\nPlease select models from the following list:")
+            max_numbers = len(models_field)
+            max_digits = len(str(max_numbers))
+            
+            for i, model in enumerate(models_field):
+                digit = str(i + 1).rjust(max_digits, ' ')
+                print(f"[{digit}] {Fore.BLUE}{model.name}")
+            models_wanted = input(
+                "\nPlease enter the models you want to enable, separated by commas " + \
+                f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
+            )
+            models_wanted = [int(e) for e in models_wanted.split(" ") if e.strip() != ""]
+            print("Models wanted:", models_wanted)
+            
+            models_wanted : List[Model] = [models_field[i - 1] for i in models_wanted]
+            
+            
+            print("Models wanted:", [e.name for e in models_wanted])
+            setattr(config_current.enabled_model_classes, s_1, enable_get)
+            if s_1 == "llm":
+                setattr(config_current, current_attr_field, models_wanted)
+            else:
+                setattr(config_current.other_local_models, current_attr_field, models_wanted)
         
-        for i, model in enumerate(default_models.other_local_models.rerank_models):
-            digit = str(i + 1).rjust(max_digits, ' ')
-            print(f"[{digit}] {Fore.BLUE}{model.name}")
-        models_wanted_r : str = input(
-            "\nPlease enter the models you want to enable, separated by commas " + \
-            f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
-        )
-        models_wanted_r = [int(e) for e in models_wanted_r.split(" ") if e.strip() != ""]
-        models_wanted_r : List[LocalModel] = [default_models.other_local_models.rerank_models[i - 1] for i in models_wanted_r]
+        
+    # enable_llms = input(f"Would you like to enable LLMs? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
+    # # if enable_llms == 'y' or enable_llms == '':
+    # enable_llms = (enable_llms == 'y')
+    # print(f"{Fore.GREEN if enable_llms else Fore.RED}LLMs will{'' if enable_llms else ' not'} be enabled.")
     
-    config_current.enabled_model_classes.rerank = enable_rerank
-    config_current.other_local_models.rerank_models = models_wanted_r
+        
+    
+    
+    # models_wanted = []
+    # if enable_llms:
+    #     print(f"\nPlease select models from the following list:")
+    #     max_numbers = len(default_models.models)
+    #     max_digits = len(str(max_numbers))
+        
+    #     for i, model in enumerate(default_models.models):
+    #         digit = str(i + 1).rjust(max_digits, ' ')
+    #         print(f"[{digit}] {Fore.BLUE}{model.name}")
+    #     models_wanted = input(
+    #         "\nPlease enter the models you want to enable, separated by commas " + \
+    #         f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
+    #     )
+    #     models_wanted = [int(e) for e in models_wanted.split(" ") if e.strip() != ""]
+    #     print("Models wanted:", models_wanted)
+        
+    #     models_wanted : List[Model] = [default_models.models[i - 1] for i in models_wanted]
+    #     print("Models wanted:", [e.name for e in models_wanted])
+        
+        
+    # config_current.enabled_model_classes.llm = enable_llms
+    # config_current.models = models_wanted
+    
+    # enable_embeddings = input(f"Would you like to enable embeddings? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
+    # # if enable_llms == 'y' or enable_llms == '':
+    # enable_embeddings = (enable_embeddings == 'y')
+    # print(f"{Fore.GREEN if enable_embeddings else Fore.RED}Embeddings will{'' if enable_embeddings else ' not'} be enabled.")
+    
+    # models_wanted_e = []
+    # if enable_embeddings:
+    #     print(f"\nPlease select models from the following list:")
+    #     max_numbers = len(default_models.other_local_models.embedding_models)
+    #     max_digits = len(str(max_numbers))
+        
+    #     for i, model in enumerate(default_models.other_local_models.embedding_models):
+    #         digit = str(i + 1).rjust(max_digits, ' ')
+    #         print(f"[{digit}] {Fore.BLUE}{model.name}")
+    #     models_wanted_e : str = input(
+    #         "\nPlease enter the models you want to enable, separated by commas " + \
+    #         f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
+    #     )
+    #     models_wanted_e = [int(e) for e in models_wanted_e.split(" ") if e.strip() != ""]
+    #     models_wanted_e : List[LocalModel] = [default_models.other_local_models.embedding_models[i - 1] for i in models_wanted_e]
+    
+    # config_current.enabled_model_classes.embedding = enable_embeddings
+    # config_current.other_local_models.embedding_models = models_wanted_e
+    
+    
+    # enable_rerank = input(f"Would you like to enable rerank models? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]
+    # enable_rerank = (enable_rerank == 'y')
+    # print(f"{Fore.GREEN if enable_rerank else Fore.RED}Rerank models will{'' if enable_rerank else ' not'} be enabled.")
+    
+    # models_wanted_r = []
+    # if enable_rerank:
+    #     print(f"\nPlease select models from the following list:")
+    #     max_numbers = len(default_models.other_local_models.rerank_models)
+    #     max_digits = len(str(max_numbers))
+        
+    #     for i, model in enumerate(default_models.other_local_models.rerank_models):
+    #         digit = str(i + 1).rjust(max_digits, ' ')
+    #         print(f"[{digit}] {Fore.BLUE}{model.name}")
+    #     models_wanted_r : str = input(
+    #         "\nPlease enter the models you want to enable, separated by commas " + \
+    #         f"(i.e. '{Fore.BLUE}1 2 3 4{Fore.RESET}'). -> "
+    #     )
+    #     models_wanted_r = [int(e) for e in models_wanted_r.split(" ") if e.strip() != ""]
+    #     models_wanted_r : List[LocalModel] = [default_models.other_local_models.rerank_models[i - 1] for i in models_wanted_r]
+    
+    # config_current.enabled_model_classes.rerank = enable_rerank
+    # config_current.other_local_models.rerank_models = models_wanted_r
     
     return config_current
 
@@ -244,11 +293,13 @@ def main():
             CURRENT_CONFIG = custom_setup(CURRENT_CONFIG, DEFAULT_CONFIG, gpus)
         else:
             CURRENT_CONFIG = premade_models_setup(CURRENT_CONFIG, DEFAULT_CONFIG, gpus)
+            print("Config:", CURRENT_CONFIG)
         
         all_model_ids = \
             [model.system_path for model in CURRENT_CONFIG.models] + \
             [model.source for model in CURRENT_CONFIG.other_local_models.embedding_models] + \
-            [model.source for model in CURRENT_CONFIG.other_local_models.rerank_models]
+            [model.source for model in CURRENT_CONFIG.other_local_models.rerank_models] + \
+            [model.source for model in CURRENT_CONFIG.other_local_models.surya_models]
         # all_model_ids = list(set(all_model_ids))
         print("All model ids:", all_model_ids)
         
@@ -259,7 +310,8 @@ def main():
         model_snaps : List[Union[Model, LocalModel]] = \
             CURRENT_CONFIG.models + \
             CURRENT_CONFIG.other_local_models.embedding_models + \
-            CURRENT_CONFIG.other_local_models.rerank_models
+            CURRENT_CONFIG.other_local_models.rerank_models + \
+            CURRENT_CONFIG.other_local_models.surya_models
         
         for i, model_snap in enumerate(model_snaps):
             if model_snap.source in models_downloaded:

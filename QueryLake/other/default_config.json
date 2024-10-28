@@ -8,7 +8,8 @@
     "enabled_model_classes": {
         "llm": true,
         "embedding": true,
-        "rerank": true
+        "rerank": true,
+        "surya": true
     },
     "models": [
         {
@@ -198,6 +199,107 @@
                 "deployment_config": {
                     "vram_required": 1965,
                     "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            }
+        ],
+        "surya_models": [
+            {
+                "name": "Surya Texify",
+                "id": "texify",
+                "source": "vikp/texify",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            },
+            {
+                "name": "Surya Detection",
+                "id": "surya_det3",
+                "source": "vikp/surya_det3",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            },
+            {
+                "name": "Surya Recognition",
+                "id": "surya_rec2",
+                "source": "vikp/surya_rec2",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            },
+            {
+                "name": "Surya Ordering",
+                "id": "surya_order",
+                "source": "vikp/surya_order",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            },
+            {
+                "name": "Surya Table Recognition",
+                "id": "surya_tablerec",
+                "source": "vikp/surya_tablerec",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": { "num_gpus": 0.04, "num_cpus": 2 },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 0,
+                        "max_replicas": 3,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            },
+            {
+                "name": "Surya Layout",
+                "id": "surya_layout4",
+                "source": "vikp/surya_layout4",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": {
+                        "num_gpus": 0.04,
+                        "num_cpus": 2
+                    },
                     "autoscaling_config": {
                         "max_ongoing_requests": 128,
                         "min_replicas": 0,
