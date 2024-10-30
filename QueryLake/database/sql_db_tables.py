@@ -97,7 +97,7 @@ class DocumentChunk(SQLModel, table=True):
 ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
 # CHUNK_CLASS_NAME = DocumentChunkPointer.__name__.lower()
 CHUNK_CLASS_NAME = ORIGINAL_CHUNK_CLASS_NAME
-CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "website_url", "collection_id", "md", "document_md"]
+CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "document_name", "website_url", "collection_id", "md", "document_md"]
 
 # CREATE_BM25_INDEX_SQL = """
 # CALL paradedb.create_bm25(
@@ -427,6 +427,20 @@ class document_raw(SQLModel, table=True):
     
     finished_processing: Optional[bool] = Field(default=False)
     md: Optional[dict] = Field(sa_column=Column(JSONB), default={})
+    
+DOCUMENT_INDEXED_COLUMNS = [
+    "id", 
+    "file_name",
+    "creation_timestamp",
+    "integrity_sha256", 
+    "size_bytes",
+    "website_url", 
+    "md", 
+    "organization_document_collection_hash_id", 
+    "user_document_collection_hash_id", 
+    "global_document_collection_hash_id", 
+    "toolchain_session_id"
+]
     
 
 

@@ -12,7 +12,8 @@ def field_match_format(field: str, value: str) -> str:
 	# return f"{field} @@@ '{value}'"
 
 def parse_search(text_in: str, 
-                 catch_all_fields: List[str] = ["text"], 
+                 valid_fields: List[str], 
+                 catch_all_fields: List[str] = ["text"],
                  return_id_exclusions : bool = False, 
                  return_everything : bool = False) -> str:
 	text_in = text_in.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
@@ -25,7 +26,7 @@ def parse_search(text_in: str,
 	TWO_SEQUENCE_BOOST = 20
 	THREE_SEQUENCE_BOOST = 60
     
-	assert all([f in VALID_FIELDS for f in catch_all_fields]), f"Invalid field in catch_all_fields. Valid fields are: {VALID_FIELDS}"	
+	assert all([f in valid_fields for f in catch_all_fields]), f"Invalid field(s) {str([f for f in catch_all_fields if not f in valid_fields])} in catch_all_fields. Valid fields are: {valid_fields}"	
  
 	call = text_in
 	phrase_arguments = {}
@@ -62,7 +63,7 @@ def parse_search(text_in: str,
 			field = field_specified.group(1)
 			term = term[len(field)+1:]
 
-		if not (field in VALID_FIELDS or (isinstance(field, str) and field.split(".")[0] in VALID_FIELDS)):
+		if not (field in valid_fields or (isinstance(field, str) and field.split(".")[0] in valid_fields)):
 			field = None
 
 		# Check if the term was moved to a parsed argument, set flag if so.
