@@ -864,3 +864,29 @@ def trigger_database_sql_error(database : Session,
     database.add(new_text_chunk_2)
     database.commit()
     return True
+
+
+def call_surya_model(
+        database : Session,
+        server_surya_handles: Dict[str, Any],
+        # toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+        # auth : AuthType, 
+        # file : Union[UploadFile, BytesIO],
+        # model: Literal["texify", "layout", "detection", "recognition", "ordering", "table"]
+    ):
+    """
+    
+    """
+    # if isinstance(file, UploadFile):
+    #     file_name = file.filename
+    #     file.file.seek(0)
+    #     file = BytesIO(file.file.read())
+    #     file.name = file_name
+    
+    print("Server surya handles:", server_surya_handles)
+        
+    
+    
+    
+    
+    

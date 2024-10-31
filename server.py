@@ -65,6 +65,16 @@ from QueryLake.misc_functions.server_class_functions import stream_results_token
 from asyncio import gather
 from pynvml import nvmlInit, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
 
+from QueryLake.operation_classes.ray_surya_class import (
+    SuryaTexifyDeployment, SuryaLayoutDeployment, SuryaDetectionDeployment,
+    SuryaRecognitionDeployment, SuryaOrderingDeployment, SuryaTableRecognitionDeployment
+)
+
+from io import BytesIO
+from marker.pdf.images import render_image
+from marker.settings import settings
+from marker.ocr.lang import replace_langs_with_codes, validate_langs
+
 origins = [
     "http://localhost:3001",
     "localhost:3001",
@@ -115,7 +125,7 @@ def clean_function_arguments_for_api(system_args : dict,
         function_args = list(inspect.signature(getattr(api, function_name)).parameters.items())
         function_args = [arg[0] for arg in function_args]
     keys_get = list(synth_args.keys())
-
+    
     print("Cleaning args with", function_args, "and", keys_get)
     for key in keys_get:
         if key in system_args or (not function_args is None and not key in function_args):
@@ -139,6 +149,7 @@ class UmbrellaClass:
                  llm_handles: Dict[str, DeploymentHandle] = {},
                  embedding_handles: Dict[str, DeploymentHandle] = None,
                  rerank_handles: Dict[str, DeploymentHandle] = None,
+                 surya_handles: Dict[str, DeploymentHandle] = None,
                  ):
         
         print("INITIALIZING UMBRELLA CLASS")
@@ -155,6 +166,7 @@ class UmbrellaClass:
         self.embedding_handles = embedding_handles
         self.rerank_handles = rerank_handles
         self.web_scraper_handle = web_scraper_handle
+        self.surya_handles = surya_handles if surya_handles else {}
         
         self.database, self.engine = initialize_database_engine()
         
@@ -162,6 +174,15 @@ class UmbrellaClass:
         database_admin_operations.add_toolchains_to_database(self.database, self.toolchain_configs)
         
         self.default_function_arguments = {
+            # All model deployments
+            "server_llm_handles_no_stream": self.llm_handles_no_stream,
+            "server_llm_handles": self.llm_handles,
+            "server_embedding_handles": self.embedding_handles,
+            "server_rerank_handles": self.rerank_handles,
+            "server_web_scraper_handle": self.web_scraper_handle,
+            "server_surya_handles": self.surya_handles,
+            
+            
             "database": self.database,
             "text_models_callback": self.text_models_callback,
             "toolchains_available": self.toolchain_configs,
@@ -179,7 +200,7 @@ class UmbrellaClass:
             "rerank": self.rerank_call,
             "find_function_calls": find_function_calls,
             "web_scrape": self.web_scrape_call,
-            "function_help": self.get_all_function_descriptions,
+            "function_help": self.get_all_function_descriptions
         }
         
         self.all_functions = API_FUNCTIONS_ALLOWED+list(self.special_function_table.keys())
@@ -567,11 +588,14 @@ class UmbrellaClass:
         This is a wrapper around every api function that is allowed. 
         It will call the function with the arguments provided, after filtering them for security.
         """
-        
+
         try:
-            # body = await req.body()
-            # print("Got request with body:", body)
-            # arguments = req.query_params._dict
+            
+            if file is None:
+                arguments_consumed_stream = await asyncio.wait_for(req.json(), timeout=10)
+            else:
+                arguments_consumed_stream = {}
+            
             print("Calling:", rest_of_path)
             
             if not file is None:
@@ -583,8 +607,9 @@ class UmbrellaClass:
                 # We use ujson because normal `await req.json()` completely stalls on large inputs.
                 # print("Awaiting JSON")
                 
-                arguments = await asyncio.wait_for(req.json(), timeout=10)
-            
+                arguments = arguments_consumed_stream
+                
+                print("Arguments 2:", arguments)
             
             # print("arguments:", arguments)
             route = req.scope['path']
@@ -801,6 +826,24 @@ class UmbrellaClass:
                 toolchain_session = None
                 del toolchain_session
 
+    async def surya(self,
+                    auth: AuthType,
+                    model: Literal["texify", "layout", "detection", "recognition", "ordering", "table"],
+                    file : Union[UploadFile, BytesIO],  # The PDF file
+                    **kwargs) -> Dict:
+        """
+        Process a PDF document using Surya models for OCR, layout analysis, etc.
+        """
+        assert self.config.enabled_model_classes.surya, "Surya models are disabled on this QueryLake Deployment"
+        (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
+
+        # result = await self.rerank_handles[model].run.remote(inputs, normalize=normalize)
+        
+        return {
+            "processed_pages": None,
+            "filtered_blocks": None,
+            "metadata": None
+        }
 
 SERVER_DIR = os.path.dirname(os.path.realpath(__file__))
 os.chdir(SERVER_DIR)
@@ -909,13 +952,46 @@ if GLOBAL_CONFIG.enabled_model_classes.rerank:
             model_card=rerank_model
         )
 
+# Add Surya model bindings
+surya_handles = {}
+if GLOBAL_CONFIG.enabled_model_classes.surya:
+    surya_model_map = {
+        "texify": SuryaTexifyDeployment,
+        "surya_layout4": SuryaLayoutDeployment,
+        "surya_det3": SuryaDetectionDeployment, 
+        "surya_rec2": SuryaRecognitionDeployment,
+        "surya_order": SuryaOrderingDeployment,
+        "surya_tablerec": SuryaTableRecognitionDeployment
+    }
+    
+    for surya_model in GLOBAL_CONFIG.other_local_models.surya_models:
+        # Map model name to deployment class
+        class_to_use = surya_model_map[surya_model.id]
+        
+        # Configure VRAM fraction
+        assert "vram_required" in surya_model.deployment_config, f"No VRAM requirement specified for {surya_model.name}"
+        vram_fraction = surya_model.deployment_config.pop("vram_required") / MAX_GPU_VRAM
+        surya_model.deployment_config["ray_actor_options"]["num_gpus"] = vram_fraction
+        
+        # Create deployment
+        deployment_class = serve.deployment(
+            _func_or_class=class_to_use,
+            name=f"surya:{surya_model.id}",
+            **surya_model.deployment_config
+        )
+        
+        surya_handles[surya_model.name] = deployment_class.bind(
+            model_card=surya_model
+        )
+
 deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,
     toolchains=TOOLCHAINS,
     web_scraper_handle=WebScraperDeployment.bind(),
     llm_handles=LOCAL_MODEL_BINDINGS,
     embedding_handles=embedding_models,
-    rerank_handles=rerank_models
+    rerank_handles=rerank_models,
+    surya_handles=surya_handles
 )
 
 if __name__ == "__main__":
