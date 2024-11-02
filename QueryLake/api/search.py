@@ -400,12 +400,16 @@ def search_bm25(database: Session,
                     for collection_attr in document_collection_attrs
                 ])
     
+    score_field = "paradedb.score(id) AS score, " if formatted_query != "()" else ""
+    order_by_field = "ORDER BY score DESC" if formatted_query != "()" else ""
+    parse_field = f"({collection_spec}) AND ({formatted_query})" if formatted_query != "()" else \
+                    f"{collection_spec}"
     
     STMT = text(f"""
-    SELECT id, paradedb.score(id) AS score, {chosen_attributes}
+    SELECT id, {score_field}{chosen_attributes}
     FROM {chosen_table.__tablename__}
-    WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
-    ORDER BY score DESC
+    WHERE id @@@ paradedb.parse('{parse_field}')
+    {order_by_field}
     LIMIT :limit
     OFFSET :offset;
     """).bindparams(
@@ -418,20 +422,20 @@ def search_bm25(database: Session,
         return str(STMT.compile(compile_kwargs={"literal_binds": True}))
     
     try:
+        subset_start = 1 if formatted_query == "()" else 2
         results = database.exec(STMT)
         results = list(results)
         # results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
         # results = list(map(lambda x: convert_query_result(x[:-2]), results))
         if table == "document_chunk":
-            results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_chunk_query_result(x[2:]), results))
+            results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_chunk_query_result(x[subset_start:]), results))
         else:
-            results_made : List[DocumentRawDictionary] = list(map(lambda x: convert_doc_query_result(x[2:]), results))
+            results_made : List[DocumentRawDictionary] = list(map(lambda x: convert_doc_query_result(x[subset_start:]), results))
         
-        for i, chunk in enumerate(results):
-            results_made[i].bm25_score = float(chunk[1])
-    
-        # TODO: find out why SQL isn't ordering them properly.
-        # I think it's because of us grouping them.
+        if formatted_query != "()":
+            for i, chunk in enumerate(results):
+                results_made[i].bm25_score = float(chunk[1])
+        
         if group_chunks:
             results_made = group_adjacent_chunks(results_made)
         results_made = sorted(results_made, key=lambda x: 0 if x.bm25_score is None else x.bm25_score, reverse=True)
