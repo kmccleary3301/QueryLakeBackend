@@ -355,6 +355,8 @@ def search_bm25(database: Session,
                 return_statement : bool = False,
                 group_chunks : bool = True,
                 table : Literal["document_chunk", "document"] = "document_chunk",
+                sort_by: str = "score",
+                sort_dir: Literal["DESC", "ASC"] = "DESC",
                 ) -> List[DocumentChunkDictionary]:
     
     (_, _) = get_user(database, auth)
@@ -381,6 +383,8 @@ def search_bm25(database: Session,
         "document": (DOCUMENT_INDEXED_COLUMNS, document_raw, retrieved_document_fields_string, ["file_name"])
     }[table]
     
+    
+    
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
     
@@ -401,7 +405,17 @@ def search_bm25(database: Session,
                 ])
     
     score_field = "paradedb.score(id) AS score, " if formatted_query != "()" else ""
-    order_by_field = "ORDER BY score DESC" if formatted_query != "()" else ""
+    
+    assert not (sort_by == "score" and formatted_query == "()"), \
+        "Cannot sort by score if no query is specified"
+    
+    assert sort_by in valid_fields or sort_by == "score", \
+        f"sort_by must be one of {valid_fields}, not {sort_by}"
+    
+    assert sort_dir in ["DESC", "ASC"], \
+        "sort_dir must be either 'DESC' or 'ASC'"
+    
+    order_by_field = f"ORDER BY {sort_by} {sort_dir}"
     parse_field = f"({collection_spec}) AND ({formatted_query})" if formatted_query != "()" else \
                     f"{collection_spec}"
     
@@ -425,8 +439,6 @@ def search_bm25(database: Session,
         subset_start = 1 if formatted_query == "()" else 2
         results = database.exec(STMT)
         results = list(results)
-        # results = list(map(lambda x: convert_query_result(x[:-2], return_wrapped=True), results))
-        # results = list(map(lambda x: convert_query_result(x[:-2]), results))
         if table == "document_chunk":
             results_made : List[DocumentChunkDictionary] = list(map(lambda x: convert_chunk_query_result(x[subset_start:]), results))
         else:
