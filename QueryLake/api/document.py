@@ -517,7 +517,7 @@ async def update_documents(database : Session,
     documents_to_clear_chunks = [
         entry.document_id
         for entry in data
-        if (not entry.text is None) or (not entry.scan is None)
+        if (not entry.text is None) or (not entry.scan is False)
     ]
     database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(documents_to_clear_chunks)))
     

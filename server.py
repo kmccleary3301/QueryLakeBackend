@@ -821,6 +821,7 @@ class UmbrellaClass:
                     # await api.save_toolchain_session(self.database, toolchain_session)
                 
                 except WebSocketDisconnect:
+                    print(">>>> Websocket disconnected")
                     raise WebSocketDisconnect
                 except Exception as e:
                     print("Error in websocket:", str(e))
@@ -833,7 +834,7 @@ class UmbrellaClass:
                     await ws.send_text((json.dumps({"ACTION": "END_WS_CALL_ERROR"})))
                     await reset_session_state()
         except WebSocketDisconnect as e:
-            print("Websocket disconnected")
+            print(">>>> Websocket disconnected")
             if not toolchain_session is None:
                 print("Unloading Toolchain")
                 
