@@ -4,7 +4,7 @@ import os, sys
 import re
 from fastapi import UploadFile
 from ..database import sql_db_tables
-from sqlmodel import Session, select, and_, delete, update
+from sqlmodel import Session, select, and_, delete, update, func
 import time
 from ..database import encryption
 from io import BytesIO
@@ -29,6 +29,7 @@ import asyncio
 import bisect
 import concurrent.futures
 from .collections import assert_collections_priviledge
+from copy import deepcopy
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -486,7 +487,7 @@ async def update_documents(database : Session,
 
     data : List[DocumentModifierArgs] = [(DocumentModifierArgs(**entry) if not isinstance(entry, DocumentModifierArgs) else entry) for entry in data ]
     
-    print(json.dumps([e.model_dump() for e in data], indent=4))
+    # print(json.dumps([e.model_dump() for e in data], indent=4))
     
     assert len(data) > 0, "No data provided"
     assert len(data) < 1000, "Too many documents to update at once"
@@ -501,7 +502,7 @@ async def update_documents(database : Session,
         "global_document_collection_hash_id",
         "toolchain_session_id"
     ] for d in documents if not getattr(d, c) is None]))
-    print("Document Collection IDs:", document_collection_ids)
+    # print("Document Collection IDs:", document_collection_ids)
     
     assert_collections_priviledge(database, auth, document_collection_ids, modifying=True)
     
@@ -709,7 +710,7 @@ def get_file_bytes(database : Session,
                    encryption_key : str):
     
     document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
-    print("Header Data:", [document.server_zip_archive_path, encryption_key])
+    # print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
 
     file = encryption.aes_decrypt_zip_file(
@@ -721,21 +722,16 @@ def get_file_bytes(database : Session,
     file_name = keys[0]
     file_get = file[file_name]
     return file_get
-    # with py7zr.SevenZipFile(document.server_zip_archive_path, mode='r', password=encryption_key) as z:
-    #     file = z.read()
-    #     keys = list(file.keys())
-    #     print(keys)
-    #     file_name = keys[0]
-    #     file_get = file[file_name]
-    #     z.close()
-    #     return file_get.getbuffer().tobytes()
 
-async def fetch_document(database : Session,
-                         server_private_key : str,
-                         document_auth_access : str):
+async def download_document(database : Session,
+                            server_private_key : str,
+                            document_auth_access : str):
     """
     Decrypt document in memory for the user's viewing.
     Return as a streaming response of bytes.
+    
+    You must first get an access token with 
+    `/api/craft_document_access_token` to use this.
     """
     # print("Fetching document with auth:", document_auth_access)
     
@@ -744,7 +740,7 @@ async def fetch_document(database : Session,
 
     document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
 
-    print("Document Request Access Auth:", document_auth_access)
+    # print("Document Request Access Auth:", document_auth_access)
     
     document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
     assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
@@ -767,6 +763,62 @@ async def fetch_document(database : Session,
     
     return StreamingResponse(file_io)
 
+
+def fetch_document(
+    database : Session,
+    auth: AuthType,
+    document_id: str,
+    get_chunk_count: bool = False,
+):
+    """
+    Fetch a document's row entry from the database.
+    """
+    (_, _) = get_user(database, auth)
+    
+    document = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == document_id)).all())
+    
+    document = document[0] if len(document) > 0 else None
+    assert not document is None, "Document not found"
+    document_dict = document.model_dump()
+    
+    collection_fields = [
+        "user_document_collection_hash_id", 
+        "organization_document_collection_hash_id",
+        "global_document_collection_hash_id",
+        "toolchain_session_id"
+    ]
+    
+    collection_ids = [document_dict[c] for c in collection_fields]
+    
+    collection_id = [c for c in collection_ids if not c is None][0]
+    
+    assert_collections_priviledge(database, auth, [collection_id])
+    
+    document_dict = {
+        k : v
+        for k, v in document_dict.items()
+        if (not k in [
+            "blob_id",
+            "blob_dir",
+            "encryption_key_secure",
+            "file_data"
+        ] + collection_fields) and (not v is None)
+    }
+    
+    document_dict.update({"collection_id": collection_id})
+    
+    if not get_chunk_count:
+        return document_dict
+    
+    stmt = select(func.count()).select_from(sql_db_tables.DocumentChunk).where(
+        sql_db_tables.DocumentChunk.document_id == document_id
+    )
+    chunk_count = int(database.scalar(stmt))
+    
+    return {
+        **document_dict,
+        "chunk_count": chunk_count
+    }
 
 async def fetch_toolchain_document(database : Session,
                                    auth: AuthType,
