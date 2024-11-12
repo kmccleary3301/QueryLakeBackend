@@ -30,15 +30,15 @@ async def llm_isolate_question(database : Session,
                                auth : AuthType,
                                toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                chat_history: List[dict],
-                               model_choice : str = None) -> str:
+                               model : str = None) -> str:
     """
     Given a chat history with a most recent question, rephrase the question so
     that it is completely clear without context.
     """
     (_, _) = get_user(database, auth)
     
-    if model_choice is None:
-        model_choice = global_config.default_models.llm
+    if model is None:
+        model = global_config.default_models.llm
     
     llm_call = toolchain_function_caller("llm")
     
@@ -54,7 +54,7 @@ Statement
         auth=auth,
         question=question_check_prompt,
         model_parameters={
-            "model_choice": model_choice,
+            "model": model,
         }
     )
     question_check = question_check["output"]
@@ -75,7 +75,7 @@ Statement
     token_count_general = toolchain_function_caller("llm_count_tokens")
     
     async def token_counter(text : str) -> int:
-        return await token_count_general(model_choice, text)
+        return await token_count_general(model, text)
     
     
     chat_history_stated = await async_construct_chat_history_old(
@@ -103,7 +103,7 @@ Statement
         auth=auth,
         question=question,
         model_parameters={
-            "model_choice": model_choice,
+            "model": model,
         }
     )
     # print("STANDALONE QUESTION:", result["output"])

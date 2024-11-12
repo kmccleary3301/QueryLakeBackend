@@ -114,7 +114,7 @@ async def llm_multistep_search(database : Session,
                                toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                chat_history: List[dict],
                                collection_ids: List[str] = [],
-                               model_choice : str = None,
+                               model : str = None,
                                max_searches : int = 5,
                                search_web : bool = False,
                                web_timeout : float = 10) -> str:
@@ -136,8 +136,8 @@ async def llm_multistep_search(database : Session,
     if len(collection_ids) == 0 and search_web is False:
         return {"sources": [], "commands": [], "notes": "No collections provided and web search is disabled."}
     
-    if model_choice is None:
-        model_choice = global_config.default_models.llm
+    if model is None:
+        model = global_config.default_models.llm
         
     max_actions = max_searches * 4
     llm_call = toolchain_function_caller("llm")
@@ -149,7 +149,7 @@ async def llm_multistep_search(database : Session,
                                                      auth, 
                                                      toolchain_function_caller, 
                                                      chat_history, 
-                                                     model_choice)
+                                                     model)
     
     # print("GOT STANDALONE QUESTION:", standalone_question)
     
@@ -243,7 +243,7 @@ async def llm_multistep_search(database : Session,
             ],
             functions_available= all_functions_available,
             model_parameters={
-                "model_choice": model_choice,
+                "model": model,
                 "max_tokens": 200,
             }
         )

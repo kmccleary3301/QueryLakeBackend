@@ -1,11 +1,11 @@
 from sqlmodel import Session, select, and_, not_
-from ..typing.config import AuthInputType
+from ..typing.config import AuthType
 from ..api.single_user_auth import process_input_as_auth_type, get_user
 from ..database import encryption
 from ..api.hashing import hash_function
 from ..api.user_auth import get_user_external_providers_dict
 import openai
-from typing import AsyncIterator
+from typing import AsyncIterator, AsyncGenerator, Dict, List, Any
 
 
 EXTERNAL_PROIVDERS = [
@@ -13,45 +13,67 @@ EXTERNAL_PROIVDERS = [
 ]
 
 
+async def stream_openai_response(
+    messages: List[Dict[str, str]],
+    model: str,
+    api_key: str,
+    model_parameters: Dict[str, Any] = None,
+    organization_id: str = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream responses from OpenAI models in a standardized format.
+    """
+    auth_args = {"api_key": api_key}
+    if organization_id:
+        auth_args["organization"] = organization_id
+
+    model_parameters = model_parameters or {}
+    
+    client = openai.OpenAI(
+        api_key=api_key,
+    )
+    
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=True,
+        **model_parameters
+    )
+    
+    for chunk in stream:
+        if chunk.choices[0].delta.content is not None:
+            yield chunk.choices[0].delta.content
+
+
 async def openai_llm_generator(
-    request_dict : dict,
-    model : str,
-    external_api_key : str,
+    request_dict: dict,
+    model: str,
+    external_api_key: str,
     external_organization_id: str = None,
 ) -> AsyncIterator[str]:
     """
     Create a generator for openAI language model.
     """
-    
-    auth_args = {"api_key": external_api_key}
-    if not external_organization_id is None:
-        auth_args["organization"] = external_organization_id
-
     if "question" in request_dict:
-        question = request_dict.pop("question")
-        messages = [{"role": "user", "content": question}]
+        messages = [{"role": "user", "content": request_dict.pop("question")}]
     elif "chat_history" in request_dict:
-        chat_history = request_dict.pop("chat_history")
-        messages = chat_history
+        messages = request_dict.pop("chat_history")
 
     model_parameters = request_dict.pop("model_parameters", {})
     
-    async for chunk in openai.ChatCompletion.create(
-        model=model,
+    async for content in stream_openai_response(
         messages=messages,
-        **model_parameters,
-        stream=True,
-    ): 
-        try:
-            content = chunk.choices[0].delta.content
-            yield content
-        except:
-            pass
-        
+        model=model,
+        api_key=external_api_key,
+        model_parameters=model_parameters,
+        organization_id=external_organization_id
+    ):
+        yield content
+
 
 def external_llm_generator(
     database : Session,
-    auth : AuthInputType,
+    auth : AuthType,
     provider : str,
     model : str,
     request_dict : dict,
@@ -67,13 +89,15 @@ def external_llm_generator(
     
     assert not user.external_providers_encrypted is None, "No external provider credentials on account."
     
-    external_providers = get_user_external_providers_dict(user_auth, user.external_providers_encrypted)
+    external_providers = get_user_external_providers_dict(database, auth)
+    
+    print("Ext LLM 2 external_providers:", external_providers)
     
     if provider == "openai":
         return openai_llm_generator(
             request_dict,
             model,
-            external_providers["openai"]["api_key"],
+            external_providers['OpenAI'],
             **(additional_auth or {})
         )
     else:

@@ -388,12 +388,13 @@ def fetch_api_keys(
 
 def get_user_external_providers_dict(
     database : Session,
-    auth : AuthInputType
+    auth : AuthType
 ) -> dict:
     """
     Get user external providers dictionary.
     """
-    auth : AuthType = process_input_as_auth_type(auth)
+    print("Auth Type:", type(auth))
+    
     (user, user_auth) = get_user(database, auth)
     
     private_key_encryption_salt = user.private_key_encryption_salt

@@ -36,7 +36,7 @@ from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
 from QueryLake.typing.toolchains import *
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
-from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
+from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass, format_chat_history
 from QueryLake.operation_classes.ray_exllamav2_class import ExllamaV2DeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
@@ -184,7 +184,6 @@ class UmbrellaClass:
             
             
             "database": self.database,
-            "text_models_callback": self.text_models_callback,
             "toolchains_available": self.toolchain_configs,
             "public_key": global_public_key,
             "server_private_key": global_private_key,
@@ -195,7 +194,6 @@ class UmbrellaClass:
         self.special_function_table = {
             "llm": self.llm_call,
             "llm_count_tokens": self.llm_count_tokens,
-            "text_models_callback": self.text_models_callback,
             "embedding": self.embedding_call,
             "rerank": self.rerank_call,
             "find_function_calls": find_function_calls,
@@ -335,14 +333,6 @@ class UmbrellaClass:
         else:
             return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
     
-    async def text_models_callback(self, request_dict: dict, model_choice: Literal["embedding", "rerank"]):
-        assert model_choice in ["embedding", "rerank"]
-        if model_choice == "embedding":
-            return_tmp = await self.embedding_handle.run.remote(request_dict)
-        elif model_choice == "rerank":
-            return_tmp = await self.rerank_handle.run.remote(request_dict)
-        return return_tmp
-    
     async def llm_count_tokens(self, model_id : str, input_string : str):
         assert model_id in self.llm_handles, "Model choice not available"
         return await self.llm_handles_no_stream[model_id].count_tokens.remote(input_string)
@@ -374,8 +364,8 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        model_choice = model_parameters.pop("model_choice", self.config.default_models.llm)
-        assert model_choice in self.llm_handles, "Model choice not available"
+        model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
+        
         
         model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
                                             .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
@@ -395,7 +385,13 @@ class UmbrellaClass:
         
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
-            
+            model_parameters_true.update({
+                "messages": format_chat_history(
+                    {"messages": chat_history},
+                    sources=sources,
+                    functions_available=functions_available
+                ),
+            })
             gen = external_llm_generator(self.database, 
                                          auth, 
                                          *model_specified,
@@ -403,6 +399,7 @@ class UmbrellaClass:
             input_token_count = -1
         else:
             assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
+            assert model_choice in self.llm_handles, "Model choice not available"
             
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen : DeploymentResponseGenerator = (
@@ -464,7 +461,7 @@ class UmbrellaClass:
                     increment_token_count=increment_token_count,
                     encode_output=False, 
                     stop_sequences=stop_sequences
-                ),
+                ) if len(model_specified) == 1 else gen,
                 background=BackgroundTask(on_finish)
             )
         else:
@@ -475,7 +472,7 @@ class UmbrellaClass:
                 on_new_token=on_new_token,
                 increment_token_count=increment_token_count,
                 stop_sequences=stop_sequences
-            ):
+            ) if len(model_specified) == 1 else gen:
                 results.append(result)
             on_finish()
         

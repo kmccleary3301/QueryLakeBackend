@@ -102,6 +102,42 @@ def encode_chat(
 	
     return prompts
 
+def format_chat_history(request_dict : dict,
+                        sources : List[dict] = [],
+                        functions_available: List[Union[FunctionCallDefinition, dict]] = None):
+    if "messages" in request_dict:
+        chat_history = request_dict["messages"]
+        chat_history = [
+            e if not isinstance(e["content"], str) else {
+                **e, 
+                "content": [
+                    {"type": "text", "text": e["content"]}
+                ]
+            }
+            for e in chat_history
+        ]
+        
+        padding = 2 if (functions_available is None and len(sources) == 0) else (100 + 300 * len(sources) + 300 * len(functions_available))
+        if len(sources) > 0:
+            new_entry = {
+                "type": "text",
+                "content": ("SYSTEM MESSAGE - PROVIDED SOURCES\n<SOURCES>\n" +
+                '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
+                f"\n</SOURCES>\nEND SYSTEM MESSAGE\n")
+            }
+            chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
+        if not functions_available is None:
+            new_entry = {
+                "type": "text",
+                "content": f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
+                f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n"
+            }
+            chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
+        
+        return chat_history
+    else:
+        raise ValueError("Request dictionary must contain 'messages' key. Got: " + str(request_dict.keys()))
+
 
 # @serve.deployment(
 #     ray_actor_options={"num_gpus": 0.001}, 

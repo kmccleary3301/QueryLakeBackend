@@ -24,14 +24,14 @@ async def llm_make_conversation_title(global_config : Config,
                                       toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                                       chat_history: List[dict],
                                       stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
-                                      model_choice : str = None) -> str:
+                                      model : str = None) -> str:
     """
     Given a chat history with a most recent question, rephrase the question so
     that it is completely clear without context.
     """
     
-    if model_choice is None:
-        model_choice = global_config.default_models.llm
+    if model is None:
+        model = global_config.default_models.llm
     
     llm_call = toolchain_function_caller("llm")
     
@@ -46,7 +46,7 @@ async def llm_make_conversation_title(global_config : Config,
     token_count_general = toolchain_function_caller("llm_count_tokens")
     
     async def token_counter(text : str) -> int:
-        return await token_count_general(model_choice, text)
+        return await token_count_general(model, text)
     
     chat_history_stated = await async_construct_chat_history_old(
         max_tokens=6144,
@@ -67,7 +67,7 @@ async def llm_make_conversation_title(global_config : Config,
         auth=auth,
         question=question,
         model_parameters={
-            "model_choice": model_choice,
+            "model": model,
         },
         stream_callables=stream_callables
     )
