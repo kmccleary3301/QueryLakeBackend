@@ -37,7 +37,7 @@ from QueryLake.typing.config import Config, AuthType, getUserType, Padding, Mode
 from QueryLake.typing.toolchains import *
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass, format_chat_history
-from QueryLake.operation_classes.ray_exllamav2_class import ExllamaV2DeploymentClass
+# from QueryLake.operation_classes.ray_exllamav2_class import ExllamaV2DeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
@@ -933,7 +933,8 @@ MAX_GPU_VRAM = gpus[0]["total_vram"]
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 
-ENGINE_CLASSES = {"vllm": VLLMDeploymentClass, "exllamav2": ExllamaV2DeploymentClass}
+# ENGINE_CLASSES = {"vllm": VLLMDeploymentClass, "exllamav2": ExllamaV2DeploymentClass}
+ENGINE_CLASSES = {"vllm": VLLMDeploymentClass}
 ENGINE_CLASS_NAMES = {"vllm": "vllm", "exllamav2": "exl2"}
 
 if GLOBAL_CONFIG.enabled_model_classes.llm:
@@ -944,7 +945,11 @@ if GLOBAL_CONFIG.enabled_model_classes.llm:
         elif model_entry.deployment_config is None:
             print("CANNOT DEPLOY; No deployment config for enabled model:", model_entry.id)
             continue
+        if not model_entry.engine in ENGINE_CLASSES:
+            print("CANNOT DEPLOY; Engine not recognized:", model_entry.engine)
+            continue
         assert "vram_required" in model_entry.deployment_config, f"No VRAM requirement specified for {model_entry.id}"
+        
         class_choice = ENGINE_CLASSES[model_entry.engine]
         
         vram_fraction = model_entry.deployment_config.pop("vram_required") / MAX_GPU_VRAM
