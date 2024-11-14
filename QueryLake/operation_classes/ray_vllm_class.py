@@ -107,8 +107,6 @@ def format_chat_history(chat_history : List[dict],
                         sources : List[dict] = [],
                         functions_available: List[Union[FunctionCallDefinition, dict]] = None):
     
-    print("FORMATTER GOT CHAT HISTORY:", json.dumps(chat_history, indent=4))
-    
     for i in range(len(sources)):
         if isinstance(sources[i], BaseModel):
             sources[i] = sources[i].model_dump()
@@ -150,8 +148,6 @@ def format_chat_history(chat_history : List[dict],
     # If it's all text, just return the stripped chat history.
     if all([p["type"] == "text" for e in chat_history for p in e["content"]]):
         chat_history = stripped_chat_history
-    
-    print("RETURNING CHAT HISTORY:", json.dumps(chat_history, indent=4))
     
     return chat_history
 

@@ -51,8 +51,6 @@ async def stream_openai_response(
         api_key=api_key,
     )
     
-    print("CALLING OPENAI WITH MESSAGES:", json.dumps(messages, indent=4))
-    
     stream = client.chat.completions.create(
         model=model,
         messages=messages,
