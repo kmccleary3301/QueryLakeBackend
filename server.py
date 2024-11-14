@@ -59,8 +59,8 @@ from fastapi_login.exceptions import InvalidCredentialsException
 from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
-from QueryLake.misc_functions.external_providers import external_llm_generator
-from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls
+from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
+from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls, basic_stream_results
 
 from asyncio import gather
 from pynvml import nvmlInit, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
@@ -246,7 +246,7 @@ class UmbrellaClass:
         assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
         if model is None:
             model = self.config.default_models.embedding
-        assert model in self.embedding_handles, "Model choice not available"
+        assert model in self.embedding_handles, f"Model choice [{model}] not available for embeddings"
         (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         result = await self.embedding_handles[model].run.remote({"text": inputs})
         
@@ -273,7 +273,7 @@ class UmbrellaClass:
         assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
         if model is None:
             model = self.config.default_models.rerank
-        assert model in self.rerank_handles, "Model choice not available"
+        assert model in self.rerank_handles, f"Model choice [{model}] not available for rerankers"
         (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         
         if isinstance(inputs, list):
@@ -334,13 +334,18 @@ class UmbrellaClass:
             return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
     
     async def llm_count_tokens(self, model_id : str, input_string : str):
-        assert model_id in self.llm_handles, "Model choice not available"
-        return await self.llm_handles_no_stream[model_id].count_tokens.remote(input_string)
+        model_specified = model_id.split("/")
+        if len(model_specified) == 1:
+            assert model_id in self.llm_handles, f"Model choice [{model_id}] not available for LLMs (tried to count tokens)"
+            return await self.llm_handles_no_stream[model_id].count_tokens.remote(input_string)
+        else:
+            return external_llm_count_tokens(input_string, model_id)
     
     async def llm_call(self,
                        auth : AuthType, 
                        question : str = None,
                        model_parameters : dict = {},
+                       model : str = None,
                        sources : List[dict] = [],
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
@@ -364,7 +369,12 @@ class UmbrellaClass:
         if not stream_callables is None and "output" in stream_callables:
             on_new_token = stream_callables["output"]
         
-        model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
+        if not model is None:
+            model_choice = model
+            print("Poppend model choice from `model`:", model_choice)
+        else:
+            model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
+            print("Poppend model choice from `model_parameters/model`:", model_choice)
         
         
         model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
@@ -385,12 +395,16 @@ class UmbrellaClass:
         
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
+            print(f"Looking for external model {model_choice} with specified length {len(model_specified)}")
+            
+            new_chat_history = format_chat_history(
+                chat_history,
+                sources=sources,
+                functions_available=functions_available
+            )
             model_parameters_true.update({
-                "messages": format_chat_history(
-                    {"messages": chat_history},
-                    sources=sources,
-                    functions_available=functions_available
-                ),
+                "messages": new_chat_history,
+                "chat_history": new_chat_history
             })
             gen = external_llm_generator(self.database, 
                                          auth, 
@@ -398,14 +412,15 @@ class UmbrellaClass:
                                          model_parameters_true)
             input_token_count = -1
         else:
+            print(f"Looking for internal model {model_choice} with specified length {len(model_specified)}")
             assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
-            assert model_choice in self.llm_handles, "Model choice not available"
+            assert model_choice in self.llm_handles, f"Model choice [{model_choice}] not available for LLMs"
             
             llm_handle : DeploymentHandle = self.llm_handles[model_choice]
             gen : DeploymentResponseGenerator = (
                 llm_handle.get_result_loop.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
             )
-            print("GOT LLM REQUEST GENERATOR")
+            print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
             
             if self.llm_configs[model_choice].engine == "exllamav2":
                 async for result in gen:
@@ -452,29 +467,39 @@ class UmbrellaClass:
             }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
         
         
+        
+        
         if return_stream_response:
-            return StreamingResponse(
-                stream_results_tokens(
+            if len(model_specified) == 1:
+                return StreamingResponse(
+                    stream_results_tokens(
+                        gen, 
+                        self.llm_configs[model_choice],
+                        on_new_token=on_new_token,
+                        increment_token_count=increment_token_count,
+                        encode_output=False, 
+                        stop_sequences=stop_sequences
+                    ),
+                    background=BackgroundTask(on_finish)
+                )
+            else:
+                return StreamingResponse(basic_stream_results(gen, on_new_token=on_new_token))
+        else:
+            results = []
+            if len(model_specified) == 1:
+                async for result in stream_results_tokens(
                     gen, 
                     self.llm_configs[model_choice],
                     on_new_token=on_new_token,
                     increment_token_count=increment_token_count,
-                    encode_output=False, 
                     stop_sequences=stop_sequences
-                ) if len(model_specified) == 1 else gen,
-                background=BackgroundTask(on_finish)
-            )
-        else:
-            results = []
-            async for result in stream_results_tokens(
-                gen, 
-                self.llm_configs[model_choice],
-                on_new_token=on_new_token,
-                increment_token_count=increment_token_count,
-                stop_sequences=stop_sequences
-            ) if len(model_specified) == 1 else gen:
-                results.append(result)
-            on_finish()
+                ):
+                    results.append(result)
+                on_finish()
+            else:
+                async for result in basic_stream_results(gen, on_new_token=on_new_token):
+                    results.append(result)
+        
         
         text_outputs = "".join(results)
         

@@ -129,6 +129,22 @@ def construct_functions_available_prompt(functions_available: List[Union[Functio
     
     return prompt_make
 
+async def basic_stream_results(
+    results_generator: DeploymentResponseGenerator,
+    on_new_token: Awaitable[Callable[[str], None]] = None
+) -> AsyncGenerator[bytes, None]:
+    
+    async def new_token_call(text_input):
+        if not on_new_token is None:
+            if inspect.iscoroutinefunction(on_new_token):
+                await on_new_token(text_input)
+            else:
+                on_new_token(text_input)
+    
+    async for request_output in results_generator:
+        await new_token_call(request_output)
+        yield request_output
+
 async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                                 model_config: Model,
                                 encode_output : bool = False,

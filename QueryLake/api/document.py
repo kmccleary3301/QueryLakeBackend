@@ -1,5 +1,5 @@
 from hashlib import sha256
-from typing import List, Callable, Awaitable, Dict, Any, Union, Literal
+from typing import List, Callable, Awaitable, Dict, Any, Union, Literal, Tuple, Optional
 import os, sys
 import re
 from fastapi import UploadFile
@@ -22,14 +22,23 @@ from fastapi.responses import StreamingResponse
 import ocrmypdf
 from ..typing.config import AuthType
 from ..typing.api_inputs import DocumentModifierArgs
-import contextlib
-import io
 from ..misc_functions.function_run_clean import file_size_as_string
 import asyncio
 import bisect
 import concurrent.futures
 from .collections import assert_collections_priviledge
-from copy import deepcopy
+from PIL import Image
+import ray
+from pypdfium2 import PdfDocument
+
+from marker.ocr.lang import replace_langs_with_codes, validate_langs
+from marker.cleaners.headers import filter_common_titles
+from marker.cleaners.bullets import replace_bullets
+from marker.postprocessors.markdown import merge_spans, merge_lines, get_full_text
+from marker.cleaners.text import cleanup_text
+from marker.images.save import images_to_dict
+from marker.pdf.images import render_image
+from marker.settings import settings
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -936,9 +945,158 @@ def call_surya_model(
     #     file.name = file_name
     
     print("Server surya handles:", server_surya_handles)
-        
+
+async def process_pdf_with_surya(
+    database: Session,
+    auth: AuthType,
+    server_surya_handles: Dict[str, Any],
+    file: BytesIO,
+    max_pages: int = None,
+    start_page: int = None,
+    metadata: Optional[Dict] = None,
+    langs: Optional[List[str]] = None,
+    batch_multiplier: int = 1,
+    ocr_all_pages: bool = False
+) -> Tuple[str, Dict[str, Image.Image], Dict]:
+    """
+    Process a single PDF file using Ray Surya deployments.
+
+    Args:
+        database: Database session.
+        server_surya_handles: Dictionary of Ray Surya deployment handles.
+        file: BytesIO object of the PDF file.
+        max_pages: Maximum number of pages to process.
+        start_page: Page number to start processing from.
+        metadata: Metadata dictionary.
+        langs: List of languages for OCR.
+        batch_multiplier: Batch multiplier for model processing.
+        ocr_all_pages: Whether to OCR all pages.
+
+    Returns:
+        Tuple containing the full text, dictionary of images, and output metadata.
+    """
+    _, _ = get_user(database, auth)
     
-    
-    
-    
-    
+    # Ensure file is a BytesIO object
+    assert isinstance(file, BytesIO), "File must be a BytesIO object"
+    file.seek(0)
+    file_bytes = file.getvalue()
+    file_name = getattr(file, 'name', 'document.pdf')
+
+    # Set default values
+    if metadata:
+        langs = metadata.get("languages", langs)
+
+    # Replace language names with codes and validate
+    langs = replace_langs_with_codes(langs)
+    validate_langs(langs)
+
+    # Determine file type
+    filetype = 'pdf' if file_name.lower().endswith('.pdf') else 'other'
+
+    out_meta = {
+        "languages": langs,
+        "filetype": filetype,
+    }
+
+    if filetype == 'other':
+        return "", {}, out_meta
+
+    # Load PDF document
+    doc = PdfDocument(file_bytes)
+
+    # Get initial text blocks from the PDF using Ray deployment
+    get_text_blocks_handle = server_surya_handles['get_text_blocks']
+    pages_toc_ref = await get_text_blocks_handle.run.remote(
+        doc, file_bytes, max_pages=max_pages, start_page=start_page
+    )
+    pages, toc = await pages_toc_ref
+    out_meta.update({
+        "pdf_toc": toc,
+        "pages": len(pages),
+    })
+
+    # Trim the doc pages if start_page is specified
+    if start_page:
+        for _ in range(start_page):
+            doc.del_page(0)
+
+    max_len = min(len(pages), len(doc))
+
+    # Render images from PDF pages
+    lowres_images = [render_image(doc[pnum], dpi=settings.SURYA_DETECTOR_DPI) for pnum in range(max_len)]
+
+    # Convert images to bytes to pass between Ray deployments
+    image_bytes_list = []
+    for image in lowres_images:
+        buf = BytesIO()
+        image.save(buf, format='PNG')
+        image_bytes_list.append(buf.getvalue())
+
+    # Serialize data for Ray deployments
+    pages_ref = ray.put(pages)
+    doc_ref = ray.put(doc)
+    file_bytes_ref = ray.put(file_bytes)
+
+    # Surya detection
+    detection_handle = server_surya_handles['detection']
+    await detection_handle.run.remote(
+        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    )
+
+    # OCR pages as needed
+    recognition_handle = server_surya_handles['recognition']
+    ocr_result_ref = await recognition_handle.run.remote(
+        doc_ref, pages_ref, langs, batch_multiplier=batch_multiplier, ocr_all_pages=ocr_all_pages
+    )
+    pages, ocr_stats = await ocr_result_ref
+    out_meta["ocr_stats"] = ocr_stats
+
+    if len([b for p in pages for b in p.blocks]) == 0:
+        return "", {}, out_meta
+
+    # Surya layout
+    layout_handle = server_surya_handles['layout']
+    await layout_handle.run.remote(
+        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    )
+
+    # Surya ordering
+    ordering_handle = server_surya_handles['ordering']
+    await ordering_handle.run.remote(
+        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    )
+
+    # Replace equations
+    texify_handle = server_surya_handles['texify']
+    eq_result_ref = await texify_handle.run.remote(
+        doc_ref, pages_ref, batch_multiplier=batch_multiplier
+    )
+    filtered, eq_stats = await eq_result_ref
+    out_meta["block_stats"] = {"equations": eq_stats}
+
+    # Merge spans, lines, and get the full text
+    merged_lines = merge_spans(filtered)
+    text_blocks = merge_lines(merged_lines)
+    text_blocks = filter_common_titles(text_blocks)
+    full_text = get_full_text(text_blocks)
+
+    # Clean up the text
+    full_text = cleanup_text(full_text)
+    full_text = replace_bullets(full_text)
+
+    # Convert images back from bytes if needed
+    # ...
+
+    # Return the final results
+    doc_images = images_to_dict(pages)
+    return {
+        "full_text": full_text,
+        "images": doc_images,
+        "metadata": out_meta
+    }
+
+
+
+
+

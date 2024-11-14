@@ -15,6 +15,7 @@ from ..database.sql_db_tables import CHUNK_CLASS_NAME, DocumentChunk, document_r
 from ..typing.config import AuthType
 from .single_user_auth import get_user
 from .collections import assert_collections_priviledge
+from ..misc_functions.toolchain_state_management import safe_serialize
 
 class DocumentChunkDictionary(BaseModel):
     id: Union[str, int, List[str], List[int]]
@@ -211,7 +212,8 @@ async def search_hybrid(database: Session,
                         return_statement : bool = False,
                         web_search : bool = False,
                         rerank : bool = False,
-                        group_chunks : bool = True
+                        group_chunks : bool = True,
+                        sources_in_object : bool = False,
                         ) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
     
@@ -339,7 +341,9 @@ async def search_hybrid(database: Session,
             results = sorted(results, key=lambda x: x.rerank_score, reverse=True)
         
         database.rollback()
-        return results
+        
+        results = [r.model_dump() for r in results]
+        return results if not sources_in_object else {"sources": results}
         
     except Exception as e:
         database.rollback()

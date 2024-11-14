@@ -795,9 +795,9 @@ class ToolchainSession():
         
         print("DUMPING LOGS WITH LENGTH", len(self.log))
         
-        # with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
-        #     f.write("\n\n".join(self.log))
-        #     f.close()
+        with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
+            f.write("\n\n".join(self.log))
+            f.close()
     
     def load(self, data, toolchain: ToolChain):
         

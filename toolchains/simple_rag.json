@@ -1,7 +1,7 @@
 {
-	"name": "Article Assistant",
-    "id": "article_curation_search_agent",
-    "category": "Summarization",
+	"name": "Simple (4o-mini)",
+    "id": "test_chat_simple_rag",
+    "category": "RAG Tests",
     "first_event_follow_up": "make_conversation_title",
     "display_configuration": {
         "split": "none",
@@ -61,7 +61,7 @@
                                     "hook": "selected_collections",
                                     "target_event": "user_question_event",
                                     "fire_index": 1,
-                                    "target_route": "collection_hash_ids",
+                                    "target_route": "collection_ids",
                                     "store": false
                                 }
                             ],
@@ -100,7 +100,12 @@
                     "from_user": true
                 },
                 {
-                    "key": "collection_hash_ids",
+                    "key": "collection_ids",
+                    "from_user": true,
+                    "optional": true
+                },
+                {
+                    "key": "search_web",
                     "from_user": true,
                     "optional": true
                 }
@@ -127,7 +132,84 @@
                     }
                 },
                 {
-                    "destination": "multi_search",
+                    "destination": "make_search_question",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "auth" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "auth" ] }
+                }
+            ]
+        },
+        {
+            "id": "make_search_question",
+            "api_function": "llm_isolate_question",
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "third_step",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "model_parameters" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "model_parameters" ] }
+                },
+                {
+                    "destination": "search_hybrid",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "query" ]
+                        }
+                    ],
+                    "getFromOutputs": { "route": [ "output" ] }
+                }
+            ]
+        },
+        {
+            "id": "search_hybrid",
+            "api_function": "search_hybrid",
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "collection_ids",
+                    "from_user": true
+                },
+                {
+                    "key": "sources_in_object",
+                    "value": true
+                },
+                {
+                    "key": "group_chunks",
+                    "value": false
+                },
+                {
+                    "key": "query"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "third_step",
                     "sequence": [
                         {
                             "type": "createAction",
@@ -137,64 +219,19 @@
                     "getFromInputs": { "route": [ "auth" ] }
                 },
                 {
-                    "destination": "multi_search",
-                    "sequence": [
-                        {
-                            "type": "createAction",
-                            "route" : [ "collection_ids" ]
-                        }
-                    ],
-                    "getFromInputs": { "route": [ "collection_hash_ids" ] }
-                }
-            ]
-        },
-        {
-            "id": "multi_search",
-            "api_function": "llm_multistep_search",
-            "input_arguments": [
-                {
-                    "key": "chat_history",
-                    "from_state": { "route": [ "chat_history" ] }
-                },
-                {
-                    "key": "auth"
-                },
-                {
-                    "key": "collection_ids",
-                    "optional": true
-                },
-                {
-                    "key": "web_timeout",
-                    "value": 6
-                }
-            ],
-            "feed_mappings": [
-                {
-                    "destination": "llm_call",
+                    "destination": "third_step",
                     "sequence": [
                         {
                             "type": "createAction",
                             "route" : [ "sources" ]
                         }
                     ],
-                    "getFromOutputs": {
-                        "route": [ "sources" ]
-                    }
-                },
-                {
-                    "destination": "llm_call",
-                    "sequence": [
-                        {
-                            "type": "createAction",
-                            "route" : [ "auth" ]
-                        }
-                    ],
-                    "getFromInputs": { "route": [ "auth" ] }
+                    "getFromOutputs": { "route": [ "sources" ] }
                 }
             ]
         },
         {
-            "id": "llm_call",
+            "id": "third_step",
             "api_function": "llm",
             "input_arguments": [
                 {
@@ -202,10 +239,20 @@
                     "from_state": { "route": [ "chat_history" ] }
                 },
                 {
-                    "key": "auth"
+                    "key": "auth",
+                    "from_user": true
                 },
                 {
                     "key": "sources"
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                },
+                {
+                    "key": "model_parameters",
+                    "from_user": true,
+                    "optional": true
                 }
             ],
             "feed_mappings": [
@@ -229,8 +276,7 @@
                             "initialValue": {
                                 "type": "staticValue",
                                 "value": {
-                                    "role": "assistant",
-                                    "content": ""
+                                    "role": "assistant"           
                                 }
                             },
                             "insertion_values": [ null, {"type": "getNodeInput", "route": ["sources"]} ],
@@ -265,6 +311,10 @@
                 {
                     "key": "chat_history",
                     "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
                 }
             ],
             "feed_mappings": [

@@ -6,11 +6,29 @@ from ..api.hashing import hash_function
 from ..api.user_auth import get_user_external_providers_dict
 import openai
 from typing import AsyncIterator, AsyncGenerator, Dict, List, Any
-
+import tiktoken
+import json
 
 EXTERNAL_PROIVDERS = [
     "openai"
 ]
+
+
+def num_tokens_from_string_tiktoken(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+def count_tokens_openai(text: str, model: str) -> int:
+    if any([model.startswith(prefix) for prefix in [
+        "gpt-4o", "o1"
+    ]]):
+        return num_tokens_from_string_tiktoken(text, "o200k_base")
+    elif any([model.startswith(prefix) for prefix in [
+        "gpt-4", "gpt-3.5"
+    ]]):
+        return num_tokens_from_string_tiktoken(text, "cl100k_base")
 
 
 async def stream_openai_response(
@@ -32,6 +50,8 @@ async def stream_openai_response(
     client = openai.OpenAI(
         api_key=api_key,
     )
+    
+    print("CALLING OPENAI WITH MESSAGES:", json.dumps(messages, indent=4))
     
     stream = client.chat.completions.create(
         model=model,
@@ -102,3 +122,11 @@ def external_llm_generator(
         )
     else:
         raise ValueError("Invalid provider.")
+    
+def external_llm_count_tokens(text: str, model: str):
+    model_specified = model.split("/")
+    if model_specified[0] == "openai":
+        return count_tokens_openai(text, model_specified[1])
+    
+    else:
+        raise Exception(f"Invalid provider specified ({model_specified[0]}).")

@@ -16,7 +16,7 @@ def parse_search(text_in: str,
                  catch_all_fields: List[str] = ["text"],
                  return_id_exclusions : bool = False, 
                  return_everything : bool = False) -> str:
-	text_in = text_in.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
+	text_in = text_in.replace("AND", "and").replace("OR", "or").replace("NOT", "not").replace("\n", " ")
 	
 	id_exclusions = []
  

@@ -53,9 +53,7 @@ Statement
     question_check = await llm_call(
         auth=auth,
         question=question_check_prompt,
-        model_parameters={
-            "model": model,
-        }
+        model=model
     )
     question_check = question_check["output"]
     # print("QUESTION CHECK RESULT:", question_check)

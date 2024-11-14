@@ -4,6 +4,9 @@ from ray import serve
 from PIL import Image
 import torch
 import sys
+import pickle
+import ray
+from ray import cloudpickle
 
 from texify.model.model import load_model as load_texify_model
 from texify.model.processor import load_processor as load_texify_processor
@@ -40,9 +43,19 @@ class SuryaTexifyDeployment:
         print("DONE INITIALIZING SURYA TEXIFY DEPLOYMENT")
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, doc: PdfDocument, pages: List[Page], batch_multiplier: int = 1) -> Tuple[List[Dict], Dict]:
-        with torch.no_grad():
-            return replace_equations(doc, pages, self.model, batch_multiplier=batch_multiplier)
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        results = []
+        for args in args_list:
+            # Unpack ObjectRefs and retrieve actual data
+            doc_ref, pages_ref, batch_multiplier = args
+            doc = ray.get(doc_ref)
+            pages = ray.get(pages_ref)
+            with torch.no_grad():
+                result = replace_equations(doc, pages, self.model, batch_multiplier=batch_multiplier)
+            results.append(result)
+        return results
 
     async def run(self, doc: PdfDocument, pages: List[Page], batch_multiplier: int = 1) -> Tuple[List[Dict], Dict]:
         return await self.handle_batch(doc, pages, batch_multiplier)
@@ -59,10 +72,16 @@ class SuryaLayoutDeployment:
         print("DONE INITIALIZING SURYA LAYOUT DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        with torch.no_grad():
-            surya_layout(images, pages, self.model, batch_multiplier=batch_multiplier)
-            annotate_block_types(pages)
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        for args in args_list:
+            images_ref, pages_ref, batch_multiplier = args
+            images = ray.get(images_ref)
+            pages = ray.get(pages_ref)
+            with torch.no_grad():
+                surya_layout(images, pages, self.model, batch_multiplier=batch_multiplier)
+                annotate_block_types(pages)
 
     async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
         await self.handle_batch(images, pages, batch_multiplier)
@@ -79,16 +98,22 @@ class SuryaDetectionDeployment:
         print("DONE INITIALIZING SURYA DETECTION DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        with torch.no_grad():
-            predictions = batch_text_detection(
-                images, 
-                self.model, 
-                self.processor, 
-                batch_size=int(get_batch_size() * batch_multiplier)
-            )
-            for page, pred in zip(pages, predictions):
-                page.text_lines = pred
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        for args in args_list:
+            images_ref, pages_ref, batch_multiplier = args
+            images = ray.get(images_ref)
+            pages = ray.get(pages_ref)
+            with torch.no_grad():
+                predictions = batch_text_detection(
+                    images, 
+                    self.model, 
+                    self.processor, 
+                    batch_size=int(get_batch_size() * batch_multiplier)
+                )
+                for page, pred in zip(pages, predictions):
+                    page.text_lines = pred
 
     async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
         await self.handle_batch(images, pages, batch_multiplier)
@@ -105,9 +130,18 @@ class SuryaRecognitionDeployment:
         print("DONE INITIALIZING SURYA RECOGNITION DEPLOYMENT")
 
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, doc: PdfDocument, pages: List[Page], langs: List[str], batch_multiplier: int = 1, ocr_all_pages: bool = False):
-        with torch.no_grad():
-            return run_ocr(doc, pages, langs, self.model, batch_multiplier=batch_multiplier, ocr_all_pages=ocr_all_pages)
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        results = []
+        for args in args_list:
+            doc_ref, pages_ref, langs, batch_multiplier, ocr_all_pages = args
+            doc = ray.get(doc_ref)
+            pages = ray.get(pages_ref)
+            with torch.no_grad():
+                result = run_ocr(doc, pages, langs, self.model, batch_multiplier=batch_multiplier, ocr_all_pages=ocr_all_pages)
+            results.append(result)
+        return results
 
     async def run(self, doc: PdfDocument, pages: List[Page], langs: List[str], batch_multiplier: int = 1, ocr_all_pages: bool = False):
         return await self.handle_batch(doc, pages, langs, batch_multiplier, ocr_all_pages)
@@ -124,10 +158,16 @@ class SuryaOrderingDeployment:
         print("DONE INITIALIZING SURYA ORDERING DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        with torch.no_grad():
-            surya_order(images, pages, self.model, batch_multiplier=batch_multiplier)
-            sort_blocks_in_reading_order(pages)
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        for args in args_list:
+            images_ref, pages_ref, batch_multiplier = args
+            images = ray.get(images_ref)
+            pages = ray.get(pages_ref)
+            with torch.no_grad():
+                surya_order(images, pages, self.model, batch_multiplier=batch_multiplier)
+                sort_blocks_in_reading_order(pages)
 
     async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
         await self.handle_batch(images, pages, batch_multiplier)
@@ -144,9 +184,21 @@ class SuryaTableRecognitionDeployment:
         print("DONE INITIALIZING SURYA TABLE RECOGNITION DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pages: List[Page], doc: PdfDocument, file_bytes: bytes, detection_model, recognition_model):
-        with torch.no_grad():
-            return format_tables(pages, doc, file_bytes, detection_model, self.model, recognition_model)
+    async def handle_batch(self, pickled_args_list):
+        # Unpickle input arguments using ray.cloudpickle
+        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+        results = []
+        for args in args_list:
+            pages_ref, doc_ref, file_bytes_ref, detection_model_ref, recognition_model_ref = args
+            pages = ray.get(pages_ref)
+            doc = ray.get(doc_ref)
+            file_bytes = ray.get(file_bytes_ref)
+            detection_model = ray.get(detection_model_ref)
+            recognition_model = ray.get(recognition_model_ref)
+            with torch.no_grad():
+                result = format_tables(pages, doc, file_bytes, detection_model, self.model, recognition_model)
+            results.append(result)
+        return results
 
     async def run(self, pages: List[Page], doc: PdfDocument, file_bytes: bytes, detection_model, recognition_model):
         return await self.handle_batch(pages, doc, file_bytes, detection_model, recognition_model)
