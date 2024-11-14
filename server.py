@@ -376,22 +376,8 @@ class UmbrellaClass:
             model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
             print("Poppend model choice from `model_parameters/model`:", model_choice)
         
-        
-        model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
-                                            .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
-        
-        model_parameters_true = {
-            **json.loads(model_entry.default_settings),
-        }
-        
-        model_parameters_true.update(model_parameters)
-        
-        return_stream_response = model_parameters_true.pop("stream", False)
-        
         model_specified = model_choice.split("/")
-        
-        stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
-        # print("Stop sequences:", stop_sequences)
+        return_stream_response = model_parameters.pop("stream", False)
         
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
@@ -402,16 +388,29 @@ class UmbrellaClass:
                 sources=sources,
                 functions_available=functions_available
             )
-            model_parameters_true.update({
+            model_parameters.update({
                 "messages": new_chat_history,
                 "chat_history": new_chat_history
             })
             gen = external_llm_generator(self.database, 
                                          auth, 
                                          *model_specified,
-                                         model_parameters_true)
+                                         model_parameters)
             input_token_count = -1
         else:
+            model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
+                                                .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
+            
+            model_parameters_true = {
+                **json.loads(model_entry.default_settings),
+            }
+            
+            model_parameters_true.update(model_parameters)
+            
+            
+            
+            stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
+            
             print(f"Looking for internal model {model_choice} with specified length {len(model_specified)}")
             assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
             assert model_choice in self.llm_handles, f"Model choice [{model_choice}] not available for LLMs"
