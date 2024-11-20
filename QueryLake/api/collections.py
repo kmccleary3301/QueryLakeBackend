@@ -215,12 +215,11 @@ def fetch_collection(database : Session,
 def fetch_collection_documents(database : Session,
                                auth : AuthType,
                                collection_hash_id : str,
-                               collection_type : str = "user",
                                limit : int = 100,
                                offset : int = 0):
     assert (limit > 0 and offset >= 0), "Invalid limit or offset, both must be ints >= 0"
     assert (limit <= 500), "Limit must be <= 500"
-    fetch_collection(database, auth, collection_hash_id, collection_type) # Doing this to authenticate user perms.
+    fetch_collection(database, auth, collection_hash_id) # Doing this to authenticate user perms.
     documents = database.exec(
         select(sql_db_tables.document_raw_backup)
         .where(sql_db_tables.document_raw_backup.document_collection_id == collection_hash_id)
