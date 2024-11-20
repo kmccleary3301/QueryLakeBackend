@@ -27,7 +27,7 @@ from ..operation_classes.toolchain_session import ToolchainSession
 from ..misc_functions.toolchain_state_management import safe_serialize
 from ..typing.config import Config
 from io import BytesIO
-from ..database.encryption import ecc_encrypt_string
+from ..database.encryption import ecc_encrypt_string, aes_encrypt_string
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
 upper_server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])+"/"
@@ -174,6 +174,8 @@ def create_toolchain_session(database : Session,
                                        toolchain_function_caller, 
                                        "",
                                        user_auth.username)
+    (user, user_auth) = get_user(database, auth)
+    
     
     public_key = user.public_key
     encryption_key = random_hash()
@@ -184,11 +186,33 @@ def create_toolchain_session(database : Session,
         creation_timestamp=time.time(),
         toolchain_id=toolchain_id,
         author=user_auth.username,
-        encryption_key_secure=ecc_encrypt_string(public_key, encryption_key)
+        # encryption_key_secure=ecc_encrypt_string(public_key, encryption_key)
     )
+    
+    
     database.add(new_session_in_database)
     database.commit()
     
+    new_doc_password = random_hash(base=16)
+    encryption_key = random_hash(base=16)
+    
+    encryption_key_secure = ecc_encrypt_string(user.public_key, encryption_key)
+    doc_password_secure = aes_encrypt_string(encryption_key, new_doc_password)
+    
+    new_session_collection = sql_db_tables.document_collection(
+        name=created_session.state["title"],
+        collection_type="toolchain_session",
+        author_user_name=user_auth.username,
+        encryption_key_secure=encryption_key_secure,
+        document_unlock_key=doc_password_secure,
+        toolchain_session_id=new_session_in_database.id
+    )
+    
+    database.add(new_session_collection)
+    database.commit()
+    
+    
+    created_session.collection_id = new_session_collection.id
     created_session.session_hash = new_session_in_database.id
     
     return created_session
@@ -271,7 +295,14 @@ def retrieve_files_for_session(database : Session,
     (user, user_auth) = user_retrieved
     # session = retrieve_toolchain_from_db(database, toolchain_function_caller, toolchains_available, auth, session_id)
     assert session.author == user.name, "User not authorized"
-    file_db_entries = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.toolchain_session_id == session.session_hash)).all()
+    bridge_collection = database.exec(select(sql_db_tables.document_collection)
+                                      .where(sql_db_tables.document_collection.toolchain_session_id == session.session_hash)).first()
+    assert not bridge_collection is None, f"No corresponding document collection found for toolchain session `{session.session_hash}`"
+    
+    file_db_entries = list(database.exec(
+        select(sql_db_tables.document_raw_backup)
+        .where(sql_db_tables.document_raw_backup.document_collection_id == bridge_collection.id)
+    ).all())
     return [get_file_bytes(database, doc.id, get_user_private_key(database, auth)["private_key"]) for doc in file_db_entries]
 
 async def toolchain_file_upload_event_call(database : Session,
@@ -294,10 +325,18 @@ async def toolchain_file_upload_event_call(database : Session,
     system_args.update(auth)
     # TOOLCHAIN_SESSION_CAROUSEL[session_id]["last_activity"] = time.time()
 
+    bridge_collection = database.exec(select(sql_db_tables.document_collection)
+                                      .where(sql_db_tables.document_collection.toolchain_session_id == session_id)).first()
+    assert not bridge_collection is None, f"No corresponding document collection found for toolchain session `{session_id}`"
+    
 
-    file_db_entry = database.exec(select(sql_db_tables.document_raw).where(and_(sql_db_tables.document_raw.toolchain_session_id == session_id,
-                                                                                sql_db_tables.document_raw.id == document_hash_id
-                                                                                ))).first()
+    file_db_entry = database.exec(
+        select(sql_db_tables.document_raw_backup)
+        .where(and_(
+            sql_db_tables.document_raw_backup.document_collection_id == bridge_collection.id,
+            sql_db_tables.document_raw_backup.id == document_hash_id
+        ))
+    ).first()
     file_bytes = get_file_bytes(database, file_db_entry.id, get_user_private_key(database, auth)["private_key"])
     
     event_parameters.update({

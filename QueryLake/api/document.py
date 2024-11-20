@@ -26,7 +26,7 @@ from ..misc_functions.function_run_clean import file_size_as_string
 import asyncio
 import bisect
 import concurrent.futures
-from .collections import assert_collections_priviledge
+from .collections import assert_collections_priviledge, get_collection_document_password
 from PIL import Image
 import ray
 from pypdfium2 import PdfDocument
@@ -60,18 +60,9 @@ async def upload_document(database : Session,
     time_start = time.time()
     
     print("Adding document to collection")
-    collection_type_lookup = {
-        "user": "user_document_collection_hash_id", 
-        "organization": "organization_document_collection_hash_id",
-        "global": "global_document_collection_hash_id",
-        "toolchain_session": "toolchain_session_id" 
-    }
+    
 
-    assert collection_type in ["global", "organization", "user", "toolchain_session"]
     assert isinstance(scan_text, bool), "scan_text must be a boolean"
-
-    if collection_type == "global":
-        public = True
 
     (user, user_auth) = get_user(database, auth)
 
@@ -98,36 +89,38 @@ async def upload_document(database : Session,
     file_integrity = sha256(file_data_bytes).hexdigest()
     file_size = len(file_data_bytes)
     
-    collection_author_kwargs = {collection_type_lookup[collection_type]: collection_hash_id}
-
-    if collection_type == "user":
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == collection_hash_id)).first()
+    collection = database.exec(select(sql_db_tables.document_collection).where(sql_db_tables.document_collection.id == collection_hash_id)).first()
+    assert not collection is None, "Collection not found"
+    
+    if collection.collection_type == "global":
+        public = True
+    
+    if collection.collection_type == "user":
         assert collection.author_user_name == user_auth.username, "User not authorized"
         public = collection.public
-    elif collection_type == "organization":
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
-        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+    elif collection.collection_type == "organization":
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
         public = collection.public
-    elif collection_type == "global":
-        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.id == collection_hash_id)).first()
+    elif collection.collection_type == "global":
         assert user.is_admin == True, "User not authorized"
         public = True
-    elif collection_type == "toolchain_session":
-        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
-        assert type(session) is sql_db_tables.toolchain_session, "Session not found"
-        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
+    elif collection.collection_type == "toolchain_session":
+        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection.toolchain_session_id)).first()
+        assert not session is None, "Session not found"
+        assert session.author == user_auth.username, "User not authorized"
         public = False
     
     if not public:
-        if collection_type == "organization":
+        if collection.collection_type == "organization":
             public_key = organization.public_key
         else:
             public_key = user.public_key
 
-    encryption_key = random_hash()
+    # TODO: Get document key from `document_collection`
+    encryption_key = get_collection_document_password(database, auth, collection.id)
     
     zip_start_time = time.time()
     if public:
@@ -152,25 +145,23 @@ async def upload_document(database : Session,
         # })
     # zip_thread.start()
     
-    new_file_blob = sql_db_tables.document_zip_blob(
+    new_file_blob = sql_db_tables.document_zip_blob_backup(
         file_count=1,
         size_bytes=len(encrypted_bytes),
-        encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         file_data=encrypted_bytes,
-        **collection_author_kwargs,
+        document_collection_id=collection.id,
     )
     
     database.add(new_file_blob)
     database.commit()
     
-    new_db_file = sql_db_tables.document_raw(
+    new_db_file = sql_db_tables.document_raw_backup(
         # server_zip_archive_path=file_zip_save_path,
         file_name=file_name,
         integrity_sha256=file_integrity,
         size_bytes=file_size,
         creation_timestamp=time.time(),
         public=public,
-        encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         # file_data=encrypted_bytes,
         blob_id=new_file_blob.id,
         blob_dir="file",
@@ -180,15 +171,12 @@ async def upload_document(database : Session,
             "size_bytes": len(file_data_bytes),
             **(document_metadata if not document_metadata is None else {})
         },
-        **collection_author_kwargs
+        document_collection_id=collection.id
     )
     
-    assert not collection is None or collection_type, "Collection not found"
-    
     print("Saved file in %.2fs" % (time.time()-zip_start_time))
-    print("Collection type:", collection_type)
-    if not collection_type == "toolchain_session":
-        collection.document_count += 1
+    print("Collection type:", collection.collection_type)
+    collection.document_count += 1
     database.add(new_db_file)
     database.commit()
     if await_embedding and scan_text:
@@ -255,26 +243,26 @@ async def upload_archive(database : Session,
     (user, user_auth) = get_user(database, auth)
 
     collection_author_kwargs = {collection_type_lookup[collection_type]: collection_hash_id}
-
-    if collection_type == "user":
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == collection_hash_id)).first()
+    
+    collection = database.exec(select(sql_db_tables.document_collection).where(sql_db_tables.document_collection.id == collection_hash_id)).first()
+    assert not collection is None, "Collection not found"
+    
+    if collection.collection_type == "user":
         assert collection.author_user_name == user_auth.username, "User not authorized"
         public = collection.public
     elif collection_type == "organization":
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == collection_hash_id)).first()
-        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
+        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization)).first()
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
         public = collection.public
     elif collection_type == "global":
-        collection = database.exec(select(sql_db_tables.global_document_collection).where(sql_db_tables.global_document_collection.id == collection_hash_id)).first()
         assert user.is_admin == True, "User not authorized"
         public = True
     elif collection_type == "toolchain_session":
-        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
-        assert type(session) is sql_db_tables.toolchain_session, "Session not found"
-        collection = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection_hash_id)).first()
+        session = database.exec(select(sql_db_tables.toolchain_session).where(sql_db_tables.toolchain_session.id == collection.toolchain_session_id)).first()
+        assert not session is None, "Session not found"
+        assert session.author_user_name == user_auth.username, "User not authorized"
         public = False
     
     if not public:
@@ -283,8 +271,9 @@ async def upload_archive(database : Session,
         else:
             public_key = user.public_key
 
-    encryption_key = random_hash()
     
+    # TODO: Get document key from `document_collection`
+    encryption_key = get_collection_document_password(database, auth, collection.id)
     
     file_name = file.filename
     file_ext = file_name.split(".")[-1]
@@ -368,37 +357,35 @@ async def upload_archive(database : Session,
             file_data=file_blob_dict
         )
     
-    new_file_blob = sql_db_tables.document_zip_blob(
+    new_file_blob = sql_db_tables.document_zip_blob_backup(
         file_count=len(gen_directories),
         size_bytes=len(encrypted_bytes),
-        encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
         file_data=encrypted_bytes,
-        **collection_author_kwargs,
+        document_collection_id=collection.id,
     )
     
     database.add(new_file_blob)
     database.commit()
     
     results, new_doc_ids = [], []
-    new_doc_db_entries : List[sql_db_tables.document_raw] = []
+    new_doc_db_entries : List[sql_db_tables.document_raw_backup] = []
     
     for i in range(len(files_retrieved)):
         file_integrity = sha256(files_retrieved_bytes[i]).hexdigest()
         file_size = len(files_retrieved_bytes[i])
         file_name = files_retrieved_names[i]
-        new_db_file = sql_db_tables.document_raw(
+        new_db_file = sql_db_tables.document_raw_backup(
             # server_zip_archive_path=file_zip_save_path,
             file_name=file_name,
             integrity_sha256=file_integrity,
             size_bytes=file_size,
             creation_timestamp=time.time(),
             public=public,
-            encryption_key_secure=encryption.ecc_encrypt_string(public_key, encryption_key),
             # file_data=encrypted_bytes,
             blob_id=new_file_blob.id,
             blob_dir=gen_directories[i],
             md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": file_size},
-            **collection_author_kwargs
+            document_collection_id=collection.id
         )
         database.add(new_db_file)
         
@@ -502,14 +489,11 @@ async def update_documents(database : Session,
     assert len(data) < 1000, "Too many documents to update at once"
     
     unique_doc_ids = list(set([entry.document_id for entry in data]))
-    documents = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id.in_(unique_doc_ids))).all())
+    documents = list(database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id.in_(unique_doc_ids))).all())
     # document_chunks = list(database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(unique_doc_ids))).all())
     # document_collection_ids = list(set([c.collection_id for c in document_chunks]))
     document_collection_ids = list(set([getattr(d, c) for c in [
-        "user_document_collection_hash_id", 
-        "organization_document_collection_hash_id",
-        "global_document_collection_hash_id",
-        "toolchain_session_id"
+        "document_collection_id"
     ] for d in documents if not getattr(d, c) is None]))
     # print("Document Collection IDs:", document_collection_ids)
     
@@ -529,7 +513,7 @@ async def update_documents(database : Session,
         for entry in data
         if (not entry.text is None) or (not entry.scan is False)
     ]
-    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(documents_to_clear_chunks)))
+    database.exec(delete(sql_db_tables.DocumentChunk_backup).where(sql_db_tables.DocumentChunk_backup.document_id.in_(documents_to_clear_chunks)))
     
     text_updates, text_update_doc_ids = {}, []
     
@@ -549,8 +533,8 @@ async def update_documents(database : Session,
             # TODO: Try to fix the auto-update trigger or find another way to get this to work.
             # This is efficient.
             database.exec(
-                update(sql_db_tables.DocumentChunk)
-                .where(sql_db_tables.DocumentChunk.document_id == document.id)
+                update(sql_db_tables.DocumentChunk_backup)
+                .where(sql_db_tables.DocumentChunk_backup.document_id == document.id)
                 .values(document_md=document.md)
             )
             # for chunk in document_chunk_lookup[document.id]:
@@ -602,24 +586,28 @@ def delete_document(database : Session,
 
     assert not hash_id is None or not hash_ids is None, "No hash_id or hash_ids provided"
     
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
 
     assert not document is None, "Document not found"
     
-    if not document.user_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == document.user_document_collection_hash_id)).first()
-        assert collection.author_user_name == user_auth.username, "User not authorized"
+    collection = database.exec(select(sql_db_tables.document_collection).where(sql_db_tables.document_collection.id == document.document_collection_id)).first()
+    assert not collection is None, "Collection not found"
     
-    elif not document.organization_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == document.organization_document_collection_hash_id)).first()
+    if collection.collection_type == "user":
+        assert (collection.author_user_name == user_auth.username) or user.is_admin, "User not authorized"
+    
+    elif collection.collection_type == "organization":
         organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
 
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         
-        assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized"
+        assert (len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"]) \
+            or user.is_admin, "User not authorized"
+    else:
+        raise ValueError(f"Collection type `{collection.collection_type}` not supported on this method yet.")
 
-    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id))
+    database.exec(delete(sql_db_tables.DocumentChunk_backup).where(sql_db_tables.DocumentChunk_backup.document_id == hash_id))
     
     aes_delete_file_from_zip_blob(database, document.id)
     
@@ -641,41 +629,11 @@ def get_document_secure(database : Session,
 
     (user, user_auth) = get_user(database, auth)
 
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
     
     assert not document is None, "Document not found"
     
-    if not document.user_document_collection_hash_id is None:
-        
-        collection = database.exec(select(sql_db_tables.user_document_collection).where(sql_db_tables.user_document_collection.id == document.user_document_collection_hash_id)).first()
-        assert collection.author_user_name == user_auth.username, "User not authorized"
-        private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
-
-        user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-
-        document_password = encryption.ecc_decrypt_string(user_private_key, document.encryption_key_secure)
-    elif not document.organization_document_collection_hash_id is None:
-        collection = database.exec(select(sql_db_tables.organization_document_collection).where(sql_db_tables.organization_document_collection.id == document.organization_document_collection_hash_id)).first()
-        organization = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization_id)).first()
-
-        memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
-                                                                                    sql_db_tables.organization_membership.user_name == user_auth.username))).all()
-        assert len(memberships) > 0, "User not authorized"
-
-        private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
-
-        user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-
-        organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
-
-        document_password = encryption.ecc_decrypt_string(organization_private_key, document.encryption_key_secure)
-    elif not document.toolchain_session_id is None:
-        private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
-        user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-        document_password = encryption.ecc_decrypt_string(user_private_key, document.encryption_key_secure)
+    document_password = get_collection_document_password(database, auth, document.document_collection_id)
     
     
     if return_document:
@@ -693,7 +651,7 @@ def craft_document_access_token(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
     
-    document : sql_db_tables.document_raw = get_document_secure(database, auth, hash_id, return_document=True)
+    document : sql_db_tables.document_raw_backup = get_document_secure(database, auth, hash_id, return_document=True)
     token_hash = random_hash()
     
     new_document_access_token = sql_db_tables.document_access_token(
@@ -718,7 +676,7 @@ def get_file_bytes(database : Session,
                    hash_id : str,
                    encryption_key : str):
     
-    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
     # print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
 
@@ -784,17 +742,14 @@ def fetch_document(
     """
     (_, _) = get_user(database, auth)
     
-    document = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == document_id)).all())
+    document = list(database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == document_id)).all())
     
     document = document[0] if len(document) > 0 else None
     assert not document is None, "Document not found"
     document_dict = document.model_dump()
     
     collection_fields = [
-        "user_document_collection_hash_id", 
-        "organization_document_collection_hash_id",
-        "global_document_collection_hash_id",
-        "toolchain_session_id"
+        "document_collection_id",
     ]
     
     collection_ids = [document_dict[c] for c in collection_fields]
@@ -819,8 +774,8 @@ def fetch_document(
     if not get_chunk_count:
         return document_dict
     
-    stmt = select(func.count()).select_from(sql_db_tables.DocumentChunk).where(
-        sql_db_tables.DocumentChunk.document_id == document_id
+    stmt = select(func.count()).select_from(sql_db_tables.DocumentChunk_backup).where(
+        sql_db_tables.DocumentChunk_backup.document_id == document_id
     )
     chunk_count = int(database.scalar(stmt))
     
@@ -909,13 +864,13 @@ def trigger_database_sql_error(database : Session,
     """
     
     _, _ = get_user(database, auth)
-    new_text_chunk = sql_db_tables.DocumentChunk(
+    new_text_chunk = sql_db_tables.DocumentChunk_backup(
         id="test",
         document_name="test.py",
         text="test"
     )
     new_text_chunk.id = "ERROR_TEST"
-    new_text_chunk_2 = sql_db_tables.DocumentChunk(
+    new_text_chunk_2 = sql_db_tables.DocumentChunk_backup(
         id="test",
         document_name="test.py",
         text="test"

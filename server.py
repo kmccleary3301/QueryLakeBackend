@@ -381,7 +381,6 @@ class UmbrellaClass:
         
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
-            print(f"Looking for external model {model_choice} with specified length {len(model_specified)}")
             
             new_chat_history = format_chat_history(
                 chat_history,
@@ -411,7 +410,6 @@ class UmbrellaClass:
             
             stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
             
-            print(f"Looking for internal model {model_choice} with specified length {len(model_specified)}")
             assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
             assert model_choice in self.llm_handles, f"Model choice [{model_choice}] not available for LLMs"
             
@@ -810,6 +808,7 @@ class UmbrellaClass:
                         result = {
                             "success": True,
                             "toolchain_session_id": toolchain_session.session_hash,
+                            "toolchain_collection_id": toolchain_session.collection_id,
                             "state": toolchain_session.state,
                         }
                     

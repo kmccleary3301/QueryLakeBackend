@@ -87,6 +87,27 @@ class DocumentChunk(SQLModel, table=True):
     # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
     ts_content: str = Field(sa_column=Column(TSVECTOR))
     
+    
+class DocumentChunk_backup(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["document_chunk"], primary_key=True, index=True, unique=True)
+    creation_timestamp: Optional[float] = Field(default_factory=time)
+    collection_type: Optional[str] = Field(index=True, default=None)
+    document_id: Optional[str] = Field(foreign_key="document_raw_backup.id", default=None, index=True)
+    document_chunk_number: Optional[int] = Field(default=None, index=True)
+    document_integrity: Optional[str] = Field(default=None, index=True)
+    collection_id: Optional[str] = Field(index=True, default=None)
+    document_name: str = Field()
+    website_url : Optional[str] = Field(default=None, index=True)
+    # embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Full 32-bit Precision
+    embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Half Precision
+    private: bool = Field(default=False)
+    
+    document_md: dict = Field(sa_column=Column(JSONB), default={})
+    md: dict = Field(sa_column=Column(JSONB), default={})
+    text: str = Field()
+    # ts_content : TSVECTOR = Field(sa_column=Column(TSVECTOR))
+    ts_content: str = Field(sa_column=Column(TSVECTOR))
+    
 # class DocumentChunkPointer(SQLModel, table=True):
 #     id: int = Field(primary_key=True, index=True, unique=True)
 #     text: str = Field()
@@ -94,7 +115,7 @@ class DocumentChunk(SQLModel, table=True):
     
 
 # CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
-ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk.__name__.lower()
+ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk_backup.__name__.lower()
 # CHUNK_CLASS_NAME = DocumentChunkPointer.__name__.lower()
 CHUNK_CLASS_NAME = ORIGINAL_CHUNK_CLASS_NAME
 CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "document_name", "website_url", "collection_id", "md", "document_md"]
@@ -145,29 +166,29 @@ FOR EACH ROW EXECUTE FUNCTION update_ts_content();
 
 CREATE INDEX IF NOT EXISTS ts_content_gin ON {ORIGINAL_CHUNK_CLASS_NAME} USING gin(ts_content);
 """)
-event.listen(DocumentChunk.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
+event.listen(DocumentChunk_backup.__table__, 'after_create', trigger.execute_if(dialect='postgresql'))
 
 
 
-# Add metadata trigger to document chunks that duplicates from parent document.
-trigger_md = DDL(f"""
-CREATE OR REPLACE FUNCTION set_document_chunk_md()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.document_md := (SELECT md FROM document_raw WHERE id = NEW.document_id);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+# # Add metadata trigger to document chunks that duplicates from parent document.
+# trigger_md = DDL(f"""
+# CREATE OR REPLACE FUNCTION set_document_chunk_md()
+# RETURNS TRIGGER AS $$
+# BEGIN
+#     NEW.document_md := (SELECT md FROM {document_raw.__tablename__} WHERE id = NEW.document_id);
+#     RETURN NEW;
+# END;
+# $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS set_document_chunk_md_trigger ON {DocumentChunk.__tablename__};
+# DROP TRIGGER IF EXISTS set_document_chunk_md_trigger ON {DocumentChunk.__tablename__};
 
-CREATE TRIGGER set_document_chunk_md_trigger
-BEFORE INSERT OR UPDATE ON {DocumentChunk.__tablename__}
-FOR EACH ROW EXECUTE FUNCTION set_document_chunk_md();
-""")
+# CREATE TRIGGER set_document_chunk_md_trigger
+# BEFORE INSERT OR UPDATE ON {DocumentChunk.__tablename__}
+# FOR EACH ROW EXECUTE FUNCTION set_document_chunk_md();
+# """)
 
-# Attach the trigger to the DocumentChunk table
-event.listen(DocumentChunk.__table__, 'after_create', trigger_md.execute_if(dialect='postgresql'))
+# # Attach the trigger to the DocumentChunk table
+# event.listen(DocumentChunk.__table__, 'after_create', trigger_md.execute_if(dialect='postgresql'))
 
 
 class DocumentEmbeddingDictionary(BaseModel):
@@ -495,3 +516,65 @@ class collaboration(SQLModel, table=True):
     organization_document_collection_id: str = Field(foreign_key="organization_document_collection.id", index=True)
     added_organization_id: str = Field(foreign_key="organization.id", index=True)
     write_priviledge: Optional[bool] = Field(default=False)
+    
+    
+    
+
+class document_collection(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["collections"], primary_key=True, index=True, unique=True)
+    name: str
+    creation_timestamp: float = Field(default_factory=time)
+    public: Optional[bool] = Field(default=False)
+    description: Optional[str] = Field(default="")
+    document_count: int = Field(default=0)
+    
+    collection_type: str = Field(index=True) # "organization" | "user" | "global" | "toolchain_session"
+    
+    
+    author_user_name: str | None = Field(foreign_key="user.name", index=True, default=None, nullable=True)
+    author_organization: str | None = Field(foreign_key="organization.id", index=True, default=None, nullable=True)
+    toolchain_session_id: str | None = Field(foreign_key="toolchain_session.id", index=True, default=None, nullable=True)
+    
+    
+    # If public or global, is plaintext unencrypted.
+    # user or toolchain collection (if private): Encrypted with user's public key
+    # organization collection (if private): Encrypted with organization's public key
+    encryption_key_secure: Optional[str] = Field(default=None)
+    
+    
+    # Document unlock key is encrypted with `encryption_key_secure`
+    # It should never be delivered to the client, only used for internal operations
+    # The decrypted value will remain the same always, but encryption may change
+    # With shifting collections.
+    document_unlock_key: Optional[str] = Field(default=None)
+
+
+class document_raw_backup(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["document_raw"], primary_key=True, index=True, unique=True)
+    # hash_id: str = Field(index=True, unique=True)
+    file_name: str
+    creation_timestamp: float
+    integrity_sha256: str = Field(index=True)
+    size_bytes: int
+    encryption_key_secure: Optional[str] = Field(default=None)
+    document_collection_id: Optional[str] = Field(foreign_key="document_collection.id", index=True)
+    
+    website_url: Optional[str] = Field(default=None)
+    
+    file_data: bytes = Field(sa_column=Column(LargeBinary))
+    
+    blob_id: Optional[str] = Field(default=None, foreign_key="document_zip_blob_backup.id", index=True)
+    blob_dir: Optional[str] = Field(default=None)
+    
+    finished_processing: Optional[bool] = Field(default=False)
+    md: Optional[dict] = Field(sa_column=Column(JSONB), default={})
+
+class document_zip_blob_backup(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    file_count: int
+    size_bytes: int
+    
+    encryption_key_secure: Optional[str] = Field(default=None)
+    document_collection_id: Optional[str] = Field(foreign_key="document_collection.id", index=True)
+    
+    file_data: bytes = Field(sa_column=Column(LargeBinary))

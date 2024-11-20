@@ -11,7 +11,7 @@ import random
 import time
 import re
 from ..misc_functions.paradedb_query_parser import parse_search
-from ..database.sql_db_tables import CHUNK_CLASS_NAME, DocumentChunk, document_raw, CHUNK_INDEXED_COLUMNS, DOCUMENT_INDEXED_COLUMNS
+from ..database.sql_db_tables import CHUNK_CLASS_NAME, DocumentChunk_backup, document_raw_backup, CHUNK_INDEXED_COLUMNS, DOCUMENT_INDEXED_COLUMNS
 from ..typing.config import AuthType
 from .single_user_auth import get_user
 from .collections import assert_collections_priviledge
@@ -47,10 +47,7 @@ class DocumentRawDictionary(BaseModel):
     integrity_sha256: str
     size_bytes: int
     encryption_key_secure: Optional[str]
-    organization_document_collection_hash_id: Optional[str] = None
-    user_document_collection_hash_id: Optional[str] = None
-    global_document_collection_hash_id: Optional[str] = None
-    toolchain_session_id: Optional[str] = None
+    document_collection_id: Optional[str] = None
     website_url: Optional[str]
     blob_id: Optional[str]
     blob_dir: Optional[str]
@@ -82,10 +79,7 @@ document_dict_arguments = [
     "integrity_sha256",
     "size_bytes",
     "encryption_key_secure",
-    "organization_document_collection_hash_id",
-    "user_document_collection_hash_id",
-    "global_document_collection_hash_id",
-    "toolchain_session_id",
+    "document_collection_id",
     "website_url",
     "blob_id",
     "blob_dir",
@@ -94,20 +88,17 @@ document_dict_arguments = [
 ]
 
 document_collection_attrs = [
-    "organization_document_collection_hash_id", 
-    "user_document_collection_hash_id", 
-    "global_document_collection_hash_id",
-    "toolchain_session_id"
+    "document_collection_id"
 ]
     
 
 field_strings_no_rerank = [e for e in chunk_dict_arguments if e not in ["rerank_score"]]
-column_attributes = [getattr(DocumentChunk, e) for e in field_strings_no_rerank]
-retrieved_fields_string = ", ".join([f"{DocumentChunk.__tablename__}."+e for e in field_strings_no_rerank])
+column_attributes = [getattr(DocumentChunk_backup, e) for e in field_strings_no_rerank]
+retrieved_fields_string = ", ".join([f"{DocumentChunk_backup.__tablename__}."+e for e in field_strings_no_rerank])
 retrieved_fields_string_bm25 = ", ".join(field_strings_no_rerank)
 
 document_field_strings = [e for e in document_dict_arguments]
-retrieved_document_fields_string = ", ".join([f"{document_raw.__tablename__}."+e for e in document_field_strings])
+retrieved_document_fields_string = ", ".join([f"{document_raw_backup.__tablename__}."+e for e in document_field_strings])
 
 
 
@@ -273,14 +264,14 @@ async def search_hybrid(database: Session,
     STMT = text(f"""
 	WITH semantic_search AS (
         SELECT id, RANK () OVER (ORDER BY embedding <=> :embedding_in) AS rank
-        FROM {DocumentChunk.__tablename__}
+        FROM {DocumentChunk_backup.__tablename__}
         {similarity_constraint}
         ORDER BY embedding <=> :embedding_in 
         LIMIT :limit_similarity
     ),
     bm25_search AS (
         SELECT id, RANK () OVER (ORDER BY paradedb.score(id) DESC) as rank
-        FROM {DocumentChunk.__tablename__} 
+        FROM {DocumentChunk_backup.__tablename__} 
         WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
         LIMIT :limit_bm25
     )
@@ -293,7 +284,7 @@ async def search_hybrid(database: Session,
         {retrieved_fields_string}
     FROM semantic_search
     FULL OUTER JOIN bm25_search ON semantic_search.id = bm25_search.id
-    JOIN {DocumentChunk.__tablename__} ON {DocumentChunk.__tablename__}.id = COALESCE(semantic_search.id, bm25_search.id)
+    JOIN {DocumentChunk_backup.__tablename__} ON {DocumentChunk_backup.__tablename__}.id = COALESCE(semantic_search.id, bm25_search.id)
     ORDER BY score DESC, text;
 	""").bindparams(
         embedding_in=str(embedding), 
@@ -383,8 +374,8 @@ def search_bm25(database: Session,
     group_chunks = group_chunks and (table == "document_chunk")
     
     valid_fields, chosen_table, chosen_attributes, chosen_catch_alls = {
-        "document_chunk": (CHUNK_INDEXED_COLUMNS, DocumentChunk, retrieved_fields_string, ["text"]),
-        "document": (DOCUMENT_INDEXED_COLUMNS, document_raw, retrieved_document_fields_string, ["file_name"])
+        "document_chunk": (CHUNK_INDEXED_COLUMNS, DocumentChunk_backup, retrieved_fields_string, ["text"]),
+        "document": (DOCUMENT_INDEXED_COLUMNS, document_raw_backup, retrieved_document_fields_string, ["file_name"])
     }[table]
     
     
@@ -480,7 +471,7 @@ def get_random_chunks(database: Session,
     results = database.exec(
         select(*column_attributes)
         .where(
-            DocumentChunk.collection_id.in_(collection_ids)
+            DocumentChunk_backup.collection_id.in_(collection_ids)
         )
         .order_by(func.random())
         # .offset(offset)
@@ -502,7 +493,7 @@ def count_chunks(database: Session,
     
     count = database.exec(
         select(func.count())
-        .where(DocumentChunk.collection_id.in_(collection_ids))
+        .where(DocumentChunk_backup.collection_id.in_(collection_ids))
     ).first()
     
     return count
@@ -527,9 +518,9 @@ def expand_document_segment(database: Session,
     chunks = list(database.exec(
         # select(*(column_attributes))
         # select(*(column_attributes + [getattr(DocumentChunk, "embedding")]))
-        select(DocumentChunk)
-        .where(DocumentChunk.document_id == document_id)
-        .where(DocumentChunk.document_chunk_number.in_(chunks_to_get))
+        select(DocumentChunk_backup)
+        .where(DocumentChunk_backup.document_id == document_id)
+        .where(DocumentChunk_backup.document_chunk_number.in_(chunks_to_get))
     ).all())
     
     chunk_tuples = list(map(lambda c: tuple([getattr(c, e) for e in field_strings_no_rerank]), chunks))
