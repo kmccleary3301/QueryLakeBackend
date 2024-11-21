@@ -8,6 +8,7 @@ import openai
 from typing import AsyncIterator, AsyncGenerator, Dict, List, Any
 import tiktoken
 import json
+from openai import AzureOpenAI
 
 EXTERNAL_PROIVDERS = [
     "openai"
@@ -61,6 +62,40 @@ async def stream_openai_response(
     for chunk in stream:
         if chunk.choices[0].delta.content is not None:
             yield chunk.choices[0].delta.content
+            
+async def stream_azure_response(
+    messages: List[Dict[str, str]],
+    model: str,
+    endpoint: str,
+    api_key: str,
+    model_parameters: Dict[str, Any] = None,
+    organization_id: str = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream responses from OpenAI models in a standardized format.
+    """
+    auth_args = {"api_key": api_key}
+    if organization_id:
+        auth_args["organization"] = organization_id
+
+    model_parameters = model_parameters or {}
+    
+    client = AzureOpenAI(
+        api_key=api_key,
+        api_version="2024-06-01",
+        azure_endpoint=endpoint
+    )
+    
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=True,
+        **model_parameters
+    )
+    
+    for chunk in stream:
+        if chunk.choices[0].delta.content is not None:
+            yield chunk.choices[0].delta.content
 
 
 async def openai_llm_generator(
@@ -76,7 +111,7 @@ async def openai_llm_generator(
         messages = [{"role": "user", "content": request_dict.pop("question")}]
     elif "chat_history" in request_dict:
         messages = request_dict.pop("chat_history")
-
+    
     model_parameters = request_dict.pop("model_parameters", {})
     
     async for content in stream_openai_response(
@@ -88,6 +123,33 @@ async def openai_llm_generator(
     ):
         yield content
 
+
+async def azure_llm_generator(
+    request_dict: dict,
+    model: str,
+    endpoint: str,
+    external_api_key: str,
+    external_organization_id: str = None,
+) -> AsyncIterator[str]:
+    """
+    Create a generator for openAI language model.
+    """
+    if "question" in request_dict:
+        messages = [{"role": "user", "content": request_dict.pop("question")}]
+    elif "chat_history" in request_dict:
+        messages = request_dict.pop("chat_history")
+
+    model_parameters = request_dict.pop("model_parameters", {})
+    
+    async for content in stream_azure_response(
+        messages=messages,
+        model=model,
+        endpoint=endpoint,
+        api_key=external_api_key,
+        model_parameters=model_parameters,
+        organization_id=external_organization_id
+    ):
+        yield content
 
 def external_llm_generator(
     database : Session,
@@ -116,6 +178,17 @@ def external_llm_generator(
             request_dict,
             model,
             external_providers['OpenAI'],
+            **(additional_auth or {})
+        )
+    elif provider == "azure":
+        model_split = model.split("/")
+        assert len(model_split) == 2, "Invalid model format for azure call. Must be in the format `endpoint/model`"
+        endpoint_sub, model_sub = model_split[0], model_split[1]
+        return azure_llm_generator(
+            request_dict,
+            model=model_sub,
+            endpoint=endpoint_sub,
+            external_api_key=external_providers['Azure'],
             **(additional_auth or {})
         )
     else:

@@ -163,16 +163,38 @@
             "feed_mappings": [
                 {
                     "destination": "third_step",
+                    "condition": {
+                        "operator": "==",
+                        "variableOne": {
+                            "type": "getNodeOutput",
+                            "route": [ "output" ]
+                        },
+                        "variableTwo": {
+                            "type": "staticValue",
+                            "value": false
+                        }
+                    },
                     "sequence": [
                         {
                             "type": "createAction",
-                            "route" : [ "model_parameters" ]
+                            "route" : [ "sources" ]
                         }
                     ],
-                    "getFromInputs": { "route": [ "model_parameters" ] }
+                    "value": []
                 },
                 {
                     "destination": "search_hybrid",
+                    "condition": {
+                        "operator": "!=",
+                        "variableOne": {
+                            "type": "getNodeOutput",
+                            "route": [ "output" ]
+                        },
+                        "variableTwo": {
+                            "type": "staticValue",
+                            "value": false
+                        }
+                    },
                     "sequence": [
                         {
                             "type": "createAction",

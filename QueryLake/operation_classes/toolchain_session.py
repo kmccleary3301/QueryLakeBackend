@@ -430,8 +430,13 @@ class ToolchainSession():
         """
         
         if not feed_map.condition is None:
-            if not evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args):
-                return None, None
+            evaluation_result = evaluate_condition(condition=feed_map.condition, provided_object=init_value, **new_state_args)
+            self.log_event("EVALUATION RESULT", {
+                "condition_result": evaluation_result,
+                "condition": feed_map.condition,
+            })
+            if not evaluation_result:
+                return None
         
         node_argument_template = copy(node_argument_template)
         
@@ -607,6 +612,7 @@ class ToolchainSession():
             assert not (feed_map.store and feed_map.iterate), "Cannot iterate and store in the same feed map."
             assert not (feed_map.iterate and feed_map.destination in ["<<STATE>>", "<<USER>>"]), "Cannot iterate on state or user outputs."
             
+            
             if feed_map.iterate:
                 for e in init_value:
                     new_node_arguments_instance = await self.run_feed_map_on_toolchain(feed_map, 
@@ -615,6 +621,11 @@ class ToolchainSession():
                                                                                        new_state_args, 
                                                                                        feed_map_args, 
                                                                                        recursive_shallow_copy(node_argument_templates.get(feed_map.destination, {})))
+                    
+                    # if new_node_arguments_instance is None: # If the condition fails, we skip the iteration.
+                    #     self.log_event("CONDITION FAILED; SKIPPING")
+                    #     continue
+                    
                     self.log_event("CREATED INPUTS FROM ITERABLE", {
                         "value_pulled": e,
                         "inputs": new_node_arguments_instance,
@@ -630,19 +641,41 @@ class ToolchainSession():
                 _ = node_argument_templates.pop(feed_map.destination, None)
             else:
                 if feed_map.destination == "<<USER>>":
-                    user_return_arguments = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
+                    run_feed_map_results = \
+                        await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
+                    if run_feed_map_results is None:
+                        self.log_event("CONDITION FAILED, SKIPPING", {
+                            "node_target_id": feed_map.destination 
+                        })
+                        continue
+                    
+                    user_return_arguments = run_feed_map_results
+                
                 elif feed_map.destination in ["<<STATE>>", "<<FILES>>"]:
                     await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.state)
                 # elif feed_map.destination == "<<FILES>>":
                     # await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.fil)
                 else:
-                    node_argument_templates[feed_map.destination] = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
+                    run_feed_map_results = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
+                    if run_feed_map_results is None:
+                        self.log_event("CONDITION FAILED, SKIPPING", {
+                            "node_target_id": feed_map.destination 
+                        })
+                        continue
+                    
+                    node_argument_templates[feed_map.destination] = run_feed_map_results
+                    
                     self.log_event("CREATED INPUT SINGLE", {
                         "inputs": node_argument_templates[feed_map.destination],
                     })
         
         for node_target_id, node_target_args in node_argument_templates.items():
-            node_follow_up_firing_queue.append((node_target_id, node_target_args.copy()))
+            if node_target_args is None:
+                self.log_event("CONDITION FAILED, SKIPPING", {
+                  "node_target_id": node_target_id 
+                })
+                continue
+            node_follow_up_firing_queue.append((node_target_id, node_target_args.copy() if isinstance(node_target_args, dict) else deepcopy(node_target_args)))
         
         self.firing_queue[node.id] = False
 

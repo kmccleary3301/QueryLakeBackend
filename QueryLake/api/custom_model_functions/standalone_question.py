@@ -59,7 +59,7 @@ Statement
     # print("QUESTION CHECK RESULT:", question_check)
     
     if not 'YES' in question_check:
-        return False
+        return {"output": False}
     
     
     if len(chat_history) == 1:

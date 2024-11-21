@@ -393,8 +393,9 @@ class UmbrellaClass:
             })
             gen = external_llm_generator(self.database, 
                                          auth, 
-                                         *model_specified,
-                                         model_parameters)
+                                         provider=model_specified[0],
+                                         model="/".join(model_specified[1:]),
+                                         request_dict=model_parameters)
             input_token_count = -1
         else:
             model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
