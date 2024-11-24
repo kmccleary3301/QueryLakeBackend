@@ -217,15 +217,23 @@ class feedMappingAtomic(BaseModel):
     Output mapping from a node to a destination.
     
     Note: if using stream, you must initialize the value (list or str) first, usually via createAction.
+    
+    
+    
     """
     destination: str # Either a Node ID, "<<STATE>>", or "<<USER>>"
     sequence: Optional[List[sequenceAction]] = [] # This operates in the firing queue inputs if a node id is provided above.
-    route: Optional[staticRoute] = None # If not None, we simply store the given value at this route, and ignore the sequence.
+    
+    
+    # If not None, we simply store the given value at this route, and ignore the sequence.
+    # If None and `store` is False, we will fire the destination node with no inputs.
+    route: Optional[staticRoute] = None 
     
     
     # Streaming can take the form of continually appending to a value or setting a value.
     stream_type: Optional[Literal["append", "set"]] = "append"
     stream: Optional[bool] = False
+    
     # Initial stream value must be provided if stream is True and stream type is append. 
     # Pretty much always an empty string or list.
     stream_initial_value: Optional[Any] = None 
@@ -243,8 +251,10 @@ class feedMappingAtomic(BaseModel):
 # They all have different retrieval field names, so the logic is non-ambiguous and allows for flexibility in choices.
 
 class feedMappingOriginal(feedMappingAtomic):
-    # type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
-    getFrom: valueObj
+    # If this is None, then the feed mapping is a dry fire.
+    # This means the destination node will fire with no constructed inputs.
+    # Provided `store` is False, of course.
+    getFrom: Optional[valueObj] = None
 
 class feedMappingStaticValue(feedMappingAtomic):
     # type : Optional[Literal["indexRouteRetrieved"]] = "indexRouteRetrieved"
@@ -270,7 +280,7 @@ feedMapping = Union[
     feedMappingInputValue,
     feedMappingStateValue,
     feedMappingStaticValue,
-    feedMappingOriginal,
+    feedMappingOriginal
 ]
 
     
@@ -291,6 +301,7 @@ class nodeInputArgument(BaseModel):
     sequence: Optional[List[sequenceAction]] = []
     
     optional: Optional[bool] = False
+    default_value: Optional[Any] = None
  
 
 class chatWindowMapping(BaseModel):

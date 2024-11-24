@@ -73,6 +73,9 @@ def safe_serialize(obj, **kwargs) -> str:
     Serialize an object, but if an element is not serializable, return a string representation of said element.
     """
     def default_callable(o):
+        if isinstance(o, BaseModel):
+            return o.model_dump(exclude_defaults=True)
+        
         try:
             return o.dict()
         except:

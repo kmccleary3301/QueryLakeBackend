@@ -23,7 +23,7 @@ from typing import Callable, Any, List, Dict, Union, Awaitable
 from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
 from ..database.sql_db_tables import document_raw_backup, document_collection
-
+import traceback
 
 
 def convert_files_in_dict(input_dict : dict, 
@@ -310,6 +310,8 @@ class ToolchainSession():
                     "node_arguments": node_arguments
                 })
                 
+                
+                
                 assert (node_input_arg.key in node_arguments or node_input_arg.optional), \
                     f"Node argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
                 if node_input_arg.key in node_arguments:
@@ -317,6 +319,13 @@ class ToolchainSession():
                     self.log_event("FOUND NODE INPUT ARG", {
                         "value": node_inputs[node_input_arg.key]
                     })
+                elif not node_input_arg.default_value is None:
+                    node_inputs[node_input_arg.key] = node_input_arg.default_value
+                    self.log_event("SETTING INPUT ARG TO DEFAULT", {
+                        "value": node_inputs[node_input_arg.key],
+                        "default": node_input_arg.default_value
+                    })
+                
                 
         node_inputs.update(system_args)
         self.log_event("CREATED NODE INPUTS", {
@@ -329,6 +338,23 @@ class ToolchainSession():
     async def get_initial_feed_map_obj(self,
                                        feed_map : feedMapping,
                                        state_args: dict):
+        
+        """
+        Get the value we'll be using in memory.
+        This is typically used for constructing inputs via the feed map.
+        
+        For example, our initial object is obtained with `getFromNodeOutputs` at some route.
+        
+        Then, we can forward it to a new node by inserting it at some route.
+        """
+        
+        if isinstance(feed_map, feedMappingOriginal) and feed_map.getFrom is None:
+            self.log_event("GOT A DRY FEED MAP", {
+                "feed_map": feed_map
+            })
+            
+            return None
+        
         if hasattr(feed_map, "value") or "value" in feed_map:
             initial_value = feed_map.value
         else:
@@ -424,9 +450,11 @@ class ToolchainSession():
                                         init_value : Any,
                                         new_state_args : dict,
                                         feed_map_args : dict,
-                                        node_argument_template : dict) -> dict:
+                                        node_argument_template : dict) -> Tuple[dict, bool]:
         """
         Run a generic feed map on the toolchain states with the top level.
+        
+        Return the arguments.
         """
         
         if not feed_map.condition is None:
@@ -435,8 +463,10 @@ class ToolchainSession():
                 "condition_result": evaluation_result,
                 "condition": feed_map.condition,
             })
+            
+            
             if not evaluation_result:
-                return None
+                return None, False
         
         node_argument_template = copy(node_argument_template)
         
@@ -444,12 +474,12 @@ class ToolchainSession():
         if feed_map.destination == "<<USER>>":
             user_return_arguments, _ = await self.run_feed_map_on_object(target_object=node_argument_template, initial_value=init_value, **feed_map_args)
 
-            return user_return_arguments
+            return user_return_arguments, False
         # Feed to state case.
         elif feed_map.destination == "<<STATE>>":
             
             if feed_map.stream:
-                return None, None
+                return None, False
             
             self.state, _ = await self.run_feed_map_on_object(target_object=self.state, initial_value=init_value, **feed_map_args)
             
@@ -462,20 +492,27 @@ class ToolchainSession():
                 "toolchain_state": self.state,
             })
             
-            return None
+            return None, False
         
         elif feed_map.destination == "<<FILES>>":
             self.toolchain_session_files, _ = await self.run_feed_map_on_object(target_object=self.toolchain_session_files, initial_value=init_value, **feed_map_args)
-        
+            return None, False
+            
         else:
             # TODO: Revisit this later. I'm not clear on the logic and there is massive room for bugs here.
+            # Destination is a ToolChain node.
             
-            
-            if feed_map.store:
+            if feed_map.store: # store is true, so we don't intend to fire the node.
                 # Initialize firing queue args if they're not already used.
                 if self.firing_queue[feed_map.destination] is False and isinstance(self.firing_queue[feed_map.destination], bool):
                     self.firing_queue[feed_map.destination] = {}
                 self.firing_queue[feed_map.destination], _ = await self.run_feed_map_on_object(target_object=self.firing_queue[feed_map.destination], initial_value=init_value, **feed_map_args)
+                return node_argument_template, False
+            
+            # elif type(feed_map) is feedMappingAtomic:
+                
+            #     return node_argument_template, True
+            
             else:
                 
                 self.log_event("CONSTRUCT FEED MAP ON NODE OUTPUT", {
@@ -489,7 +526,7 @@ class ToolchainSession():
                     "result": node_argument_template,
                 })
             
-            return node_argument_template
+                return node_argument_template, True
     
     async def run_node(self,
                        database: Session,
@@ -600,6 +637,11 @@ class ToolchainSession():
             try:
                 init_value = await self.get_initial_feed_map_obj(feed_map, new_state_args)
             except Exception as e:
+                self.log_event("Failed to get initial feed map obj on feed map", {
+                    "feed_map": feed_map,
+                    "error": str(e),
+                    "trace": traceback.format_exc()
+                })
                 continue
             
             feed_map_args = {
@@ -641,7 +683,7 @@ class ToolchainSession():
                 _ = node_argument_templates.pop(feed_map.destination, None)
             else:
                 if feed_map.destination == "<<USER>>":
-                    run_feed_map_results = \
+                    run_feed_map_results, _ = \
                         await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, user_return_arguments)
                     if run_feed_map_results is None:
                         self.log_event("CONDITION FAILED, SKIPPING", {
@@ -655,9 +697,22 @@ class ToolchainSession():
                     await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.state)
                 # elif feed_map.destination == "<<FILES>>":
                     # await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, self.fil)
-                else:
-                    run_feed_map_results = await self.run_feed_map_on_toolchain(feed_map, node, init_value, new_state_args, feed_map_args, copy(node_argument_templates.get(feed_map.destination, {})))
-                    if run_feed_map_results is None:
+                
+                else: # Destination is a ToolChain Node
+                    self.log_event("Running Feed Map", {
+                        "feed_map": feed_map 
+                    })
+                    
+                    run_feed_map_results, fire_node = await self.run_feed_map_on_toolchain(
+                        feed_map, 
+                        node, 
+                        init_value, 
+                        new_state_args, 
+                        feed_map_args, 
+                        copy(node_argument_templates.get(feed_map.destination, {}))
+                    )
+                    
+                    if not fire_node:
                         self.log_event("CONDITION FAILED, SKIPPING", {
                             "node_target_id": feed_map.destination 
                         })
@@ -675,7 +730,7 @@ class ToolchainSession():
                   "node_target_id": node_target_id 
                 })
                 continue
-            node_follow_up_firing_queue.append((node_target_id, node_target_args.copy() if isinstance(node_target_args, dict) else deepcopy(node_target_args)))
+            node_follow_up_firing_queue.append((node_target_id, node_target_args.copy()))
         
         self.firing_queue[node.id] = False
 

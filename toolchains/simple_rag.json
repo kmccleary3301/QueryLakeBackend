@@ -173,14 +173,7 @@
                             "type": "staticValue",
                             "value": false
                         }
-                    },
-                    "sequence": [
-                        {
-                            "type": "createAction",
-                            "route" : [ "sources" ]
-                        }
-                    ],
-                    "value": []
+                    }
                 },
                 {
                     "destination": "search_hybrid",
@@ -265,7 +258,9 @@
                     "from_user": true
                 },
                 {
-                    "key": "sources"
+                    "key": "sources",
+                    "optional": true,
+                    "default_value": []
                 },
                 {
                     "key": "model",
