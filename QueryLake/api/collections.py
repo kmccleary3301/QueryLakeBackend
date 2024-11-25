@@ -183,22 +183,24 @@ def fetch_collection(database : Session,
         if collection.public == False:
             assert collection.author_user_name == user_auth.username, "User not authorized to view collection"
         
-        owner = "personal"
+        ret_args = {"owner": "personal"}
     elif collection.collection_type == "organization":
         user_membership = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization,
                                                                                           sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(user_membership) > 0 or collection.public == True, "User not authorized to view collection"
         author_org = database.exec(select(sql_db_tables.organization).where(sql_db_tables.organization.id == collection.author_organization)).first()
         assert not author_org is None, f"Author organization `{collection.author_organization}` not found"
-        owner = author_org.name
+        ret_args = {"owner": author_org.id, "owner_org_name": author_org.name}
     elif collection.collection_type == "global":
-        owner = "global"
+        ret_args = {"owner": "global"}
+    else:
+        raise Exception(f"Invalid collection type `{collection.collection_type}`")
 
     data = {
         "title" : collection.name,
         "description": collection.description,
         "type": collection.collection_type,
-        "owner": owner,
+        **ret_args,
         "public": collection.public,
         "document_count": collection.document_count
     }
@@ -503,11 +505,11 @@ def get_collection_document_password(
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == organization.id,
                                                                                     sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0, "User not authorized"
-
+        
         private_key_encryption_salt = user.private_key_encryption_salt
         user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
-        user_private_key = encryption.ecc_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
+        user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
 
         organization_private_key = encryption.ecc_decrypt_string(user_private_key, memberships[0].organization_private_key_secure)
         
