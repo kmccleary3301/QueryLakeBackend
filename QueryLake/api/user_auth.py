@@ -393,7 +393,7 @@ def get_user_external_providers_dict(
     """
     Get user external providers dictionary.
     """
-    print("Auth Type:", type(auth))
+    # print("Auth Type:", type(auth))
     
     (user, user_auth) = get_user(database, auth)
     

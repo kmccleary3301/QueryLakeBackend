@@ -245,29 +245,27 @@ def modify_document_collection(database : Session,
                                 auth : AuthType,
                                 collection_hash_id : str,
                                 title : str = None,
-                                description : str = None,
-                                collection_type : str = "user"):
+                                description : str = None):
     """
     Changes document collection properties for a user.
     
     TODO: Implement public/private switch.
     """
     
-    assert collection_type in ["user", "organization", "global"], "Invalid collection type"
     (user, user_auth) = get_user(database, auth)
 
     collection = database.exec(select(sql_db_tables.document_collection).where(and_(sql_db_tables.document_collection.id == collection_hash_id))).first()
     assert not collection is None, "Collection not found"
     
-    if collection_type == "user":
+    if collection.collection_type == "user":
         if collection.public == False:
             assert collection.author_user_name == user_auth.username, "User not authorized to modify collection"
-    elif collection_type == "organization":
+    elif collection.collection_type == "organization":
         memberships = database.exec(select(sql_db_tables.organization_membership).where(and_(sql_db_tables.organization_membership.organization_id == collection.author_organization,
                                                                                           sql_db_tables.organization_membership.user_name == user_auth.username))).all()
         assert len(memberships) > 0 or collection.public == True, "User not authorized to modify collection"
         assert len(memberships) > 0 and memberships[0].role in ["owner", "admin", "member"], "User not authorized to modify collection"
-    elif collection_type == "global":
+    elif collection.collection_type == "global":
         assert user.is_admin == True, "User not authorized to modify collection"
 
     if not title is None:

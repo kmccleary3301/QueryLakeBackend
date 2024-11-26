@@ -9,6 +9,7 @@ from .toolchains import *
 from .custom_model_functions.standalone_question import llm_isolate_question
 from .custom_model_functions.create_conversation_title import llm_make_conversation_title
 from .custom_model_functions.multi_search import llm_multistep_search
+from .custom_model_functions.self_guided_search import self_guided_search
 from .search import *
 from .usage_tracking import *
 # from .patho_report_stager import *

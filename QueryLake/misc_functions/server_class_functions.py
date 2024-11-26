@@ -4,9 +4,7 @@ import json, inspect
 from pydantic import BaseModel
 from ..typing.function_calling import FunctionCallDefinition
 from ..typing.config import Model
-from ..api.usage_tracking import increment_usage_tally
 from copy import deepcopy
-from .function_run_clean import get_function_call_preview
 import re
 
 # function_call_description_template = """
@@ -49,12 +47,10 @@ Here are your available functions:
 
 def find_function_calls(text_in: str):
     # pattern = r"\`\`\`FUNCTION\_CALL\n([\s\S]*?)\`\`\`"
-    
-    pattern = r"\&\& \> ([^\&]*) \&\&"
+    pattern = r"\&\&[^\S\r\n]*\>[^\S\r\n]*(.*?)[^\S\r\n]*\&\&"
     function_calls = []
     for match in re.finditer(pattern, text_in):
         call = match.group(1)
-        print(call)
         
         call = [e for e in call.split("\n") if e.strip() != ""][0]
         arguments = {}

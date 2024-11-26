@@ -190,22 +190,23 @@ def group_adjacent_chunks(chunks: List[DocumentChunkDictionary]) -> List[Documen
     return new_results
           
 
-async def search_hybrid(database: Session,
-                        toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-                        auth : AuthType,
-                        query: Union[str, dict[str, str]],
-                        embedding: List[float] = None,
-                        collection_ids: List[str] = [],
-                        limit_bm25: int = 10,
-                        limit_similarity: int = 10,
-                        similarity_weight: float = 0.1,
-                        bm25_weight: float = 0.9,
-                        return_statement : bool = False,
-                        web_search : bool = False,
-                        rerank : bool = False,
-                        group_chunks : bool = True,
-                        sources_in_object : bool = False,
-                        ) -> List[DocumentChunkDictionary]:
+async def search_hybrid(
+    database: Session,
+    toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
+    auth : AuthType,
+    query: Union[str, dict[str, str]],
+    embedding: List[float] = None,
+    collection_ids: List[str] = [],
+    limit_bm25: int = 10,
+    limit_similarity: int = 10,
+    similarity_weight: float = 0.1,
+    bm25_weight: float = 0.9,
+    return_statement : bool = False,
+    web_search : bool = False,
+    rerank : bool = False,
+    group_chunks : bool = True,
+    sources_in_object : bool = False,
+) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
     
     (_, _) = get_user(database, auth)
@@ -252,7 +253,7 @@ async def search_hybrid(database: Session,
     
     formatted_query, strong_where_clause = parse_search(query["bm25"], CHUNK_INDEXED_COLUMNS, catch_all_fields=["text"])
     
-    print("Formatted query:", formatted_query)
+    # print("Formatted query:", formatted_query)
     
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}"""
     collection_spec_new = f"""collection_id IN ({str(collection_ids)[1:-1]})"""
@@ -340,19 +341,20 @@ async def search_hybrid(database: Session,
         database.rollback()
         raise e
 
-def search_bm25(database: Session,
-                auth : AuthType,
-                query: str,
-                collection_ids: List[str] = [],
-                limit: int = 10,
-                offset: int = 0,
-                web_search : bool = False,
-                return_statement : bool = False,
-                group_chunks : bool = True,
-                table : Literal["document_chunk", "document"] = "document_chunk",
-                sort_by: str = "score",
-                sort_dir: Literal["DESC", "ASC"] = "DESC",
-                ) -> List[DocumentChunkDictionary]:
+def search_bm25(
+    database: Session,
+    auth : AuthType,
+    query: str,
+    collection_ids: List[str] = [],
+    limit: int = 10,
+    offset: int = 0,
+    web_search : bool = False,
+    return_statement : bool = False,
+    group_chunks : bool = True,
+    table : Literal["document_chunk", "document"] = "document_chunk",
+    sort_by: str = "score",
+    sort_dir: Literal["DESC", "ASC"] = "DESC",
+) -> List[DocumentChunkDictionary]:
     
     (_, _) = get_user(database, auth)
     
@@ -392,7 +394,7 @@ def search_bm25(database: Session,
     
     formatted_query, strong_where_clause = parse_search(query, valid_fields, catch_all_fields=chosen_catch_alls)
     
-    print("Formatted query:", formatted_query)
+    # print("Formatted query:", formatted_query)
     collection_spec = f"""collection_id:IN {str(collection_ids).replace("'", "")}""" if (table == "document_chunk") else \
             " OR ".join([
                     f"""({collection_attr}:IN {str(collection_ids).replace("'", "")})"""

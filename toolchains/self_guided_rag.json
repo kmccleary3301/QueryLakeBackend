@@ -1,0 +1,394 @@
+{
+	"name": "Self Guided RAG",
+    "id": "self_guided_rag",
+    "category": "RAG Tests",
+    "first_event_follow_up": "make_conversation_title",
+    "display_configuration": {
+        "split": "none",
+        "size": 100,
+        "align": "center",
+        "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8 pt-4",
+        "mappings": [
+            {
+                "display_route": [
+                    "chat_history"
+                ],
+                "display_as": "chat"
+            },
+            {
+                "display_route": [],
+                "display_as": "current-event-display"
+            }
+        ],
+        "footer": {
+            "align": "justify",
+            "tailwind": "pb-2",
+            "mappings": [
+                {
+                    "type": "div",
+                    "align": "center",
+                    "tailwind": "min-w-[20px] min-h-[20px]",
+                    "mappings": [
+                        {
+                            "display_as": "chat-input",
+                            "hooks": [
+                                {
+                                    "hook": "on_submit",
+                                    "target_event": "user_question_event",
+                                    "fire_index": 1,
+                                    "target_route": "question",
+                                    "store": false
+                                },
+                                {
+                                    "hook": "selected_collections",
+                                    "target_event": "user_question_event",
+                                    "fire_index": 1,
+                                    "target_route": "collection_ids",
+                                    "store": false
+                                }
+                            ],
+                            "config": [
+                                {
+                                    "name": "test_7_long_string",
+                                    "value": "6ix"
+                                }
+                            ],
+                            "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw]"
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "initial_state": {
+        "title": "New Chat",
+        "chat_history": []
+    },
+    "nodes": [
+        {
+            "id": "user_question_event",
+            "input_arguments": [
+                {
+                    "key": "model_parameters",
+                    "from_user": true,
+                    "optional": true
+                },
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "question",
+                    "from_user": true
+                },
+                {
+                    "key": "collection_ids",
+                    "from_user": true,
+                    "optional": true
+                },
+                {
+                    "key": "search_web",
+                    "from_user": true,
+                    "optional": true
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "appendAction", 
+                            "initialValue": {
+                                "type": "staticValue",
+                                "value": {
+                                    "role": "user"         
+                                }
+                            },
+                            "insertion_values": [ null ],
+                            "insertions": [ [ "content" ] ],
+                            "route" : [ "chat_history" ]
+                        }
+                    ],
+                    "getFromInputs": {
+                        "route": [ "question" ]
+                    }
+                },
+                {
+                    "destination": "make_search_question",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "auth" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "auth" ] }
+                }
+            ]
+        },
+        {
+            "id": "make_search_question",
+            "api_function": "llm_isolate_question",
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "simple_llm_call",
+                    "condition": {
+                        "operator": "==",
+                        "variableOne": {
+                            "type": "getNodeOutput",
+                            "route": [ "output" ]
+                        },
+                        "variableTwo": {
+                            "type": "staticValue",
+                            "value": false
+                        }
+                    }
+                },
+                {
+                    "destination": "self_guided_search_llm_call",
+                    "condition": {
+                        "operator": "!=",
+                        "variableOne": {
+                            "type": "getNodeOutput",
+                            "route": [ "output" ]
+                        },
+                        "variableTwo": {
+                            "type": "staticValue",
+                            "value": false
+                        }
+                    },
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "question" ]
+                        }
+                    ],
+                    "getFromOutputs": { "route": [ "output" ] }
+                }
+            ]
+        },
+        {
+            "id": "search_hybrid",
+            "api_function": "search_hybrid",
+            "input_arguments": [
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "collection_ids",
+                    "from_user": true
+                },
+                {
+                    "key": "sources_in_object",
+                    "value": true
+                },
+                {
+                    "key": "group_chunks",
+                    "value": false
+                },
+                {
+                    "key": "query"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "simple_llm_call",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "auth" ]
+                        }
+                    ],
+                    "getFromInputs": { "route": [ "auth" ] }
+                },
+                {
+                    "destination": "simple_llm_call",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "sources" ]
+                        }
+                    ],
+                    "getFromOutputs": { "route": [ "sources" ] }
+                }
+            ]
+        },
+        {
+            "id": "simple_llm_call",
+            "api_function": "llm",
+            "input_arguments": [
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "sources",
+                    "optional": true,
+                    "default_value": []
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                },
+                {
+                    "key": "model_parameters",
+                    "from_user": true,
+                    "optional": true
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<USER>>",
+                    "sequence": [
+                        {
+                            "type": "createAction", 
+                            "route" : [ "output" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route" : [ "output" ]
+                    }
+                },
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "appendAction", 
+                            "initialValue": {
+                                "type": "staticValue",
+                                "value": {
+                                    "role": "assistant"           
+                                }
+                            },
+                            "insertion_values": [ null, {"type": "getNodeInput", "route": ["sources"]} ],
+                            "insertions": [ [ "content" ], [ "sources" ] ],
+                            "route" : [ "chat_history" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "output" ]
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
+                }
+            ]
+        },
+        {
+            "id": "self_guided_search_llm_call",
+            "api_function": "self_guided_search",
+            "input_arguments": [
+                {
+                    "key": "question"
+                },
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "collection_ids",
+                    "from_user": true
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "appendAction", 
+                            "initialValue": {
+                                "type": "staticValue",
+                                "value": {
+                                    "role": "assistant"           
+                                }
+                            },
+                            "insertion_values": [ null ],
+                            "insertions": [ [ "content" ] ],
+                            "route" : [ "chat_history" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "output" ]
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
+                },
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "chat_history", -1, "sources" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "sources" ]
+                    }
+                }
+            ]
+        },
+        {
+            "id": "make_conversation_title",
+            "api_function": "llm_make_conversation_title",
+            "input_arguments": [
+                {
+                    "key": "toolchain_function_caller",
+                    "from_server": true
+                },
+                {
+                    "key": "global_config",
+                    "from_server": true
+                },
+                {
+                    "key": "auth",
+                    "from_user": true
+                },
+                {
+                    "key": "chat_history",
+                    "from_state": { "route": [ "chat_history" ] }
+                },
+                {
+                    "key": "model",
+                    "value": "openai/gpt-4o-mini"
+                }
+            ],
+            "feed_mappings": [
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "title" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "output" ]
+                    },
+                    "stream": true,
+                    "stream_initial_value": ""
+                }
+            ]
+        }
+    ]
+}

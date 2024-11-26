@@ -60,7 +60,6 @@ def aes_encrypt_string(key : str, input_string : str, encoding : str = "utf-8") 
     Encrypts input string using any input key string.
     Data is returned as a hex string.
     """
-    print("Encrypting with key:", key)
     # key = bytes.fromhex(hash_function(key))
     key = bytes("abcdef0123456789", encoding="utf-8")
     nonce = get_random_hash()
@@ -79,7 +78,6 @@ def aes_decrypt_string(key : str, encrypted_hex_string : str, encoding : str = "
     obj = AES.new(key, AES.MODE_EAX, bytes.fromhex(nonce))
     ciphertext = obj.decrypt(bytes.fromhex(encrypted_hex_string))
     result = ciphertext.decode(encoding=encoding)
-    print(result, type(result))
     return result
 
 def zip_test(key : str):

@@ -171,7 +171,7 @@ def external_llm_generator(
     
     external_providers = get_user_external_providers_dict(database, auth)
     
-    print("Ext LLM 2 external_providers:", external_providers)
+    # print("Ext LLM 2 external_providers:", external_providers)
     
     if provider == "openai":
         return openai_llm_generator(

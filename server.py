@@ -371,10 +371,8 @@ class UmbrellaClass:
         
         if not model is None:
             model_choice = model
-            print("Poppend model choice from `model`:", model_choice)
         else:
             model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
-            print("Poppend model choice from `model_parameters/model`:", model_choice)
         
         model_specified = model_choice.split("/")
         return_stream_response = model_parameters.pop("stream", False)
@@ -418,7 +416,7 @@ class UmbrellaClass:
             gen : DeploymentResponseGenerator = (
                 llm_handle.get_result_loop.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
             )
-            print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
+            # print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
             
             if self.llm_configs[model_choice].engine == "exllamav2":
                 async for result in gen:
