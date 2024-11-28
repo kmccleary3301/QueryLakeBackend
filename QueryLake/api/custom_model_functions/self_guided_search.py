@@ -276,7 +276,14 @@ async def self_guided_search(
             demo_sequence.append(response)
 
         if responses >= max_responses:
-            return {"chat_history": chat_history_1, "output": "Model ran out of responses.", "responses": responses, "time_taken": time.time() - start_time, "sources": [], "answer_found": answer_found}
+            return {
+                "chat_history": chat_history_1, 
+                "output": "Model ran out of responses.", 
+                "responses": responses, 
+                "time_taken": time.time() - start_time, 
+                "sources": [], 
+                "answer_found": answer_found
+            }
 
 
     # print("RETURNING DEMO SEQUENCE WITH LENGTH", len(demo_sequence))

@@ -6,8 +6,8 @@ import torch
 import sys
 import pickle
 import ray
+from io import BytesIO
 from ray import cloudpickle
-
 from texify.model.model import load_model as load_texify_model
 from texify.model.processor import load_processor as load_texify_processor
 
@@ -30,6 +30,7 @@ from marker.equations.equations import replace_equations
 from marker.ocr.recognition import run_ocr
 from marker.tables.table import format_tables
 from pypdfium2 import PdfDocument
+import base64
 
 class SuryaTexifyDeployment:
     def __init__(self, model_card: LocalModel):
@@ -43,22 +44,29 @@ class SuryaTexifyDeployment:
         print("DONE INITIALIZING SURYA TEXIFY DEPLOYMENT")
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pickled_args_list):
-        # Unpickle input arguments using ray.cloudpickle
-        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+    async def handle_batch(
+        self,
+        doc: List[PdfDocument], 
+        pages: List[List[Page]]
+    ):
         results = []
-        for args in args_list:
-            # Unpack ObjectRefs and retrieve actual data
-            doc_ref, pages_ref, batch_multiplier = args
-            doc = ray.get(doc_ref)
-            pages = ray.get(pages_ref)
+        for i in range(len(doc)):
+            doc_local = doc[i]
+            pages_local = pages[i]
             with torch.no_grad():
-                result = replace_equations(doc, pages, self.model, batch_multiplier=batch_multiplier)
+                result = replace_equations(doc_local, pages_local, self.model, batch_multiplier=1)
             results.append(result)
         return results
 
-    async def run(self, doc: PdfDocument, pages: List[Page], batch_multiplier: int = 1) -> Tuple[List[Dict], Dict]:
-        return await self.handle_batch(doc, pages, batch_multiplier)
+    async def run(self, doc: bytes, pages: List[Page]) -> Tuple[List[Dict], Dict]:
+        doc_wrapped = PdfDocument(doc)
+        result = await self.handle_batch(doc_wrapped, pages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 class SuryaLayoutDeployment:
     def __init__(self, model_card: LocalModel):
@@ -72,19 +80,33 @@ class SuryaLayoutDeployment:
         print("DONE INITIALIZING SURYA LAYOUT DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pickled_args_list):
-        # Unpickle input arguments using ray.cloudpickle
-        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
-        for args in args_list:
-            images_ref, pages_ref, batch_multiplier = args
-            images = ray.get(images_ref)
-            pages = ray.get(pages_ref)
+    async def handle_batch(
+        self,
+        images: List[List[Image.Image]], 
+        pages: List[List[Page]]
+    ):
+        results = []
+        for i in range(len(images)):
+            images_local = images[i]
+            images_local = [Image.open(BytesIO(image)) for image in images_local]
+            pages_local = pages[i]
             with torch.no_grad():
-                surya_layout(images, pages, self.model, batch_multiplier=batch_multiplier)
-                annotate_block_types(pages)
+                surya_layout(images_local, pages_local, self.model, batch_multiplier=1)
+                annotate_block_types(pages_local)
+                results.append({
+                    "pages": pages_local,
+                    "images": images_local
+                })
+        return results
 
-    async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        await self.handle_batch(images, pages, batch_multiplier)
+    async def run(self, images: List[Image.Image], pages: List[Page]):
+        result = await self.handle_batch(images, pages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 class SuryaDetectionDeployment:
     def __init__(self, model_card: LocalModel):
@@ -98,25 +120,51 @@ class SuryaDetectionDeployment:
         print("DONE INITIALIZING SURYA DETECTION DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pickled_args_list):
-        # Unpickle input arguments using ray.cloudpickle
-        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
-        for args in args_list:
-            images_ref, pages_ref, batch_multiplier = args
-            images = ray.get(images_ref)
-            pages = ray.get(pages_ref)
+    async def handle_batch(self, images : List[List[bytes]], pages : List[List[Page]]):
+        
+        
+        results = []
+        
+        for i in range(0, len(images)):
+            # images_ref, pages_ref, batch_multiplier = args
+            batch_multiplier = 1
+            # images = ray.get(images[i])
+            # pages = ray.get(pages[i])
+            images_local = images[i]
+            images_local = [Image.open(BytesIO(image)) for image in images_local]
+            pages_local = pages[i]
             with torch.no_grad():
                 predictions = batch_text_detection(
-                    images, 
+                    images_local,
                     self.model, 
                     self.processor, 
                     batch_size=int(get_batch_size() * batch_multiplier)
                 )
-                for page, pred in zip(pages, predictions):
+                for page, pred in zip(pages_local, predictions):
                     page.text_lines = pred
+                
+                
+                local_result = {
+                    "pages": pages_local,
+                    "images": images_local
+                }
+                
+                results.append(local_result)
+                
+        return results
 
-    async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        await self.handle_batch(images, pages, batch_multiplier)
+    async def run(self, images: List[Image.Image], pages: List[Page]):
+        print("RUNNING SURYA DETECTION WITH")
+        print(f"Images: {len(images)}", type(images[0]))
+        print(f"Pages: {len(images)}", type(pages[0]))
+        
+        result = await self.handle_batch(images, pages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 class SuryaRecognitionDeployment:
     def __init__(self, model_card: LocalModel):
@@ -130,21 +178,41 @@ class SuryaRecognitionDeployment:
         print("DONE INITIALIZING SURYA RECOGNITION DEPLOYMENT")
 
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pickled_args_list):
-        # Unpickle input arguments using ray.cloudpickle
-        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
+    async def handle_batch(
+        self, 
+        doc: List[PdfDocument], 
+        pages: List[List[Page]], 
+        langs: List[List[str]],
+        ocr_all_pages: List[bool]
+    ):
         results = []
-        for args in args_list:
-            doc_ref, pages_ref, langs, batch_multiplier, ocr_all_pages = args
-            doc = ray.get(doc_ref)
-            pages = ray.get(pages_ref)
+        for i in range(len(doc)):
+            doc_local = doc[i]
+            pages_local = pages[i]
+            langs_local = langs[i]
+            ocr_all_pages_local = ocr_all_pages[i]
             with torch.no_grad():
-                result = run_ocr(doc, pages, langs, self.model, batch_multiplier=batch_multiplier, ocr_all_pages=ocr_all_pages)
+                result = run_ocr(
+                    doc_local, 
+                    pages_local, 
+                    langs_local, 
+                    self.model, 
+                    batch_multiplier=1, 
+                    ocr_all_pages=ocr_all_pages_local
+                )
             results.append(result)
         return results
 
-    async def run(self, doc: PdfDocument, pages: List[Page], langs: List[str], batch_multiplier: int = 1, ocr_all_pages: bool = False):
-        return await self.handle_batch(doc, pages, langs, batch_multiplier, ocr_all_pages)
+    async def run(self, doc: bytes, pages: List[Page], langs: List[str], ocr_all_pages: bool = False):
+        doc_wrapped = PdfDocument(doc)
+        result = await self.handle_batch(doc_wrapped, pages, langs, ocr_all_pages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
+        
 
 class SuryaOrderingDeployment:
     def __init__(self, model_card: LocalModel):
@@ -158,21 +226,35 @@ class SuryaOrderingDeployment:
         print("DONE INITIALIZING SURYA ORDERING DEPLOYMENT")
 
     @serve.batch(max_batch_size=4, batch_wait_timeout_s=0.1)
-    async def handle_batch(self, pickled_args_list):
-        # Unpickle input arguments using ray.cloudpickle
-        args_list = [cloudpickle.loads(args) for args in pickled_args_list]
-        for args in args_list:
-            images_ref, pages_ref, batch_multiplier = args
-            images = ray.get(images_ref)
-            pages = ray.get(pages_ref)
+    async def handle_batch(
+        self,
+        images: List[List[Image.Image]], 
+        pages: List[List[Page]]
+    ):
+        results = []
+        for i in range(len(images)):
+            images_local = images[i]
+            images_local = [Image.open(BytesIO(image)) for image in images_local]
+            pages_local = pages[i]
             with torch.no_grad():
-                surya_order(images, pages, self.model, batch_multiplier=batch_multiplier)
-                sort_blocks_in_reading_order(pages)
-
-    async def run(self, images: List[Image.Image], pages: List[Page], batch_multiplier: int = 1):
-        await self.handle_batch(images, pages, batch_multiplier)
+                surya_order(images_local, pages_local, self.model, batch_multiplier=1)
+                sort_blocks_in_reading_order(pages_local)
+            results.append(pages_local)
+        return results
+        
+    async def run(self, images: List[Image.Image], pages: List[Page]):
+        result = await self.handle_batch(images, pages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 class SuryaTableRecognitionDeployment:
+    
+    # TODO: this won't work due to the `format_tables` function requiring multiple models
+    
     def __init__(self, model_card: LocalModel):
         print("INITIALIZING SURYA TABLE RECOGNITION DEPLOYMENT")
         surya_settings_module = sys.modules['surya.settings']

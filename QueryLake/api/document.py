@@ -3,6 +3,7 @@ from typing import List, Callable, Awaitable, Dict, Any, Union, Literal, Tuple, 
 import os, sys
 import re
 from fastapi import UploadFile
+import ray.cloudpickle
 from ..database import sql_db_tables
 from sqlmodel import Session, select, and_, delete, update, func
 import time
@@ -39,6 +40,9 @@ from marker.cleaners.text import cleanup_text
 from marker.images.save import images_to_dict
 from marker.pdf.images import render_image
 from marker.settings import settings
+from marker.pdf.extract_text import get_text_blocks
+
+import base64
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -905,7 +909,8 @@ async def process_pdf_with_surya(
     database: Session,
     auth: AuthType,
     server_surya_handles: Dict[str, Any],
-    file: BytesIO,
+    file: BytesIO = None,
+    document_id: str = None,
     max_pages: int = None,
     start_page: int = None,
     metadata: Optional[Dict] = None,
@@ -932,8 +937,26 @@ async def process_pdf_with_surya(
     """
     _, _ = get_user(database, auth)
     
+    assert any([file, document_id]), "Must provide either file or document_id"
+    
     # Ensure file is a BytesIO object
-    assert isinstance(file, BytesIO), "File must be a BytesIO object"
+    if not file is None:
+        assert isinstance(file, BytesIO), "File must be a BytesIO object"
+    else:
+        fetch_parameters = get_document_secure(
+            database=database,
+            auth=auth,
+            hash_id=document_id,
+        )
+        
+        password = fetch_parameters["password"]
+
+        file = aes_decrypt_zip_file(
+            database, 
+            password,
+            fetch_parameters["hash_id"]
+        )
+    
     file.seek(0)
     file_bytes = file.getvalue()
     file_name = getattr(file, 'name', 'document.pdf')
@@ -955,17 +978,23 @@ async def process_pdf_with_surya(
     }
 
     if filetype == 'other':
-        return "", {}, out_meta
-
+        return {
+            "full_text": "",
+            "images": {},
+            "metadata": out_meta
+        }
+    
     # Load PDF document
     doc = PdfDocument(file_bytes)
 
     # Get initial text blocks from the PDF using Ray deployment
-    get_text_blocks_handle = server_surya_handles['get_text_blocks']
-    pages_toc_ref = await get_text_blocks_handle.run.remote(
-        doc, file_bytes, max_pages=max_pages, start_page=start_page
+    # get_text_blocks_handle = server_surya_handles['get_text_blocks']
+    pages, toc = get_text_blocks(
+        doc,
+        file_bytes, 
+        max_pages=max_pages, 
+        start_page=start_page
     )
-    pages, toc = await pages_toc_ref
     out_meta.update({
         "pdf_toc": toc,
         "pages": len(pages),
@@ -980,9 +1009,9 @@ async def process_pdf_with_surya(
 
     # Render images from PDF pages
     lowres_images = [render_image(doc[pnum], dpi=settings.SURYA_DETECTOR_DPI) for pnum in range(max_len)]
-
+    
     # Convert images to bytes to pass between Ray deployments
-    image_bytes_list = []
+    image_bytes_list : List[bytes] = []
     for image in lowres_images:
         buf = BytesIO()
         image.save(buf, format='PNG')
@@ -990,44 +1019,73 @@ async def process_pdf_with_surya(
 
     # Serialize data for Ray deployments
     pages_ref = ray.put(pages)
-    doc_ref = ray.put(doc)
+    # doc_ref = ray.put(doc) # Cannot pickle the PdfDocument object because it has C pointers
     file_bytes_ref = ray.put(file_bytes)
 
     # Surya detection
-    detection_handle = server_surya_handles['detection']
-    await detection_handle.run.remote(
-        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    detection_handle = server_surya_handles['Surya Detection']
+    
+    detection_results = await detection_handle.run.remote(
+        images=image_bytes_list, pages=pages_ref
     )
+    
+    detection_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(detection_results))))
+    
+    # print("Detection results:", detection_results)
+    
+    lowres_images = detection_results["images"]
+    pages = detection_results["pages"]
 
     # OCR pages as needed
-    recognition_handle = server_surya_handles['recognition']
-    ocr_result_ref = await recognition_handle.run.remote(
-        doc_ref, pages_ref, langs, batch_multiplier=batch_multiplier, ocr_all_pages=ocr_all_pages
+    recognition_handle = server_surya_handles['Surya Recognition']
+    
+    del pages_ref
+    pages_ref = ray.put(pages)
+    
+    ocr_results = await recognition_handle.run.remote(
+        file_bytes_ref, pages_ref, langs, ocr_all_pages=ocr_all_pages
     )
-    pages, ocr_stats = await ocr_result_ref
+    ocr_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(ocr_results))))
+    
+    pages, ocr_stats = tuple(ocr_results)
     out_meta["ocr_stats"] = ocr_stats
 
     if len([b for p in pages for b in p.blocks]) == 0:
         return "", {}, out_meta
 
     # Surya layout
-    layout_handle = server_surya_handles['layout']
-    await layout_handle.run.remote(
-        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    layout_handle = server_surya_handles['Surya Layout']
+    
+    del pages_ref
+    pages_ref = ray.put(pages)
+    
+    layout_results = await layout_handle.run.remote(
+        image_bytes_list, pages_ref
     )
-
+    layout_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(layout_results))))
+    pages = layout_results["pages"]
+    
+    
     # Surya ordering
-    ordering_handle = server_surya_handles['ordering']
-    await ordering_handle.run.remote(
-        image_bytes_list, pages_ref, batch_multiplier=batch_multiplier
+    ordering_handle = server_surya_handles['Surya Ordering']
+    
+    del pages_ref
+    pages_ref = ray.put(pages)
+    
+    ordering_results = await ordering_handle.run.remote(
+        image_bytes_list, pages_ref
     )
+    ordering_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(ordering_results))))
+    pages = ordering_results
 
     # Replace equations
-    texify_handle = server_surya_handles['texify']
-    eq_result_ref = await texify_handle.run.remote(
-        doc_ref, pages_ref, batch_multiplier=batch_multiplier
+    texify_handle = server_surya_handles['Surya Texify']
+    eq_results = await texify_handle.run.remote(
+        file_bytes_ref, pages_ref
     )
-    filtered, eq_stats = await eq_result_ref
+    
+    eq_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(eq_results))))
+    filtered, eq_stats = eq_results
     out_meta["block_stats"] = {"equations": eq_stats}
 
     # Merge spans, lines, and get the full text
