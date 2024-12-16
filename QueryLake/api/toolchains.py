@@ -435,3 +435,40 @@ async def get_toolchain_output_file_response(database : Session,
     
     
     return StreamingResponse(BytesIO(file_bytes), media_type="application/octet-stream", headers=headers)
+
+def delete_toolchain_session(database: Session,
+                            auth: AuthType,
+                            session_id: str) -> dict:
+    """
+    Delete a toolchain session and its associated document collection.
+    Returns success status and message.
+    """
+    user_retrieved: getUserType = get_user(database, auth)
+    (user, user_auth) = user_retrieved
+    
+    # Get session and verify ownership
+    session_db_entry = database.exec(
+        select(sql_db_tables.toolchain_session)
+        .where(sql_db_tables.toolchain_session.id == session_id)
+    ).first()
+    
+    if session_db_entry is None:
+        return {"success": False, "message": "Session not found"}
+    
+    if session_db_entry.author != user_auth.username:
+        return {"success": False, "message": "User not authorized"}
+    
+    # Delete associated document collection
+    doc_collection = database.exec(
+        select(sql_db_tables.document_collection)
+        .where(sql_db_tables.document_collection.toolchain_session_id == session_id)
+    ).first()
+    
+    if doc_collection:
+        database.delete(doc_collection)
+    
+    # Delete session
+    database.delete(session_db_entry)
+    database.commit()
+    
+    return {"success": True, "message": "Session deleted successfully"}

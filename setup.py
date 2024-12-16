@@ -314,13 +314,23 @@ def main():
             CURRENT_CONFIG.other_local_models.surya_models
         
         for i, model_snap in enumerate(model_snaps):
-            if model_snap.source in models_downloaded:
+            if str(model_snap.source) in models_downloaded:
                 continue
-            models_downloaded.add(model_snap.source)
-            print(f"\n{Fore.GREEN}Downloading model [{Fore.RED}{i+1}/{len(model_snaps)}{Fore.GREEN}] {Fore.BLUE}{model_snap.source}")
-            folder = huggingface_hub.snapshot_download(model_snap.source, cache_dir="models")
-            folder = os.path.join(SERVER_DIR, folder)
-            model_snap.system_path = folder
+            
+            sources = [("", model_snap.source)] if isinstance(model_snap.source, str) else list(model_snap.source.items())
+            
+            
+            for source_i, (source_key, source) in enumerate(sources):
+                models_downloaded.add(str(source))
+                print(f"\n{Fore.GREEN}Downloading model [{Fore.RED}{i+1}.{source_i+1}/{len(model_snaps)}{Fore.GREEN}] {Fore.BLUE}{source}")
+                folder = huggingface_hub.snapshot_download(source, cache_dir="models")
+                folder = os.path.join(SERVER_DIR, folder)
+                if isinstance(model_snap.source, str):
+                    model_snap.system_path = folder
+                else:
+                    if model_snap.system_path is None:
+                        model_snap.system_path = {}
+                    model_snap.system_path[source_key] = folder
             # print("Model saved to", folder)
         
         with open("config.json", 'w') as f:

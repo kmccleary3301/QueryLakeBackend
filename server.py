@@ -66,14 +66,10 @@ from asyncio import gather
 from pynvml import nvmlInit, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
 
 from QueryLake.operation_classes.ray_surya_class import (
-    SuryaTexifyDeployment, SuryaLayoutDeployment, SuryaDetectionDeployment,
-    SuryaRecognitionDeployment, SuryaOrderingDeployment, SuryaTableRecognitionDeployment
+    MarkerDeployment
 )
 
 from io import BytesIO
-from marker.pdf.images import render_image
-from marker.settings import settings
-from marker.ocr.lang import replace_langs_with_codes, validate_langs
 
 origins = [
     "http://localhost:3001",
@@ -999,12 +995,7 @@ if GLOBAL_CONFIG.enabled_model_classes.rerank:
 surya_handles = {}
 if GLOBAL_CONFIG.enabled_model_classes.surya:
     surya_model_map = {
-        "texify": SuryaTexifyDeployment,
-        "surya_layout4": SuryaLayoutDeployment,
-        "surya_det3": SuryaDetectionDeployment, 
-        "surya_rec2": SuryaRecognitionDeployment,
-        "surya_order": SuryaOrderingDeployment,
-        "surya_tablerec": SuryaTableRecognitionDeployment
+        "marker": MarkerDeployment,
     }
     
     for surya_model in GLOBAL_CONFIG.other_local_models.surya_models:
@@ -1026,6 +1017,7 @@ if GLOBAL_CONFIG.enabled_model_classes.surya:
         surya_handles[surya_model.name] = deployment_class.bind(
             model_card=surya_model
         )
+
 
 deployment = UmbrellaClass.bind(
     configuration=GLOBAL_CONFIG,

@@ -12,6 +12,7 @@ from .custom_model_functions.multi_search import llm_multistep_search
 from .custom_model_functions.self_guided_search import self_guided_search
 from .search import *
 from .usage_tracking import *
+from .custom_model_functions.surya import process_pdf_with_surya
 # from .patho_report_stager import *
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])

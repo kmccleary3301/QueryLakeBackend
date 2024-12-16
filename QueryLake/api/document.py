@@ -28,21 +28,7 @@ import asyncio
 import bisect
 import concurrent.futures
 from .collections import assert_collections_priviledge, get_collection_document_password
-from PIL import Image
-import ray
-from pypdfium2 import PdfDocument
 
-from marker.ocr.lang import replace_langs_with_codes, validate_langs
-from marker.cleaners.headers import filter_common_titles
-from marker.cleaners.bullets import replace_bullets
-from marker.postprocessors.markdown import merge_spans, merge_lines, get_full_text
-from marker.cleaners.text import cleanup_text
-from marker.images.save import images_to_dict
-from marker.pdf.images import render_image
-from marker.settings import settings
-from marker.pdf.extract_text import get_text_blocks
-
-import base64
 
 async def upload_document(database : Session,
                           toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
@@ -445,9 +431,16 @@ async def update_documents(database : Session,
     If uploading a zip/7zip file, the file must be named `metadata.jsonl`.
     Each entry must match the following scheme:
     ```python
+    # This is your input data
+    class MainArgument(BaseModel):
         document_id: str
+        text: Optional[Union[str, List[TextChunks]]] = None
+        metadata: Optional[Dict[str, Any]] = None
         scan: Optional[bool] = False
-        text: Optional[str] = None
+        
+    
+    class TextChunks(BaseModel):
+        text: str
         metadata: Optional[Dict[str, Any]] = None
     ```
     `scan` indicates whether to start scanning the file to extract text, chunk it, and put it into the database.
@@ -904,210 +897,6 @@ def call_surya_model(
     #     file.name = file_name
     
     print("Server surya handles:", server_surya_handles)
-
-async def process_pdf_with_surya(
-    database: Session,
-    auth: AuthType,
-    server_surya_handles: Dict[str, Any],
-    file: BytesIO = None,
-    document_id: str = None,
-    max_pages: int = None,
-    start_page: int = None,
-    metadata: Optional[Dict] = None,
-    langs: Optional[List[str]] = None,
-    batch_multiplier: int = 1,
-    ocr_all_pages: bool = False
-) -> Tuple[str, Dict[str, Image.Image], Dict]:
-    """
-    Process a single PDF file using Ray Surya deployments.
-
-    Args:
-        database: Database session.
-        server_surya_handles: Dictionary of Ray Surya deployment handles.
-        file: BytesIO object of the PDF file.
-        max_pages: Maximum number of pages to process.
-        start_page: Page number to start processing from.
-        metadata: Metadata dictionary.
-        langs: List of languages for OCR.
-        batch_multiplier: Batch multiplier for model processing.
-        ocr_all_pages: Whether to OCR all pages.
-
-    Returns:
-        Tuple containing the full text, dictionary of images, and output metadata.
-    """
-    _, _ = get_user(database, auth)
-    
-    assert any([file, document_id]), "Must provide either file or document_id"
-    
-    # Ensure file is a BytesIO object
-    if not file is None:
-        assert isinstance(file, BytesIO), "File must be a BytesIO object"
-    else:
-        fetch_parameters = get_document_secure(
-            database=database,
-            auth=auth,
-            hash_id=document_id,
-        )
-        
-        password = fetch_parameters["password"]
-
-        file = aes_decrypt_zip_file(
-            database, 
-            password,
-            fetch_parameters["hash_id"]
-        )
-    
-    file.seek(0)
-    file_bytes = file.getvalue()
-    file_name = getattr(file, 'name', 'document.pdf')
-
-    # Set default values
-    if metadata:
-        langs = metadata.get("languages", langs)
-
-    # Replace language names with codes and validate
-    langs = replace_langs_with_codes(langs)
-    validate_langs(langs)
-
-    # Determine file type
-    filetype = 'pdf' if file_name.lower().endswith('.pdf') else 'other'
-
-    out_meta = {
-        "languages": langs,
-        "filetype": filetype,
-    }
-
-    if filetype == 'other':
-        return {
-            "full_text": "",
-            "images": {},
-            "metadata": out_meta
-        }
-    
-    # Load PDF document
-    doc = PdfDocument(file_bytes)
-
-    # Get initial text blocks from the PDF using Ray deployment
-    # get_text_blocks_handle = server_surya_handles['get_text_blocks']
-    pages, toc = get_text_blocks(
-        doc,
-        file_bytes, 
-        max_pages=max_pages, 
-        start_page=start_page
-    )
-    out_meta.update({
-        "pdf_toc": toc,
-        "pages": len(pages),
-    })
-
-    # Trim the doc pages if start_page is specified
-    if start_page:
-        for _ in range(start_page):
-            doc.del_page(0)
-
-    max_len = min(len(pages), len(doc))
-
-    # Render images from PDF pages
-    lowres_images = [render_image(doc[pnum], dpi=settings.SURYA_DETECTOR_DPI) for pnum in range(max_len)]
-    
-    # Convert images to bytes to pass between Ray deployments
-    image_bytes_list : List[bytes] = []
-    for image in lowres_images:
-        buf = BytesIO()
-        image.save(buf, format='PNG')
-        image_bytes_list.append(buf.getvalue())
-
-    # Serialize data for Ray deployments
-    pages_ref = ray.put(pages)
-    # doc_ref = ray.put(doc) # Cannot pickle the PdfDocument object because it has C pointers
-    file_bytes_ref = ray.put(file_bytes)
-
-    # Surya detection
-    detection_handle = server_surya_handles['Surya Detection']
-    
-    detection_results = await detection_handle.run.remote(
-        images=image_bytes_list, pages=pages_ref
-    )
-    
-    detection_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(detection_results))))
-    
-    # print("Detection results:", detection_results)
-    
-    lowres_images = detection_results["images"]
-    pages = detection_results["pages"]
-
-    # OCR pages as needed
-    recognition_handle = server_surya_handles['Surya Recognition']
-    
-    del pages_ref
-    pages_ref = ray.put(pages)
-    
-    ocr_results = await recognition_handle.run.remote(
-        file_bytes_ref, pages_ref, langs, ocr_all_pages=ocr_all_pages
-    )
-    ocr_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(ocr_results))))
-    
-    pages, ocr_stats = tuple(ocr_results)
-    out_meta["ocr_stats"] = ocr_stats
-
-    if len([b for p in pages for b in p.blocks]) == 0:
-        return "", {}, out_meta
-
-    # Surya layout
-    layout_handle = server_surya_handles['Surya Layout']
-    
-    del pages_ref
-    pages_ref = ray.put(pages)
-    
-    layout_results = await layout_handle.run.remote(
-        image_bytes_list, pages_ref
-    )
-    layout_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(layout_results))))
-    pages = layout_results["pages"]
-    
-    
-    # Surya ordering
-    ordering_handle = server_surya_handles['Surya Ordering']
-    
-    del pages_ref
-    pages_ref = ray.put(pages)
-    
-    ordering_results = await ordering_handle.run.remote(
-        image_bytes_list, pages_ref
-    )
-    ordering_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(ordering_results))))
-    pages = ordering_results
-
-    # Replace equations
-    texify_handle = server_surya_handles['Surya Texify']
-    eq_results = await texify_handle.run.remote(
-        file_bytes_ref, pages_ref
-    )
-    
-    eq_results = ray.get(ray.cloudpickle.load(BytesIO(base64.b64decode(eq_results))))
-    filtered, eq_stats = eq_results
-    out_meta["block_stats"] = {"equations": eq_stats}
-
-    # Merge spans, lines, and get the full text
-    merged_lines = merge_spans(filtered)
-    text_blocks = merge_lines(merged_lines)
-    text_blocks = filter_common_titles(text_blocks)
-    full_text = get_full_text(text_blocks)
-
-    # Clean up the text
-    full_text = cleanup_text(full_text)
-    full_text = replace_bullets(full_text)
-
-    # Convert images back from bytes if needed
-    # ...
-
-    # Return the final results
-    doc_images = images_to_dict(pages)
-    return {
-        "full_text": full_text,
-        "images": doc_images,
-        "metadata": out_meta
-    }
 
 
 

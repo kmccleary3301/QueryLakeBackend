@@ -57,8 +57,8 @@ class LoaderParameters(BaseModel):
 class LocalModel(BaseModel):
     name: str
     id: str
-    source: str
-    system_path: Optional[str] = None
+    source: Union[str, Dict[str, str]]
+    system_path: Optional[Union[str, Dict[str, str]]] = None
     deployment_config: Optional[dict] = {}
 
 class OtherLocalModelsField(BaseModel):

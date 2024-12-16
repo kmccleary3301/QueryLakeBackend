@@ -118,7 +118,7 @@ class DocumentChunk_backup(SQLModel, table=True):
 ORIGINAL_CHUNK_CLASS_NAME = DocumentChunk_backup.__name__.lower()
 # CHUNK_CLASS_NAME = DocumentChunkPointer.__name__.lower()
 CHUNK_CLASS_NAME = ORIGINAL_CHUNK_CLASS_NAME
-CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "document_name", "website_url", "collection_id", "md", "document_md"]
+CHUNK_INDEXED_COLUMNS = ["id", "text", "document_id", "document_name", "website_url", "collection_id", "md", "document_md", "creation_timestamp", "document_chunk_number"]
 
 # CREATE_BM25_INDEX_SQL = """
 # CALL paradedb.create_bm25(

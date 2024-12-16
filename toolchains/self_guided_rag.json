@@ -10,14 +10,36 @@
         "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8 pt-4",
         "mappings": [
             {
+                "display_as": "basf-intro-screen",
+                "hooks": [
+                    {
+                        "hook": "on_submit",
+                        "target_event": "user_question_event",
+                        "fire_index": 1,
+                        "target_route": "question",
+                        "store": false
+                    },
+                    {
+                        "hook": "selected_collections",
+                        "target_event": "user_question_event",
+                        "fire_index": 1,
+                        "target_route": "collection_ids",
+                        "store": false
+                    }
+                ],
+                "config": [
+                    {
+                        "name": "test_7_long_string",
+                        "value": "Hello, how are you?"
+                    }
+                ],
+                "tailwind": "w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pb-8 pt-4"
+            },
+            {
                 "display_route": [
                     "chat_history"
                 ],
                 "display_as": "chat"
-            },
-            {
-                "display_route": [],
-                "display_as": "current-event-display"
             }
         ],
         "footer": {
@@ -139,7 +161,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o-mini"
+                    "value": "openai/gpt-4o"
                 }
             ],
             "feed_mappings": [
@@ -246,7 +268,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o-mini"
+                    "value": "openai/gpt-4o"
                 },
                 {
                     "key": "model_parameters",
@@ -308,7 +330,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o-mini"
+                    "value": "openai/gpt-4o"
                 }
             ],
             "feed_mappings": [
@@ -344,7 +366,23 @@
                     ],
                     "getFromOutputs": {
                         "route": [ "sources" ]
-                    }
+                    },
+                    "stream": true,
+                    "stream_initial_value": []
+                },
+                {
+                    "destination": "<<STATE>>",
+                    "sequence": [
+                        {
+                            "type": "createAction",
+                            "route" : [ "chat_history", -1, "headline" ]
+                        }
+                    ],
+                    "getFromOutputs": {
+                        "route": [ "searches" ]
+                    },
+                    "stream": true,
+                    "stream_initial_value": []
                 }
             ]
         },
@@ -370,7 +408,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o-mini"
+                    "value": "openai/gpt-4o"
                 }
             ],
             "feed_mappings": [

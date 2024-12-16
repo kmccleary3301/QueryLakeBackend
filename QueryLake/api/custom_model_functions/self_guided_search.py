@@ -6,6 +6,7 @@ from sqlmodel import Session
 import time
 from ..search import DocumentChunkDictionary
 import json
+import inspect
 
 
 TRAINING_SYSTEM_PROMPT = """
@@ -123,9 +124,11 @@ async def self_guided_search(
     llm_call = toolchain_function_caller("llm")
 
     search_bm25_function = toolchain_function_caller("search_bm25")
-
+    
     start_time = time.time()
 
+    if stream_callables is None:
+        stream_callables = {}
 
     answer_flag, answer, sources_matched, responses, searches = False, None, [], 0, 0
     ready_to_answer_flag = False
@@ -141,6 +144,26 @@ async def self_guided_search(
     previous_searches, previous_results, all_sources = set(), [], []
     answer_found = False
     
+    searches_return = []
+    
+    
+    async def on_new_search(search: str):
+        nonlocal searches_return
+        searches_return.append({"search": search})
+        if "searches" in stream_callables:
+            if inspect.iscoroutinefunction(stream_callables["searches"]):
+                await stream_callables["searches"]({"search": search})
+            else:
+                stream_callables["searches"]({"search": search})
+                
+    async def on_new_source(source_in: dict):
+        nonlocal searches_return
+        searches_return.append(source_in)
+        if "sources" in stream_callables:
+            if inspect.iscoroutinefunction(stream_callables["sources"]):
+                await stream_callables["sources"](source_in)
+            else:
+                stream_callables["sources"](source_in)
     
     while True:
         if ready_to_answer_flag:
@@ -172,7 +195,7 @@ async def self_guided_search(
             chat_history=chat_history_1, 
             model_parameters=model_parameters,
             functions_available=all_functions_available if not answer_flag else [],
-            stream_callables=stream_callables if answer_flag else None
+            stream_callables=stream_callables if answer_flag and stream_callables else None
         )
         
 
@@ -196,6 +219,8 @@ async def self_guided_search(
                 excluded_chunks = " ".join([f"-id:\"{result}\"" for result in previous_results])
 
                 search_make = model_response["function_calls"][-1]["arguments"]["question"] + f" {excluded_chunks}"
+                await on_new_search(f"Searching: \"{new_search}\"")
+                
                 # print("PREVIOUS RESULTS:", previous_results)
                 # print("SEARCH MADE:", search_make)
                 searched_sources : List[DocumentChunkDictionary] = search_bm25_function(
@@ -207,6 +232,10 @@ async def self_guided_search(
                 )
                 all_sources.extend(searched_sources)
                 searched_sources = [source.model_dump(exclude_defaults=True) for source in searched_sources]
+                
+                for source in searched_sources:
+                    await on_new_source(source)
+                
                 for i in range(len(searched_sources)):
                     citation_map[
                         searched_sources[i]["id"] 
@@ -219,10 +248,12 @@ async def self_guided_search(
                         sources_matched.extend(source["id"])
                     else:
                         sources_matched.append(source["id"])
+                        
+                    
                 
                 sources_represented = [
                     "<CITATION>\n\t{cite:" + str(citation_map[
-                        source["id"] 
+                        source["id"]
                         if isinstance(source["id"], str) 
                         else source["id"][0]
                     ]) + "}\n</CITATION>\n" + \
@@ -276,13 +307,17 @@ async def self_guided_search(
             demo_sequence.append(response)
 
         if responses >= max_responses:
+            max_cite_index = max([int(cite.split(":")[-1][:-1]) for cite in citation_map.keys()])
+            assert max_cite_index == len(sources_matched), f"Max cite index: {max_cite_index}, sources matched: {len(sources_matched)}, citation map: {citation_map}"
+            
             return {
                 "chat_history": chat_history_1, 
                 "output": "Model ran out of responses.", 
                 "responses": responses, 
                 "time_taken": time.time() - start_time, 
                 "sources": [], 
-                "answer_found": answer_found
+                "answer_found": answer_found,
+                "searches": searches_return
             }
 
 
@@ -294,4 +329,5 @@ async def self_guided_search(
         "time_taken": time.time() - start_time,
         "sources": all_sources,
         "answer_found": answer_found,
+        "searches": searches_return
     }

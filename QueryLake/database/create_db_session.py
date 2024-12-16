@@ -36,6 +36,7 @@ CALL paradedb.create_bm25(
   table_name => '&CHUNK_CLASS_NAME&',
   key_field => 'id',
   text_fields => paradedb.field('text') || paradedb.field('document_id') || paradedb.field('document_name') || paradedb.field('website_url') || paradedb.field('collection_id'),
+  numeric_fields => paradedb.field('creation_timestamp') || paradedb.field('document_chunk_number'),
   json_fields => paradedb.field('md') || paradedb.field('document_md')
 );
 """.replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)

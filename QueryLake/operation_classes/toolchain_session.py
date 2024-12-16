@@ -156,6 +156,28 @@ class ToolchainSession():
                 input_dict[key] = self.get_file_bytes(value)
         return input_dict
     
+    async def create_single_streaming_callable(
+        self,
+        feed_map : feedMapping,
+        state_args : dict,
+        random_streaming_id: str,
+        new_routes: Any | List[int | str],
+        ws : WebSocket = None
+    ) -> Awaitable[Callable[[Any], None]]:
+        if not feed_map.stream:
+            return None
+
+        async def update_state_with_streaming_output(value):
+            await self.send_websocket_msg({
+                "s_id": random_streaming_id,
+                "v": value
+            }, ws)
+            for route_direct in new_routes:
+                self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=(feed_map.stream_type == "append"))
+        
+        return update_state_with_streaming_output
+
+    
     async def create_streaming_callables(self, 
                                          node : toolchainNode,
                                          state_args : dict,
@@ -177,11 +199,19 @@ class ToolchainSession():
             
             random_streaming_id = random_hash()[:16]
             
+            
+            
             self.state, new_routes = run_sequence_action_on_object(self.state, 
                                                                    sequence=feed_map.sequence, 
                                                                    provided_object=feed_map.stream_initial_value, 
                                                                    **state_args, 
                                                                    return_provided_object_routes=True)
+            
+            self.log_event("STREAM CALLABLE SINGLE MADE WITH", {
+                "feed_map": feed_map,
+                "new_routes": new_routes,
+                "random_id": random_streaming_id
+            })
             
             await self.send_websocket_msg({
                 "type": "streaming_output_mapping",
@@ -190,13 +220,18 @@ class ToolchainSession():
                 "routes": new_routes
             }, ws)
             
-            async def update_state_with_streaming_output(value):
-                await self.send_websocket_msg({
-                    "s_id": random_streaming_id,
-                    "v": value
-                }, ws)
-                for route_direct in new_routes:
-                    self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=(feed_map.stream_type == "append"))
+            # async def update_state_with_streaming_output(value):
+            #     await self.send_websocket_msg({
+            #         "s_id": random_streaming_id,
+            #         "v": value
+            #     }, ws)
+            #     for route_direct in new_routes:
+            #         self.state = insert_in_static_route_global(self.state, route_direct, value, **state_args, append=(feed_map.stream_type == "append"))
+            
+            
+            update_state_with_streaming_output = await self.create_single_streaming_callable(
+                feed_map, state_args, random_streaming_id, new_routes, ws
+            )
             
             # Use the first route index as the id
             # Assuming only top-level results are streamed.

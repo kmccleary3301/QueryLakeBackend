@@ -24,6 +24,7 @@ from itertools import chain
 import json
 import bisect
 from ..database.create_db_session import initialize_database_engine
+from ..typing.api_inputs import TextChunks
 
 def binary_search(sorted_list, target):
 	index = bisect.bisect_right(sorted_list, target)
@@ -114,7 +115,7 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
                           document_db_entries: List[Union[str, document_raw_backup]],
                           document_names : List[str],
                           document_bytes_list : List[bytes] = None, 
-                          document_texts : List[str] = None,
+                          document_texts : List[Union[str, List[TextChunks]]] = None,
                           document_metadata : List[Union[dict, Literal[None]]] = None,
                           create_embeddings : bool = True):
     """
@@ -161,8 +162,18 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
             else:
                 raise ValueError(f"File extension `{file_extension}` not supported for scanning, only [pdf, txt, md, json] are supported at this time.")
         else:
-            text = document_texts[i].split("\n")
-            text_chunks = list(map(lambda i: (text[i], {"line": i}), list(range(len(text)))))
+            
+            if isinstance(document_texts[i], str):
+                text = document_texts[i].split("\n")
+                text_chunks : List[Tuple[str, dict]] = list(map(lambda i: (
+                    text[i], {"line": i}
+                ), list(range(len(text)))))
+            elif isinstance(document_texts[i], list) and all([isinstance(e, TextChunks) for e in document_texts[i]]):
+                text_chunks : List[Tuple[str, dict]] = list(map(lambda x: (
+                    x.text, x.metadata if not x.metadata is None else {}
+                ), document_texts[i]))
+            else:
+                raise ValueError(f"Document text must be a string or a list of TextChunks.")
 
         text_segment_collections.append(text_chunks)
     

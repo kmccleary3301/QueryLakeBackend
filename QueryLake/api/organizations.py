@@ -97,7 +97,7 @@ def invite_user_to_organization(database : Session,
     user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
 
     user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-
+    
     # user_private_key = get_user_private_key(database, username, password_prehash)["private_key"]
 
     organization_private_key = encryption.ecc_decrypt_string(user_private_key, membership_get[0].organization_private_key_secure)
