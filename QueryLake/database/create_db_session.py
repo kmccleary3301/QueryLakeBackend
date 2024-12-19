@@ -30,41 +30,36 @@ END
 $$;
 """.replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
 
-CREATE_BM25_CHUNK_INDEX_SQL = """
-CALL paradedb.create_bm25(
-  index_name => 'search_&CHUNK_CLASS_NAME&_idx',
-  table_name => '&CHUNK_CLASS_NAME&',
-  key_field => 'id',
-  text_fields => paradedb.field('text') || paradedb.field('document_id') || paradedb.field('document_name') || paradedb.field('website_url') || paradedb.field('collection_id'),
-  numeric_fields => paradedb.field('creation_timestamp') || paradedb.field('document_chunk_number'),
-  json_fields => paradedb.field('md') || paradedb.field('document_md')
-);
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
+# CREATE_BM25_CHUNK_INDEX_SQL = """
+# CALL paradedb.create_bm25(
+#   index_name => 'search_&CHUNK_CLASS_NAME&_idx',
+#   table_name => '&CHUNK_CLASS_NAME&',
+#   key_field => 'id',
+#   text_fields => paradedb.field('text') || paradedb.field('document_id') || paradedb.field('document_name') || paradedb.field('website_url') || paradedb.field('collection_id'),
+#   numeric_fields => paradedb.field('creation_timestamp') || paradedb.field('document_chunk_number'),
+#   json_fields => paradedb.field('md') || paradedb.field('document_md')
+# );
+# """.replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
 
-DELETE_BM25_CHUNK_INDEX_SQL = """
-CALL paradedb.drop_bm25(
-  index_name => 'search_&CHUNK_CLASS_NAME&_idx',
-  schema_name => 'public'
-);
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
+CREATE_BM25_CHUNK_INDEX_SQL = f"""
+CREATE INDEX search_{DocumentChunk_backup.__tablename__}_idx ON {DocumentChunk_backup.__tablename__}
+USING bm25 (id, text, document_id, document_name, website_url, collection_id, creation_timestamp, document_chunk_number, md, document_md)
+WITH (key_field = 'id');
+"""
 
-CREATE_BM25_DOC_INDEX_SQL = """
-CALL paradedb.create_bm25(
-  index_name => 'search_&CHUNK_CLASS_NAME&_idx',
-  table_name => '&CHUNK_CLASS_NAME&',
-  key_field => 'id',
-  numeric_fields => paradedb.field('creation_timestamp') || paradedb.field('size_bytes'),
-  text_fields => paradedb.field('file_name') || paradedb.field('website_url') ||  paradedb.field('integrity_sha256') || paradedb.field('document_collection_id'),
-  json_fields => paradedb.field('md')
-);
-""".replace("&CHUNK_CLASS_NAME&", document_raw_backup.__tablename__)
+DELETE_BM25_CHUNK_INDEX_SQL = f"""
+DROP INDEX search_{DocumentChunk_backup.__tablename__}_idx;
+"""
 
-DELETE_BM25_DOC_INDEX_SQL = """
-CALL paradedb.drop_bm25(
-  index_name => 'search_&CHUNK_CLASS_NAME&_idx',
-  schema_name => 'public'
-);
-""".replace("&CHUNK_CLASS_NAME&", document_raw_backup.__tablename__)
+CREATE_BM25_DOC_INDEX_SQL = f"""
+CREATE INDEX search_{document_raw_backup.__tablename__}_idx ON {document_raw_backup.__tablename__}
+USING bm25 (id, creation_timestamp, size_bytes, file_name, website_url, integrity_sha256, document_collection_id, md)
+WITH (key_field = 'id');
+"""
+
+DELETE_BM25_DOC_INDEX_SQL = f"""
+DROP INDEX search_{document_raw_backup.__tablename__}_idx;
+"""
 
 def check_index_created(database: Session):
     result = database.exec(text(CHECK_INDEX_EXISTS_SQL))

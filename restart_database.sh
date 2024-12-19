@@ -16,7 +16,9 @@ sudo docker pull paradedb/paradedb:latest
 sudo docker volume prune -y
 
 # Free disk space by removing unused Docker volumes
-sudo docker volume prune
+# sudo docker volume prune
+
+sudo docker volume rm querylake_database_volume
 
 # Start the Docker container
 # sudo docker compose -f "$(dirname "$0")/docker-compose-only-db.yml" up -d

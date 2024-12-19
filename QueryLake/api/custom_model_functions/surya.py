@@ -1,6 +1,7 @@
 from typing import List, Callable, Awaitable, Dict, Any, Union, Literal, Tuple, Optional
 
 import ray.cloudpickle
+import ray.serve
 from sqlmodel import Session
 from io import BytesIO
 from ..user_auth import *
@@ -12,6 +13,7 @@ from ...typing.config import AuthType
 from PIL import Image
 import ray
 from pypdfium2 import PdfDocument
+from ray.serve.handle import DeploymentHandle
 
 # from marker.ocr.lang import replace_langs_with_codes, validate_langs
 # from marker.cleaners.headers import filter_common_titles
@@ -54,7 +56,7 @@ import time
 async def process_pdf_with_surya(
     database: Session,
     auth: AuthType,
-    server_surya_handles: Dict[str, Any],
+    server_surya_handles: Dict[str, DeploymentHandle],
     file: BytesIO = None,
     document_id: str = None,
     max_pages: int = None,
@@ -115,9 +117,9 @@ async def process_pdf_with_surya(
     
     request_id, request_queued, request_response = random_hash(), False, "REQUEST_IN_PROGRESS"
     
-    for i in range(30):
-        print("Sleeping for %4d seconds   " % (30-i), end="\r")
-        time.sleep(1)
+    # for i in range(30):
+    #     print("Sleeping for %4d seconds   " % (30-i), end="\r")
+    #     time.sleep(1)
     
     # Get the reference from the async call
     
@@ -125,11 +127,19 @@ async def process_pdf_with_surya(
         request_response in ["QUEUE_NOT_FOUND", "REQUEST_IN_PROGRESS"]:
         
         try:
-            marker_results = await marker_handle.run.remote(
+            marker_handle_new = marker_handle.handle_options()
+            
+            marker_results = marker_handle.remote(
                 doc=doc_ref,
                 request_id=request_id,
                 already_made=request_queued,
             )
+            
+            print("Marker results type:", type(marker_results))
+            
+            _, pending = ray.wait([marker_results], timeout=5)
+            
+            print("Pending:", pending)
             
             # Process the result
             marker_results = ray.cloudpickle.load(BytesIO(base64.b64decode(marker_results)))

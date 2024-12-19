@@ -314,7 +314,7 @@ class MarkerDeployment:
         
         return results
 
-    async def run(self, doc: bytes, request_id: str, already_made: bool = False):
+    async def __call__(self, doc: bytes, request_id: str, already_made: bool = False):
         # doc_wrapped = PdfDocument(doc)
         # result = await self.handle_batch(doc_wrapped, pages)
         
@@ -329,16 +329,18 @@ class MarkerDeployment:
             print("Sleeping for %4d seconds   " % (30-i), end="\r")
             time.sleep(1)
         
-        if request_id in self.queued_outputs:
-            if self.queued_outputs[request_id] == False:
-                result = "REQUEST_IN_PROGRESS"
-            else:
-                print("Finished result ")
-                result = self.queued_outputs.pop(request_id)
-        elif already_made:
-            result =  "QUEUE_NOT_FOUND"
-        else:
-            result = await self.handle_batch(doc)
+        # if request_id in self.queued_outputs:
+        #     if self.queued_outputs[request_id] == False:
+        #         result = "REQUEST_IN_PROGRESS"
+        #     else:
+        #         print("Finished result ")
+        #         result = self.queued_outputs.pop(request_id)
+        # elif already_made:
+        #     result =  "QUEUE_NOT_FOUND"
+        # else:
+        #     result = await self.handle_batch(doc)
+        
+        result = await self.handle_batch(doc)
         
         
         result_buf = BytesIO()
