@@ -67,37 +67,53 @@ def check_index_created(database: Session):
     return index_exists
 
 def initialize_database_engine() -> Session:
-    engine = create_engine("postgresql://querylake_access:querylake_access_password@localhost:5444/querylake_database")
+    url = "postgresql://querylake_access:querylake_access_password@localhost:5444/querylake_database"
+    engine = create_engine(url)
+    print("PG URL:", url)
     
+    # Create tables
     SQLModel.metadata.create_all(engine)
+    
+    # Create initial session
     database = Session(engine)
     
-    RESTART_DB = False
-    
+    # Check if indices exist
     index_exists = check_index_created(database)
     print("CHECKING IF SEARCH INDICES CREATED:", index_exists)
-    
-    if RESTART_DB:
-        database.exec(text(DELETE_BM25_CHUNK_INDEX_SQL))
-        database.commit()
-        database.exec(text(CREATE_BM25_CHUNK_INDEX_SQL))
-        database.commit()
-        database.exec(text(DELETE_BM25_DOC_INDEX_SQL))
-        database.commit()
-        database.exec(text(CREATE_BM25_DOC_INDEX_SQL))
-        database.commit()
     
     if not index_exists:
-	    # Your SQL commands to execute if the index does not exist
-        print("ATTEMPTING TO ADD INDICES...")
-        database.exec(text(CREATE_VECTOR_INDEX_SQL)) 
-        database.exec(text(CREATE_BM25_CHUNK_INDEX_SQL)) 
-        database.exec(text(CREATE_BM25_DOC_INDEX_SQL)) 
-        database.commit()
-    
-    index_exists = check_index_created(database)
-    print("CHECKING IF SEARCH INDICES CREATED:", index_exists)
-    
-    # For some reason in testing, the raw SQL adds the fastest speedup despite adding the same index with the same ID.
+        # Close current session and create a temporary one just for index creation
+        
+        try:
+            print("ATTEMPTING TO ADD INDICES...")
+            database.exec(text(CREATE_VECTOR_INDEX_SQL))
+            database.exec(text(CREATE_BM25_CHUNK_INDEX_SQL))
+            database.exec(text(CREATE_BM25_DOC_INDEX_SQL))
+            database.commit()
+            
+            # Verify indices were created
+            index_exists = check_index_created(database)
+            print("VERIFYING INDICES CREATED:", index_exists)
+        finally:
+            database.close()
+        
+        # Completely close the session
+        # This prevents a baffling machine-dependent bug (only occurs on one of my machines)
+        # Essentially, on the first time running the server,
+        # a rollback+flush would delete the BM25 indices
+        # *despite* them being committed first.
+        
+        # I tried very hard to figure out why this happened, but could not.
+        # However, running the server for the first time and instantly
+        # restarting it prevented the issue. Thus, I am using this workaround.
+        del database, engine
+        
+        # Create fresh session after index creation
+        engine_2 = create_engine(url)
+        database_2 = Session(engine_2)
+        
+        # Return the *fresh* sessions to prevent the aforementioned bug
+        return database_2, engine_2
+        
     
     return database, engine
