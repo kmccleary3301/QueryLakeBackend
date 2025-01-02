@@ -22,7 +22,7 @@ from typing import Callable, Any, List, Dict, Union, Awaitable
 
 from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
-from ..database.sql_db_tables import document_raw_backup, document_collection
+from ..database.sql_db_tables import document_raw, document_collection
 import traceback
 
 
@@ -114,7 +114,7 @@ class ToolchainSession():
         """
         Get the bytes of a file from the toolchain session.
         """
-        database_obj : document_raw_backup = self.database.exec(select(document_raw_backup).where(document_raw_backup.id == file_pointer.document_hash_id)).first()
+        database_obj : document_raw = self.database.exec(select(document_raw).where(document_raw.id == file_pointer.document_hash_id)).first()
         assert not database_obj is None, f"File \'{file_pointer.document_hash_id}\' not found in database."
         
         bridge_collection = self.database.exec(

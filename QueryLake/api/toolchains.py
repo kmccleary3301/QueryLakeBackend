@@ -300,8 +300,8 @@ def retrieve_files_for_session(database : Session,
     assert not bridge_collection is None, f"No corresponding document collection found for toolchain session `{session.session_hash}`"
     
     file_db_entries = list(database.exec(
-        select(sql_db_tables.document_raw_backup)
-        .where(sql_db_tables.document_raw_backup.document_collection_id == bridge_collection.id)
+        select(sql_db_tables.document_raw)
+        .where(sql_db_tables.document_raw.document_collection_id == bridge_collection.id)
     ).all())
     return [get_file_bytes(database, doc.id, get_user_private_key(database, auth)["private_key"]) for doc in file_db_entries]
 
@@ -331,10 +331,10 @@ async def toolchain_file_upload_event_call(database : Session,
     
 
     file_db_entry = database.exec(
-        select(sql_db_tables.document_raw_backup)
+        select(sql_db_tables.document_raw)
         .where(and_(
-            sql_db_tables.document_raw_backup.document_collection_id == bridge_collection.id,
-            sql_db_tables.document_raw_backup.id == document_hash_id
+            sql_db_tables.document_raw.document_collection_id == bridge_collection.id,
+            sql_db_tables.document_raw.id == document_hash_id
         ))
     ).first()
     file_bytes = get_file_bytes(database, file_db_entry.id, get_user_private_key(database, auth)["private_key"])

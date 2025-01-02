@@ -44,7 +44,7 @@ async def embed_urls(database : Session,
     
     results = await web_scrape_call(auth, urls, timeout=web_timeout)
     
-    document_entries : List[Tuple[sql_db_tables.document_raw_backup, str]] = []
+    document_entries : List[Tuple[sql_db_tables.document_raw, str]] = []
     embedding_coroutines = []
     
     for i, result_dictionary in enumerate(results):
@@ -58,7 +58,7 @@ async def embed_urls(database : Session,
             continue
         
         website_content_bytes : bytes = content.encode("utf-8")
-        new_document = sql_db_tables.document_raw_backup(
+        new_document = sql_db_tables.document_raw(
             file_name=result_dictionary["metadata"]["title"],
             author_user_name=user_auth.username,
             organization_hash_id=None,
@@ -66,8 +66,8 @@ async def embed_urls(database : Session,
             integrity_sha256=sha256(website_content_bytes).hexdigest(),
             size_bytes=len(website_content_bytes),
             website_url=url,
-            file_data=website_content_bytes,
-            finished_processing=False
+            # file_data=website_content_bytes,
+            finished_processing=1,
         )
         database.add(new_document)
         document_entries.append((new_document, content))

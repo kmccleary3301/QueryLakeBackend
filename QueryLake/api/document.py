@@ -135,7 +135,7 @@ async def upload_document(database : Session,
         # })
     # zip_thread.start()
     
-    new_file_blob = sql_db_tables.document_zip_blob_backup(
+    new_file_blob = sql_db_tables.document_zip_blob(
         file_count=1,
         size_bytes=len(encrypted_bytes),
         file_data=encrypted_bytes,
@@ -145,7 +145,7 @@ async def upload_document(database : Session,
     database.add(new_file_blob)
     database.commit()
     
-    new_db_file = sql_db_tables.document_raw_backup(
+    new_db_file = sql_db_tables.document_raw(
         # server_zip_archive_path=file_zip_save_path,
         file_name=file_name,
         integrity_sha256=file_integrity,
@@ -347,7 +347,7 @@ async def upload_archive(database : Session,
             file_data=file_blob_dict
         )
     
-    new_file_blob = sql_db_tables.document_zip_blob_backup(
+    new_file_blob = sql_db_tables.document_zip_blob(
         file_count=len(gen_directories),
         size_bytes=len(encrypted_bytes),
         file_data=encrypted_bytes,
@@ -358,13 +358,13 @@ async def upload_archive(database : Session,
     database.commit()
     
     results, new_doc_ids = [], []
-    new_doc_db_entries : List[sql_db_tables.document_raw_backup] = []
+    new_doc_db_entries : List[sql_db_tables.document_raw] = []
     
     for i in range(len(files_retrieved)):
         file_integrity = sha256(files_retrieved_bytes[i]).hexdigest()
         file_size = len(files_retrieved_bytes[i])
         file_name = files_retrieved_names[i]
-        new_db_file = sql_db_tables.document_raw_backup(
+        new_db_file = sql_db_tables.document_raw(
             # server_zip_archive_path=file_zip_save_path,
             file_name=file_name,
             integrity_sha256=file_integrity,
@@ -486,7 +486,7 @@ async def update_documents(database : Session,
     assert len(data) < 1000, "Too many documents to update at once"
     
     unique_doc_ids = list(set([entry.document_id for entry in data]))
-    documents = list(database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id.in_(unique_doc_ids))).all())
+    documents = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id.in_(unique_doc_ids))).all())
     # document_chunks = list(database.exec(select(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(unique_doc_ids))).all())
     # document_collection_ids = list(set([c.collection_id for c in document_chunks]))
     document_collection_ids = list(set([getattr(d, c) for c in [
@@ -510,7 +510,7 @@ async def update_documents(database : Session,
         for entry in data
         if (not entry.text is None) or (not entry.scan is False)
     ]
-    database.exec(delete(sql_db_tables.DocumentChunk_backup).where(sql_db_tables.DocumentChunk_backup.document_id.in_(documents_to_clear_chunks)))
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id.in_(documents_to_clear_chunks)))
     
     text_updates, text_update_doc_ids = {}, []
     
@@ -530,8 +530,8 @@ async def update_documents(database : Session,
             # TODO: Try to fix the auto-update trigger or find another way to get this to work.
             # This is efficient.
             database.exec(
-                update(sql_db_tables.DocumentChunk_backup)
-                .where(sql_db_tables.DocumentChunk_backup.document_id == document.id)
+                update(sql_db_tables.DocumentChunk)
+                .where(sql_db_tables.DocumentChunk.document_id == document.id)
                 .values(document_md=document.md)
             )
             # for chunk in document_chunk_lookup[document.id]:
@@ -583,7 +583,7 @@ def delete_document(database : Session,
 
     assert not hash_id is None or not hash_ids is None, "No hash_id or hash_ids provided"
     
-    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
 
     assert not document is None, "Document not found"
     
@@ -604,7 +604,7 @@ def delete_document(database : Session,
     else:
         raise ValueError(f"Collection type `{collection.collection_type}` not supported on this method yet.")
 
-    database.exec(delete(sql_db_tables.DocumentChunk_backup).where(sql_db_tables.DocumentChunk_backup.document_id == hash_id))
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.document_id == hash_id))
     
     aes_delete_file_from_zip_blob(database, document.id)
     
@@ -626,7 +626,7 @@ def get_document_secure(database : Session,
 
     (user, user_auth) = get_user(database, auth)
 
-    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
     
     assert not document is None, "Document not found"
     
@@ -648,7 +648,7 @@ def craft_document_access_token(database : Session,
     """
     (user, user_auth) = get_user(database, auth)
     
-    document : sql_db_tables.document_raw_backup = get_document_secure(database, auth, hash_id, return_document=True)
+    document : sql_db_tables.document_raw = get_document_secure(database, auth, hash_id, return_document=True)
     token_hash = random_hash()
     
     new_document_access_token = sql_db_tables.document_access_token(
@@ -673,7 +673,7 @@ def get_file_bytes(database : Session,
                    hash_id : str,
                    encryption_key : str):
     
-    document = database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == hash_id)).first()
+    document = database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == hash_id)).first()
     # print("Header Data:", [document.server_zip_archive_path, encryption_key])
 
 
@@ -739,7 +739,7 @@ def fetch_document(
     """
     (_, _) = get_user(database, auth)
     
-    document = list(database.exec(select(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.id == document_id)).all())
+    document = list(database.exec(select(sql_db_tables.document_raw).where(sql_db_tables.document_raw.id == document_id)).all())
     
     document = document[0] if len(document) > 0 else None
     assert not document is None, "Document not found"
@@ -771,8 +771,8 @@ def fetch_document(
     if not get_chunk_count:
         return document_dict
     
-    stmt = select(func.count()).select_from(sql_db_tables.DocumentChunk_backup).where(
-        sql_db_tables.DocumentChunk_backup.document_id == document_id
+    stmt = select(func.count()).select_from(sql_db_tables.DocumentChunk).where(
+        sql_db_tables.DocumentChunk.document_id == document_id
     )
     chunk_count = int(database.scalar(stmt))
     
@@ -861,13 +861,13 @@ def trigger_database_sql_error(database : Session,
     """
     
     _, _ = get_user(database, auth)
-    new_text_chunk = sql_db_tables.DocumentChunk_backup(
+    new_text_chunk = sql_db_tables.DocumentChunk(
         id="test",
         document_name="test.py",
         text="test"
     )
     new_text_chunk.id = "ERROR_TEST"
-    new_text_chunk_2 = sql_db_tables.DocumentChunk_backup(
+    new_text_chunk_2 = sql_db_tables.DocumentChunk(
         id="test",
         document_name="test.py",
         text="test"

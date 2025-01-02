@@ -6,7 +6,7 @@ from .text_chunking.character import RecursiveCharacterTextSplitter
 from .text_chunking.markdown import MarkdownTextSplitter
 from .text_chunking.document_class import Document
 # from chromadb.api import ClientAPI
-from ..database.sql_db_tables import document_raw_backup, DocumentChunk_backup, DocumentEmbeddingDictionary, document_collection
+from ..database.sql_db_tables import document_raw, DocumentChunk, DocumentEmbeddingDictionary, document_collection
 from ..api.hashing import random_hash, hash_function
 from ..api.single_user_auth import get_user
 from typing import List, Callable, Any, Union, Awaitable, Tuple, Literal
@@ -112,7 +112,7 @@ def split_list(input_list : list, n : int) -> List[list]:
 async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                           database : Session,
                           auth : AuthType,
-                          document_db_entries: List[Union[str, document_raw_backup]],
+                          document_db_entries: List[Union[str, document_raw]],
                           document_names : List[str],
                           document_bytes_list : List[bytes] = None, 
                           document_texts : List[Union[str, List[TextChunks]]] = None,
@@ -142,10 +142,10 @@ async def chunk_documents(toolchain_function_caller: Callable[[Any], Union[Calla
         document_name = document_names[i]
         
         if isinstance(document_db_entry, str):
-            document_db_entry : document_raw_backup = database.exec(select(document_raw_backup).where(document_raw_backup.id == document_db_entry)).first()
+            document_db_entry : document_raw = database.exec(select(document_raw).where(document_raw.id == document_db_entry)).first()
             assert not document_db_entry is None, "Document not found in database."
         
-        assert isinstance(document_db_entry, document_raw_backup), "Document returned is not type `document_raw`."
+        assert isinstance(document_db_entry, document_raw), "Document returned is not type `document_raw`."
         real_db_entries.append(document_db_entry)
         
         file_extension = document_name.split(".")[-1].lower()
@@ -193,7 +193,7 @@ async def create_text_chunks(database : Session,
                              auth : AuthType,
                              toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
                              text_segment_collections : List[List[Tuple[str, dict]]],
-                             document_sql_entries : List[document_raw_backup], 
+                             document_sql_entries : List[document_raw], 
                              document_names: List[str],
                              document_metadata : List[Union[dict, Literal[None]]],
                              create_embeddings : bool = True):
@@ -313,7 +313,7 @@ async def create_text_chunks(database : Session,
                 **parent_doc_md,
             }
             
-            embedding_db_entry = DocumentChunk_backup(
+            embedding_db_entry = DocumentChunk(
                 # collection_type=collection_type,
                 document_id=document_sql_entry.id,
                 document_chunk_number=i,
@@ -334,7 +334,10 @@ async def create_text_chunks(database : Session,
                 database.commit()
                 current_chunks_queued = 0
         
-        document_sql_entry.finished_processing = True
+        if embeddings is None:
+            document_sql_entry.finished_processing = 3
+        else:
+            document_sql_entry.finished_processing = 4
         embeddings_iterable += current_split_size
     
     database.commit()
@@ -380,7 +383,7 @@ async def create_website_embeddings(database : Session,
 
     for i in range(len(embeddings)):
         
-        document_db_entry = DocumentChunk_backup(
+        document_db_entry = DocumentChunk(
             document_name=splits_metadata[i]["website_short"],
             website_url=splits_metadata[i]["url"],
             embedding=embeddings[i],
@@ -571,15 +574,15 @@ async def keyword_query(database : Session ,
     
     if len(collection_hash_ids) > 1:
         lookup_sql_condition = or_(
-            *(DocumentChunk_backup.collection_id == collection_hash_id for collection_hash_id in collection_hash_ids)
+            *(DocumentChunk.collection_id == collection_hash_id for collection_hash_id in collection_hash_ids)
         )
     else:
         
-        lookup_sql_condition = (DocumentChunk_backup.collection_id == collection_hash_ids[0])
+        lookup_sql_condition = (DocumentChunk.collection_id == collection_hash_ids[0])
 
-    selection = select(DocumentChunk_backup).where(lookup_sql_condition).limit(k)
+    selection = select(DocumentChunk).where(lookup_sql_condition).limit(k)
     
-    first_pass_results : List[DocumentChunk_backup] = database.exec(selection)
+    first_pass_results : List[DocumentChunk] = database.exec(selection)
     
     new_docs_dict = {} # Remove duplicates
     for i, doc in enumerate(first_pass_results):
@@ -615,18 +618,18 @@ def expand_source(database : Session,
     assert range[0] < 0, "Range start must be less than 0."
     assert range[1] > 0, "Range end must be greater than 0."
     
-    main_chunk = database.exec(select(DocumentChunk_backup).where(DocumentChunk_backup.id == chunk_id)).first()
+    main_chunk = database.exec(select(DocumentChunk).where(DocumentChunk.id == chunk_id)).first()
     
     assert not main_chunk is None, "Chunk not found"
     main_chunk_index = main_chunk.document_chunk_number
     
-    chunk_range : List[DocumentChunk_backup] = database.exec(select(DocumentChunk_backup).where(and_(
-        DocumentChunk_backup.document_id == main_chunk.document_id,
-        DocumentChunk_backup.document_chunk_number >= main_chunk_index + range[0],
-        DocumentChunk_backup.document_chunk_number <= main_chunk_index + range[1],
+    chunk_range : List[DocumentChunk] = database.exec(select(DocumentChunk).where(and_(
+        DocumentChunk.document_id == main_chunk.document_id,
+        DocumentChunk.document_chunk_number >= main_chunk_index + range[0],
+        DocumentChunk.document_chunk_number <= main_chunk_index + range[1],
     ))).all()
     
-    chunk_range : List[DocumentChunk_backup] = sorted(chunk_range, key=lambda x: x.document_chunk_number)
+    chunk_range : List[DocumentChunk] = sorted(chunk_range, key=lambda x: x.document_chunk_number)
     
     chunks_of_text = [chunk.text for chunk in chunk_range]
     

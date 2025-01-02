@@ -223,13 +223,11 @@ def fetch_collection_documents(database : Session,
     assert (limit <= 500), "Limit must be <= 500"
     fetch_collection(database, auth, collection_hash_id) # Doing this to authenticate user perms.
     documents = database.exec(
-        select(sql_db_tables.document_raw_backup)
-        .where(sql_db_tables.document_raw_backup.document_collection_id == collection_hash_id)
+        select(sql_db_tables.document_raw)
+        .where(sql_db_tables.document_raw.document_collection_id == collection_hash_id)
         .offset(offset)
         .limit(limit)
     ).all()
-    
-    
     
     results = list(map(lambda x: {
         "title": x.file_name,
@@ -306,11 +304,11 @@ def delete_document_collection(database : Session,
         raise Exception(f"Invalid collection type `{collection.collection_type}`")
     
     # Wipe the chunks for all documents in the collection.
-    database.exec(delete(sql_db_tables.DocumentChunk_backup).where(sql_db_tables.DocumentChunk_backup.collection_id == collection_id))
+    database.exec(delete(sql_db_tables.DocumentChunk).where(sql_db_tables.DocumentChunk.collection_id == collection_id))
     # Wipe the documents
-    database.exec(delete(sql_db_tables.document_raw_backup).where(sql_db_tables.document_raw_backup.document_collection_id == collection_id))
+    database.exec(delete(sql_db_tables.document_raw).where(sql_db_tables.document_raw.document_collection_id == collection_id))
     # Wipe the zip blobs for the document bytes
-    database.exec(delete(sql_db_tables.document_zip_blob_backup).where(sql_db_tables.document_zip_blob_backup.document_collection_id == collection_id))
+    database.exec(delete(sql_db_tables.document_zip_blob).where(sql_db_tables.document_zip_blob.document_collection_id == collection_id))
     
     database.delete(collection)
     
@@ -374,95 +372,7 @@ def assert_collections_priviledge(database : Session,
     
     return organization_collections + user_collections
     
-    
-async def migrate_user_collection(
-    database: Session,
-    auth: AuthType,
-    toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
-    collection_id: str,
-):
-    (user, user_auth) = get_user(database, auth)
-    
-    user_collection_original = database.exec(
-        select(sql_db_tables.user_document_collection)
-        .where(sql_db_tables.user_document_collection.id == collection_id)
-    ).first()
-    
-    assert not user_collection_original is None, "Collection not found"
-    
-    new_collection = database.exec(
-        select(sql_db_tables.document_collection)
-        .where(sql_db_tables.document_collection.id == collection_id)
-    ).first()
-    
-    assert not new_collection is None, "New collection not found"
-    
-    get_document_secure = toolchain_function_caller("get_document_secure")
-    
-    original_documents = list(database.exec(
-        select(sql_db_tables.document_raw_backup)
-        .where(sql_db_tables.document_raw_backup.document_collection_id == collection_id)
-    ).all())
-    
-    zip_blob_passwords = {}
-    
-    for doc in original_documents:
-        private_key_encryption_salt = user.private_key_encryption_salt
-        user_private_key_decryption_key = hash_function(user_auth.password_prehash, private_key_encryption_salt, only_salt=True)
-
-        user_private_key = encryption.aes_decrypt_string(user_private_key_decryption_key, user.private_key_secured)
-
-        password = encryption.ecc_decrypt_string(user_private_key, doc.encryption_key_secure)
-        
-        zip_blob_id = doc.blob_id
-        
-        assert not (zip_blob_id in zip_blob_passwords and zip_blob_passwords[zip_blob_id] != password), "Zip blob pwd mismatch"
-        
-        zip_blob_passwords[zip_blob_id] = password
-    
-    
-    
-    
-    assert new_collection.encryption_key_secure is None, "Collection already migrated"
-    assert new_collection.document_unlock_key is None, "Collection already migrated"
-    
-    new_doc_password = random_hash(base=62)
-    encryption_key = random_hash(base=62)
-    user_public_key = user.public_key
-    
-    encryption_key_secure = encryption.ecc_encrypt_string(user_public_key, encryption_key)
-    doc_password_secure = encryption.aes_encrypt_string(encryption_key, new_doc_password)
-    
-    
-    
-    
-    
-    for zip_blob_id, original_password in tqdm(zip_blob_passwords.items()):
-        zip_blob_new = database.exec(
-            select(sql_db_tables.document_zip_blob_backup)
-            .where(sql_db_tables.document_zip_blob_backup.id == zip_blob_id)
-        ).first()
-        assert not zip_blob_new is None, "New zip blob not found"
-        
-        old_file_data = BytesIO(zip_blob_new.file_data)
-        new_file_data = encryption.aes_recrypt_zip_file(
-            old_file_data,
-            original_password,
-            new_doc_password
-        )
-        
-        zip_blob_new.file_data = new_file_data.getvalue()
-        
-        # database.commit()
-        
-    new_collection.encryption_key_secure = encryption_key_secure
-    new_collection.document_unlock_key = doc_password_secure
-    
-    database.commit()
-        
-    return True
-        
-    
+ 
 def get_collection_document_password(
     database : Session, 
     auth: AuthType,

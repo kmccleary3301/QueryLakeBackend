@@ -10,7 +10,7 @@ import os
 from io import BytesIO
 from typing import Dict, Union, List
 from sqlmodel import Session, select, and_
-from ..database.sql_db_tables import document_raw_backup, ToolchainSessionFileOutput, document_zip_blob_backup
+from ..database.sql_db_tables import document_raw, ToolchainSessionFileOutput, document_zip_blob
 
 
 def get_random_hash():
@@ -138,7 +138,7 @@ def aes_decrypt_zip_file(database: Session,
     Secondary use is extracting a file from a BytesIO 7zip file directly, specify the file with `file_name`.
     """
     
-    document = database.exec(select(document_raw_backup).where(document_raw_backup.id == document_id)).first()
+    document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
     
     if toolchain_file and not isinstance(document_id, BytesIO):
         statement = select(ToolchainSessionFileOutput).where(ToolchainSessionFileOutput.id == document_id)
@@ -149,8 +149,8 @@ def aes_decrypt_zip_file(database: Session,
         file_bytes = file_model.file_data
         file_bytes_io = BytesIO(file_bytes)
     elif not isinstance(document_id, BytesIO):
-        document = database.exec(select(document_raw_backup).where(document_raw_backup.id == document_id)).first()
-        document_blob = database.exec(select(document_zip_blob_backup).where(document_zip_blob_backup.id == document.blob_id)).first()
+        document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
+        document_blob = database.exec(select(document_zip_blob).where(document_zip_blob.id == document.blob_id)).first()
         assert document_blob is not None, "Document blob not found in database."
         file_model = document_blob
         directory = document.blob_dir
@@ -178,8 +178,8 @@ def aes_delete_file_from_zip_blob(database: Session,
     
     The py7zr library doesn't seem to support r+w mode, so we can't do it efficiently.
     """
-    document = database.exec(select(document_raw_backup).where(document_raw_backup.id == document_id)).first()
-    document_blob = database.exec(select(document_zip_blob_backup).where(document_zip_blob_backup.id == document.blob_id)).first()
+    document = database.exec(select(document_raw).where(document_raw.id == document_id)).first()
+    document_blob = database.exec(select(document_zip_blob).where(document_zip_blob.id == document.blob_id)).first()
     assert document_blob is not None, "Document blob not found in database."
     directory = document.blob_dir
     assert not directory is None, "Document doesn't contain a blob directory."

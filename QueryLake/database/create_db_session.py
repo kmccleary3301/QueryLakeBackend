@@ -18,7 +18,7 @@ SELECT EXISTS (
     WHERE  c.relname = '&CHUNK_CLASS_NAME&_vector_cos_idx'
     AND    n.nspname = 'public'  -- or your schema name here
 );
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
+""".replace("&CHUNK_CLASS_NAME&", DocumentChunk.__tablename__)
 
 CREATE_VECTOR_INDEX_SQL = """
 DO $$
@@ -28,7 +28,7 @@ BEGIN
 				WITH (m = 16, ef_construction = 64);';
 END
 $$;
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
+""".replace("&CHUNK_CLASS_NAME&", DocumentChunk.__tablename__)
 
 # CREATE_BM25_CHUNK_INDEX_SQL = """
 # CALL paradedb.create_bm25(
@@ -42,23 +42,23 @@ $$;
 # """.replace("&CHUNK_CLASS_NAME&", DocumentChunk_backup.__tablename__)
 
 CREATE_BM25_CHUNK_INDEX_SQL = f"""
-CREATE INDEX search_{DocumentChunk_backup.__tablename__}_idx ON {DocumentChunk_backup.__tablename__}
+CREATE INDEX search_{DocumentChunk.__tablename__}_idx ON {DocumentChunk.__tablename__}
 USING bm25 (id, text, document_id, document_name, website_url, collection_id, creation_timestamp, document_chunk_number, md, document_md)
 WITH (key_field = 'id');
 """
 
 DELETE_BM25_CHUNK_INDEX_SQL = f"""
-DROP INDEX search_{DocumentChunk_backup.__tablename__}_idx;
+DROP INDEX search_{DocumentChunk.__tablename__}_idx;
 """
 
 CREATE_BM25_DOC_INDEX_SQL = f"""
-CREATE INDEX search_{document_raw_backup.__tablename__}_idx ON {document_raw_backup.__tablename__}
-USING bm25 (id, creation_timestamp, size_bytes, file_name, website_url, integrity_sha256, document_collection_id, md)
+CREATE INDEX search_{document_raw.__tablename__}_idx ON {document_raw.__tablename__}
+USING bm25 (id, creation_timestamp, size_bytes, file_name, website_url, integrity_sha256, document_collection_id, md, finished_processing)
 WITH (key_field = 'id');
 """
 
 DELETE_BM25_DOC_INDEX_SQL = f"""
-DROP INDEX search_{document_raw_backup.__tablename__}_idx;
+DROP INDEX search_{document_raw.__tablename__}_idx;
 """
 
 def check_index_created(database: Session):
@@ -97,7 +97,7 @@ def initialize_database_engine() -> Session:
         finally:
             database.close()
         
-        # Completely close the session
+        # Completely close the session and make a new one to return.
         # This prevents a baffling machine-dependent bug (only occurs on one of my machines)
         # Essentially, on the first time running the server,
         # a rollback+flush would delete the BM25 indices
