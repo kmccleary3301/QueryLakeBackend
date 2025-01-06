@@ -413,8 +413,13 @@ def search_bm25(
         "sort_dir must be either 'DESC' or 'ASC'"
     
     order_by_field = f"ORDER BY {sort_by} {sort_dir}" + (", id ASC" if sort_by != "id" else "")
-    parse_field = f"({collection_spec}) AND ({formatted_query})" if formatted_query != "()" else \
-                    f"{collection_spec}"
+    
+    if formatted_query.startswith("() NOT "):
+        formatted_query = formatted_query[3:]
+        parse_field = f"({collection_spec}) {formatted_query}"
+    else:
+        parse_field = f"({collection_spec}) AND ({formatted_query})" \
+            if formatted_query != "()" else f"{collection_spec}"
     
     STMT = text(f"""
     SELECT id, {score_field}{chosen_attributes}
