@@ -1,19 +1,11 @@
-from sqlmodel import Session, select, and_, not_
+from sqlmodel import Session
 from ..typing.config import AuthType
-from ..api.single_user_auth import process_input_as_auth_type, get_user
-from ..database import encryption
-from ..api.hashing import hash_function
+from ..api.single_user_auth import get_user
 from ..api.user_auth import get_user_external_providers_dict
 import openai
 from typing import AsyncIterator, AsyncGenerator, Dict, List, Any
 import tiktoken
-import json
 from openai import AzureOpenAI
-
-EXTERNAL_PROIVDERS = [
-    "openai"
-]
-
 
 def num_tokens_from_string_tiktoken(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -38,6 +30,7 @@ async def stream_openai_response(
     api_key: str,
     model_parameters: Dict[str, Any] = None,
     organization_id: str = None,
+    base_url: str = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream responses from OpenAI models in a standardized format.
@@ -48,8 +41,15 @@ async def stream_openai_response(
 
     model_parameters = model_parameters or {}
     
+    print("Stream OpenAI Response got called with:", {
+        "model": model,
+        "base_url": base_url,
+        "api_key": api_key,
+    })
+    
     client = openai.OpenAI(
         api_key=api_key,
+        base_url=base_url
     )
     
     stream = client.chat.completions.create(
@@ -103,6 +103,7 @@ async def openai_llm_generator(
     model: str,
     external_api_key: str,
     external_organization_id: str = None,
+    base_url: str = None,
 ) -> AsyncIterator[str]:
     """
     Create a generator for openAI language model.
@@ -119,7 +120,8 @@ async def openai_llm_generator(
         model=model,
         api_key=external_api_key,
         model_parameters=model_parameters,
-        organization_id=external_organization_id
+        base_url=base_url,
+        organization_id=external_organization_id,
     ):
         yield content
 
@@ -151,6 +153,11 @@ async def azure_llm_generator(
     ):
         yield content
 
+provider_base_url_lookups = {
+    "openai": [None, "OpenAI"],
+    "deepinfra": ["https://api.deepinfra.com/v1/openai", "DeepInfra"],
+}
+
 def external_llm_generator(
     database : Session,
     auth : AuthType,
@@ -163,32 +170,35 @@ def external_llm_generator(
     Create a generator for an external language model provider.
     """
     
-    assert provider in EXTERNAL_PROIVDERS, f"Invalid external provider. Valid providers are: {EXTERNAL_PROIVDERS}"
-    
     (user, user_auth) = get_user(database, auth)
     
     assert not user.external_providers_encrypted is None, "No external provider credentials on account."
     
-    external_providers = get_user_external_providers_dict(database, auth)
+    external_providers_user_credentials = get_user_external_providers_dict(database, auth)
     
     # print("Ext LLM 2 external_providers:", external_providers)
     
-    if provider == "openai":
+    if provider in ["openai", "deepinfra"]:
+        provider_specs = provider_base_url_lookups.get(provider)
         return openai_llm_generator(
             request_dict,
             model,
-            external_providers['OpenAI'],
-            **(additional_auth or {})
+            external_providers_user_credentials[provider_specs[1]],
+            base_url=provider_specs[0],
+            **(additional_auth or {}),
         )
-    elif provider == "azure":
+    elif provider == "azure": 
+        # TODO: This currently doesn't work
+        # We need a clean way of specifying an endpoint and model
         model_split = model.split("/")
-        assert len(model_split) == 2, "Invalid model format for azure call. Must be in the format `endpoint/model`"
+        assert len(model_split) >= 2, "Invalid model format for azure call. Must be in the format `endpoint/model`"
+        model_split = [model_split[0], "/".join(model_split[1:])]
         endpoint_sub, model_sub = model_split[0], model_split[1]
         return azure_llm_generator(
             request_dict,
             model=model_sub,
             endpoint=endpoint_sub,
-            external_api_key=external_providers['Azure'],
+            external_api_key=external_providers_user_credentials['Azure'],
             **(additional_auth or {})
         )
     else:

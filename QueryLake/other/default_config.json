@@ -170,7 +170,8 @@
     "providers": [
         "OpenAI",
         "Anthropic",
-        "Serper.dev"
+        "Serper.dev",
+        "DeepInfra"
     ],
     "other_local_models": {
         "rerank_models": [
