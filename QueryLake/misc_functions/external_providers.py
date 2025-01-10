@@ -41,12 +41,6 @@ async def stream_openai_response(
 
     model_parameters = model_parameters or {}
     
-    print("Stream OpenAI Response got called with:", {
-        "model": model,
-        "base_url": base_url,
-        "api_key": api_key,
-    })
-    
     client = openai.OpenAI(
         api_key=api_key,
         base_url=base_url
