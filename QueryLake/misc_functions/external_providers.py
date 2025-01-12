@@ -3,7 +3,7 @@ from ..typing.config import AuthType
 from ..api.single_user_auth import get_user
 from ..api.user_auth import get_user_external_providers_dict
 import openai
-from typing import AsyncIterator, AsyncGenerator, Dict, List, Any
+from typing import AsyncIterator, AsyncGenerator, Dict, List, Any, Callable
 import tiktoken
 from openai import AzureOpenAI
 
@@ -28,6 +28,7 @@ async def stream_openai_response(
     messages: List[Dict[str, str]],
     model: str,
     api_key: str,
+    set_input_token_count: Callable[[int], None],
     model_parameters: Dict[str, Any] = None,
     organization_id: str = None,
     base_url: str = None,
@@ -50,12 +51,22 @@ async def stream_openai_response(
         model=model,
         messages=messages,
         stream=True,
+        stream_options={"include_usage": True},
         **model_parameters
     )
     
+    input_tokens_called = False
+    
     for chunk in stream:
-        if chunk.choices[0].delta.content is not None:
+        if not input_tokens_called and chunk.usage is not None and chunk.usage.prompt_tokens is not None:
+            set_input_token_count(chunk.usage.prompt_tokens)
+            
+        if chunk.choices is not None and \
+            len(chunk.choices) > 0 and \
+            chunk.choices[0].delta.content is not None:
+            
             yield chunk.choices[0].delta.content
+        
             
 async def stream_azure_response(
     messages: List[Dict[str, str]],
@@ -96,6 +107,7 @@ async def openai_llm_generator(
     request_dict: dict,
     model: str,
     external_api_key: str,
+    set_input_token_count: Callable[[int], None],
     external_organization_id: str = None,
     base_url: str = None,
 ) -> AsyncIterator[str]:
@@ -113,6 +125,7 @@ async def openai_llm_generator(
         messages=messages,
         model=model,
         api_key=external_api_key,
+        set_input_token_count=set_input_token_count,
         model_parameters=model_parameters,
         base_url=base_url,
         organization_id=external_organization_id,
@@ -158,7 +171,8 @@ def external_llm_generator(
     provider : str,
     model : str,
     request_dict : dict,
-    additional_auth: dict = None
+    set_input_token_count: Callable[[int], None],
+    additional_auth: dict = None,
 ) -> AsyncIterator:
     """
     Create a generator for an external language model provider.
@@ -179,6 +193,7 @@ def external_llm_generator(
             model,
             external_providers_user_credentials[provider_specs[1]],
             base_url=provider_specs[0],
+            set_input_token_count=set_input_token_count,
             **(additional_auth or {}),
         )
     elif provider == "azure": 

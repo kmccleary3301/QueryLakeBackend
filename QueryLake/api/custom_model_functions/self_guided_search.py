@@ -139,7 +139,7 @@ async def self_guided_search(
         {"role": "user", "content": TRAINING_PROMPT_2.format(question=question, max_search_string=max_search_string)}
     ]
 
-    max_responses = 15
+    max_responses, prompt_tokens, output_tokens = 15, 0, 0
 
     previous_searches, previous_results, all_sources = set(), [], []
     answer_found = False
@@ -157,8 +157,8 @@ async def self_guided_search(
                 stream_callables["searches"]({"search": search})
                 
     async def on_new_source(source_in: dict):
-        nonlocal searches_return
-        searches_return.append(source_in)
+        nonlocal all_sources
+        all_sources.append(source_in)
         if "sources" in stream_callables:
             if inspect.iscoroutinefunction(stream_callables["sources"]):
                 await stream_callables["sources"](source_in)
@@ -198,6 +198,9 @@ async def self_guided_search(
             stream_callables=stream_callables if answer_flag and stream_callables else None
         )
         
+        prompt_tokens += model_response.get("input_token_count", 0)
+        output_tokens += model_response.get("output_token_count", 0)
+        
 
         responses += 1
         chat_history_1.append({"role": "assistant", "content": model_response["output"], "function_calls": model_response.get("function_calls", [])})
@@ -230,7 +233,6 @@ async def self_guided_search(
                     collection_ids=collection_ids,
                     limit=5,
                 )
-                all_sources.extend(searched_sources)
                 searched_sources = [source.model_dump(exclude_defaults=True) for source in searched_sources]
                 
                 for source in searched_sources:
@@ -317,7 +319,9 @@ async def self_guided_search(
                 "time_taken": time.time() - start_time, 
                 "sources": [], 
                 "answer_found": answer_found,
-                "searches": searches_return
+                "searches": searches_return,
+                "input_token_count": prompt_tokens,
+                "output_token_count": output_tokens
             }
 
 
@@ -329,5 +333,7 @@ async def self_guided_search(
         "time_taken": time.time() - start_time,
         "sources": all_sources,
         "answer_found": answer_found,
-        "searches": searches_return
+        "searches": searches_return,
+        "input_token_count": prompt_tokens,
+        "output_token_count": output_tokens
     }

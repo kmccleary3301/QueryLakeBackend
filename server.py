@@ -135,7 +135,7 @@ def clean_function_arguments_for_api(system_args : dict,
 def hello_world():
     return {"message": "Hello World"}
 
-@serve.deployment
+@serve.deployment(max_ongoing_requests=100)
 @serve.ingress(fastapi_app)
 class UmbrellaClass:
     def __init__(self,
@@ -349,9 +349,6 @@ class UmbrellaClass:
                        only_format_prompt: bool = False):
         """
         Call an LLM model, possibly with parameters.
-        
-        TODO: Move OpenAI calls here for integration.
-        TODO: Add optionality via default values to the model parameters.
         """
         (_, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
         
@@ -373,6 +370,11 @@ class UmbrellaClass:
         model_specified = model_choice.split("/")
         return_stream_response = model_parameters.pop("stream", False)
         
+        input_token_count = -1
+        def set_input_token_count(input_token_value: int):
+            nonlocal input_token_count
+            input_token_count = input_token_value
+        
         if len(model_specified) > 1:
             # External LLM provider (OpenAI, Anthropic, etc)
             
@@ -389,8 +391,8 @@ class UmbrellaClass:
                                          auth, 
                                          provider=model_specified[0],
                                          model="/".join(model_specified[1:]),
-                                         request_dict=model_parameters)
-            input_token_count = -1
+                                         request_dict=model_parameters,
+                                         set_input_token_count=set_input_token_count)
         else:
             model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
                                                 .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
