@@ -8,7 +8,7 @@ from sqlalchemy import event, text
 from sqlalchemy.sql import func
 
 from sqlmodel import Session, create_engine, UUID
-from pgvector.sqlalchemy import Vector, HalfVector
+from pgvector.sqlalchemy import Vector, HALFVEC
 from sqlalchemy import Column
 from ..api.hashing import random_hash
 from sqlalchemy import Column, DDL, event, text
@@ -265,7 +265,7 @@ class DocumentChunk(SQLModel, table=True):
     document_name: str = Field()
     website_url : Optional[str] = Field(default=None, index=True)
     # embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Full 32-bit Precision
-    embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Half Precision
+    embedding: Optional[List[float]] = Field(sa_column=Column(HALFVEC(1024)), default=None) # Half Precision (16 bit)
     private: bool = Field(default=False)
     
     document_md: dict = Field(sa_column=Column(JSONB), default={})

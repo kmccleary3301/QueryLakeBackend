@@ -24,7 +24,7 @@ CREATE_VECTOR_INDEX_SQL = """
 DO $$
 BEGIN
 	EXECUTE 'CREATE INDEX &CHUNK_CLASS_NAME&_vector_cos_idx ON &CHUNK_CLASS_NAME&
-				USING hnsw (embedding vector_cosine_ops)
+				USING hnsw (embedding halfvec_cosine_ops)
 				WITH (m = 16, ef_construction = 64);';
 END
 $$;

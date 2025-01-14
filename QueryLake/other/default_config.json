@@ -171,7 +171,8 @@
         "OpenAI",
         "Anthropic",
         "Serper.dev",
-        "DeepInfra"
+        "DeepInfra",
+        "Azure"
     ],
     "other_local_models": {
         "rerank_models": [
