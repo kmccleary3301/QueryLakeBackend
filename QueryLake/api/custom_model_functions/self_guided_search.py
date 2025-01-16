@@ -112,6 +112,8 @@ async def self_guided_search(
     collection_ids: List[str] = [],
     model : str = None,
     max_searches : int = 5,
+    use_hybrid: bool = False,
+    use_rerank: int = None,
     stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None
 ) -> str:
     """
@@ -124,6 +126,7 @@ async def self_guided_search(
     llm_call = toolchain_function_caller("llm")
 
     search_bm25_function = toolchain_function_caller("search_bm25")
+    search_hybrid_function = toolchain_function_caller("search_hybrid")
     
     start_time = time.time()
 
@@ -226,14 +229,31 @@ async def self_guided_search(
                 
                 # print("PREVIOUS RESULTS:", previous_results)
                 # print("SEARCH MADE:", search_make)
-                searched_sources : List[DocumentChunkDictionary] = search_bm25_function(
-                    database=database,
-                    auth=auth,
-                    query=search_make,
-                    collection_ids=collection_ids,
-                    limit=5,
-                )
-                searched_sources = [source.model_dump(exclude_defaults=True) for source in searched_sources]
+                if not use_hybrid:
+                    searched_sources : List[DocumentChunkDictionary] = search_bm25_function(
+                        database=database,
+                        auth=auth,
+                        query=search_make,
+                        collection_ids=collection_ids,
+                        limit=5,
+                    )
+                    searched_sources = [source.model_dump(exclude_defaults=True) for source in searched_sources]
+                else:
+                    split_size = 5 if use_rerank is None else use_rerank // 2
+                    
+                    searched_sources : List[DocumentChunkDictionary] = await search_hybrid_function(
+                        database=database,
+                        toolchain_function_caller=toolchain_function_caller,
+                        auth=auth,
+                        query=search_make,
+                        collection_ids=collection_ids,
+                        limit_bm25=split_size,
+                        limit_similarity=split_size,
+                        rerank=(True if not use_rerank is None else False)
+                    )
+                    searched_sources = searched_sources[:5]
+                    
+                
                 
                 for source in searched_sources:
                     await on_new_source(source)
