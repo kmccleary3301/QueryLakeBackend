@@ -10,25 +10,30 @@ from pgvector.sqlalchemy import Vector
 from .sql_db_tables import *
 
 
-CHECK_INDEX_EXISTS_SQL = """
+CHECK_INDEX_EXISTS_SQL = f"""
 SELECT EXISTS (
     SELECT 1
     FROM   pg_class c
     JOIN   pg_namespace n ON n.oid = c.relnamespace
-    WHERE  c.relname = '&CHUNK_CLASS_NAME&_vector_cos_idx'
+    WHERE  c.relname = '{DocumentChunk.__tablename__}_vector_cos_idx'
     AND    n.nspname = 'public'  -- or your schema name here
 );
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk.__tablename__)
+"""
 
-CREATE_VECTOR_INDEX_SQL = """
+CREATE_VECTOR_INDEX_SQL = f"""
 DO $$
 BEGIN
-	EXECUTE 'CREATE INDEX &CHUNK_CLASS_NAME&_vector_cos_idx ON &CHUNK_CLASS_NAME&
+	EXECUTE 'CREATE INDEX {DocumentChunk.__tablename__}_vector_cos_idx ON {DocumentChunk.__tablename__}
 				USING hnsw (embedding halfvec_cosine_ops)
 				WITH (m = 16, ef_construction = 64);';
 END
 $$;
-""".replace("&CHUNK_CLASS_NAME&", DocumentChunk.__tablename__)
+"""
+
+
+DELETE_VECTOR_INDEX_SQL = f"""
+DROP INDEX {DocumentChunk.__tablename__}_vector_cos_idx;
+"""
 
 # CREATE_BM25_CHUNK_INDEX_SQL = """
 # CALL paradedb.create_bm25(
@@ -71,11 +76,22 @@ def initialize_database_engine() -> Session:
     engine = create_engine(url)
     print("PG URL:", url)
     
+    REBUILD_INDEX = True
+    
     # Create tables
     SQLModel.metadata.create_all(engine)
     
     # Create initial session
     database = Session(engine)
+    
+    if REBUILD_INDEX:
+        print("Deleting existing indices...")
+        database.exec(text(DELETE_VECTOR_INDEX_SQL))
+        database.exec(text(DELETE_BM25_CHUNK_INDEX_SQL))
+        database.exec(text(DELETE_BM25_DOC_INDEX_SQL))
+        database.commit()
+        print("Deleting existing indices...")
+    
     
     # Check if indices exist
     index_exists = check_index_created(database)

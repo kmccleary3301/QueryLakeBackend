@@ -580,6 +580,8 @@ def delete_document(database : Session,
                     hash_ids: Union[List[str], str] = None):
     """
     Authorizes that user has permission to delete document, then does so.
+    
+    TODO: doesn't yet support deleting multiple documents at once.
     """
     (user, user_auth) = get_user(database, auth)
 
