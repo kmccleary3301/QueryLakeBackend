@@ -66,7 +66,7 @@ class RerankerDeployment:
         print("DONE INITIALIZING RERANKER DEPLOYMENT")
         # self.model = FlagReranker(model_key, use_fp16=True)
     
-    @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.1)
+    @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.05)
     async def handle_batch(self, inputs: List[Tuple[str, str]], normalize = List[bool]) -> List[float]:
         
         with torch.no_grad():

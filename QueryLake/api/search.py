@@ -208,6 +208,7 @@ async def search_hybrid(
     sources_in_object : bool = False,
 ) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
+    t_1 = time.time()
     
     (_, _) = get_user(database, auth)
     
@@ -223,17 +224,17 @@ async def search_hybrid(
     assert (isinstance(limit_similarity, int) and limit_similarity >= 0 and limit_similarity <= 200), \
         "`limit_similarity` must be an int between 0 and 200"
     
-    
-    
     # Prevent SQL injection with embedding
     if not embedding is None:
         assert len(embedding) == 1024 and all(list(map(lambda x: isinstance(x, (int, float)), embedding))), \
             "Embedding must be a list of 1024 floats"
+    t_2 = time.time()
     
     # Prevent SQL injection with the collection ids.
     collection_ids = list(map(lambda x: re.sub(r'[^a-zA-Z0-9]', '', x), collection_ids))
     
     assert_collections_priviledge(database, auth, collection_ids)
+    t_3 = time.time()
     
     if web_search:
         collection_ids.append(["WEB"])
@@ -250,6 +251,7 @@ async def search_hybrid(
         embedding = (await embedding_call(auth, [query["embedding"]]))[0] if embedding is None else embedding
     else:
         embedding = [0.0]*1024
+    t_4 = time.time()
     
     formatted_query, strong_where_clause = parse_search(query["bm25"], CHUNK_INDEXED_COLUMNS, catch_all_fields=["text"])
     
@@ -260,37 +262,44 @@ async def search_hybrid(
     similarity_constraint = f"WHERE id @@@ paradedb.parse('({collection_spec}) AND ({strong_where_clause})')" \
         if not strong_where_clause is None else \
         f"WHERE {collection_spec_new}"
-    
-    
+    t_5 = time.time()
+ 
     STMT = text(f"""
-	WITH semantic_search AS (
-        SELECT id, RANK () OVER (ORDER BY embedding <=> :embedding_in) AS rank
+	WITH bm25_candidates AS (
+        SELECT id
+        FROM {DocumentChunk.__tablename__}
+        WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
+        ORDER BY paradedb.score(id) DESC
+        LIMIT :limit_bm25
+    ),
+    bm25_ranked AS (
+        SELECT id, RANK() OVER (ORDER BY paradedb.score(id) DESC) AS rank
+        FROM bm25_candidates
+    ),
+    semantic_search AS (
+        SELECT id, RANK() OVER (ORDER BY embedding <=> :embedding_in) AS rank
         FROM {DocumentChunk.__tablename__}
         {similarity_constraint}
-        ORDER BY embedding <=> :embedding_in 
+        ORDER BY embedding <=> :embedding_in
         LIMIT :limit_similarity
-    ),
-    bm25_search AS (
-        SELECT id, RANK () OVER (ORDER BY paradedb.score(id) DESC) as rank
-        FROM {DocumentChunk.__tablename__} 
-        WHERE id @@@ paradedb.parse('({collection_spec}) AND ({formatted_query})')
-        LIMIT :limit_bm25
     )
     SELECT
-        COALESCE(semantic_search.id, bm25_search.id) AS id,
+        COALESCE(semantic_search.id, bm25_ranked.id) AS id,
         COALESCE(1.0 / (60 + semantic_search.rank), 0.0) AS semantic_score,
-        COALESCE(1.0 / (60 + bm25_search.rank), 0.0) AS bm25_score,
+        COALESCE(1.0 / (60 + bm25_ranked.rank), 0.0) AS bm25_score,
         COALESCE(1.0 / (60 + semantic_search.rank), 0.0) +
-        COALESCE(1.0 / (60 + bm25_search.rank), 0.0) AS score,
+        COALESCE(1.0 / (60 + bm25_ranked.rank), 0.0) AS score,
         {retrieved_fields_string}
     FROM semantic_search
-    FULL OUTER JOIN bm25_search ON semantic_search.id = bm25_search.id
-    JOIN {DocumentChunk.__tablename__} ON {DocumentChunk.__tablename__}.id = COALESCE(semantic_search.id, bm25_search.id)
-    ORDER BY score DESC, text;
+    FULL OUTER JOIN bm25_ranked ON semantic_search.id = bm25_ranked.id
+    JOIN {DocumentChunk.__tablename__} ON {DocumentChunk.__tablename__}.id = COALESCE(semantic_search.id, bm25_ranked.id)
+    ORDER BY score DESC, text
+    LIMIT :sum;
 	""").bindparams(
         embedding_in=str(embedding), 
         limit_bm25=limit_bm25,
         limit_similarity=limit_similarity,
+        sum=limit_bm25 + limit_similarity,
     )
     
     if return_statement:
@@ -300,6 +309,19 @@ async def search_hybrid(
         results = database.exec(STMT)
         results = list(results)
         results = list(filter(lambda x: not x[0] is None, results))
+        t_6 = time.time()
+        
+        
+        result_metrics = {
+            "duration": {
+                "input_assertions": t_2 - t_1,
+                "collection_permission_assertions": t_3 - t_2,
+                "embedding_call": t_4 - t_3,
+                "query_parsing": t_5 - t_4,
+                "query_execution": t_6 - t_5,
+                "total": t_6 - t_1
+            }
+        }
         
         # results = list(filter(lambda x: not x[0] in id_exclusions, results))
         
@@ -331,11 +353,13 @@ async def search_hybrid(
                 rerank_score=rerank_scores[x]
             ), list(range(len(results)))))
             results = sorted(results, key=lambda x: x.rerank_score, reverse=True)
+            t_7 = time.time()
+            result_metrics["duration"].update({"rerank": t_7 - t_6, "total": t_7 - t_1})
         
         database.rollback()
         
         results = [r.model_dump() for r in results]
-        return results if not sources_in_object else {"sources": results}
+        return {"rows": results, **result_metrics}
         
     except Exception as e:
         database.rollback()

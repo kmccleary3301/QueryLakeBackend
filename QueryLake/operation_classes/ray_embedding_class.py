@@ -11,28 +11,15 @@ from FlagEmbedding import BGEM3FlagModel
 import time
 from ..typing.config import LocalModel
 
-# @serve.deployment(
-#     ray_actor_options={"num_gpus": 0.04, "num_cpus": 2}, 
-#     # max_replicas_per_node=1, 
-#     max_ongoing_requests=128,
-#     autoscaling_config={
-#         "min_replicas": 0,
-#         "max_replicas": 3,
-#         "downscale_delay_s": 5,
-#         "target_num_ongoing_requests_per_replica": 128,
-#     }
-# )
 class EmbeddingDeployment:
     def __init__(self, model_card : LocalModel):
         print("INITIALIZING EMBEDDING DEPLOYMENT")
         self.tokenizer = AutoTokenizer.from_pretrained(model_card.system_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        # self.device = "cpu"
-        # self.model = AutoModel.from_pretrained(model_key).to(self.device)
         self.model = BGEM3FlagModel(model_card.system_path, use_fp16=True, device=self.device) 
         print("DONE INITIALIZING EMBEDDING DEPLOYMENT")
 
-    @serve.batch(max_batch_size=128, batch_wait_timeout_s=1)
+    @serve.batch(max_batch_size=128, batch_wait_timeout_s=0.05)
     async def handle_batch(self, inputs: List[str]) -> List[List[float]]:
         
         m_1 = time.time()
@@ -55,9 +42,6 @@ class EmbeddingDeployment:
         
         pad_id = self.model.tokenizer.pad_token_id
         token_counts = [sum([1 for x in y if x != pad_id]) for y in inputs_tokenized]
-        # sparse_vecs = sentence_embeddings['lexical_weights']
-        
-        # print("Sparse Vector:", sparse_vecs)
         
         embed_list = sentence_embeddings['dense_vecs'].tolist()
         print("Done handling batch of size", len(inputs))

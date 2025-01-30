@@ -76,7 +76,7 @@ def initialize_database_engine() -> Session:
     engine = create_engine(url)
     print("PG URL:", url)
     
-    REBUILD_INDEX = True
+    REBUILD_INDEX = False
     
     # Create tables
     SQLModel.metadata.create_all(engine)
