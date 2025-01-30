@@ -21,7 +21,6 @@ def modified_sigmoid(x : Union[torch.Tensor, float]):
     return 100 * torch.sigmoid(-8 * ((x / 100) - 0.5))
 
 def S(x):
-    # return 1/(1 + torch.exp(-4 * (x - 0.5))) if isinstance(x, torch.Tensor) else 1 / (1 + math.exp(-4 * (x - 0.5)))
     return torch.sigmoid(4*(x - 0.5)) if isinstance(x, torch.Tensor) else 1 / (1 + exp(-4 * (x - 0.5)))
 
 def H(x):
@@ -32,7 +31,6 @@ def F(x):
         x = torch.tensor([x], dtype=torch.float32)
 
     h_zero = H(0)
-    # h_one = H(100)
     delta_h = H(x) - h_zero
     result = delta_h * (100 / (100 - h_zero))
 
@@ -44,16 +42,7 @@ def F(x):
 
     return result
 
-# @serve.deployment(
-#     ray_actor_options={"num_gpus": 0.08, "num_cpus": 2}, 
-#     # num_replicas=1
-#     autoscaling_config={
-#         "min_replicas": 0,
-#         "max_replicas": 3,
-#         "downscale_delay_s": 5,
-#         "target_num_ongoing_requests_per_replica": 32,
-#     }
-# )
+
 class RerankerDeployment:
     def __init__(self, model_card : LocalModel):
         print("INITIALIZING RERANKER DEPLOYMENT")

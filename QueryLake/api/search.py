@@ -205,7 +205,6 @@ async def search_hybrid(
     web_search : bool = False,
     rerank : bool = False,
     group_chunks : bool = True,
-    sources_in_object : bool = False,
 ) -> List[DocumentChunkDictionary]:
     # TODO: Check permissions on specified collections.
     t_1 = time.time()

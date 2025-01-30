@@ -227,8 +227,6 @@ async def self_guided_search(
                 search_make = model_response["function_calls"][-1]["arguments"]["question"] + f" {excluded_chunks}"
                 await on_new_search(f"Searching: \"{new_search}\"")
                 
-                # print("PREVIOUS RESULTS:", previous_results)
-                # print("SEARCH MADE:", search_make)
                 if not use_hybrid:
                     searched_sources : List[DocumentChunkDictionary] = search_bm25_function(
                         database=database,
@@ -241,7 +239,7 @@ async def self_guided_search(
                 else:
                     split_size = 5 if use_rerank is None else use_rerank // 2
                     
-                    searched_sources : List[DocumentChunkDictionary] = await search_hybrid_function(
+                    searched_sources = await search_hybrid_function(
                         database=database,
                         toolchain_function_caller=toolchain_function_caller,
                         auth=auth,
@@ -251,9 +249,8 @@ async def self_guided_search(
                         limit_similarity=split_size,
                         rerank=(True if not use_rerank is None else False)
                     )
+                    searched_sources : List[DocumentChunkDictionary] = searched_sources["rows"]
                     searched_sources = searched_sources[:5]
-                    
-                
                 
                 for source in searched_sources:
                     await on_new_source(source)
