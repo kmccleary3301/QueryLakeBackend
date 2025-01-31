@@ -4,22 +4,14 @@ from .user_auth import get_user
 from sqlmodel import Session, select, and_, not_
 from sqlalchemy.sql.operators import is_
 from ..database import sql_db_tables
-from copy import deepcopy, copy
-from time import sleep
 from .hashing import random_hash
-from ..toolchain_functions import toolchain_node_functions
-from fastapi import UploadFile
-from sse_starlette.sse import EventSourceResponse
-import asyncio
-from threading import Thread
 # from ..models.model_manager import LLMEnsemble
 import time
-from ..api.document import get_file_bytes, get_document_secure
+from ..api.document import get_file_bytes
 from ..api.user_auth import get_user_private_key
 from ..database.encryption import aes_encrypt_zip_file, aes_decrypt_zip_file
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi import WebSocket
-from ..misc_functions.function_run_clean import run_function_safe
 from ..typing.config import AuthType, getUserType
 from typing import Callable, Any, List, Dict, Union
 from ..typing.toolchains import *
@@ -51,6 +43,9 @@ async def save_toolchain_session(database : Session,
     existing_session.file_state = safe_serialize(toolchain_data["files"])
     existing_session.firing_queue = safe_serialize(toolchain_data["firing_queue"])
     existing_session.first_event_fired = toolchain_data["first_event_fired"]
+    existing_session.misc_data = safe_serialize({
+        "local_cache": toolchain_data["local_cache"]
+    })
 
     database.commit()
     if not ws is None:
@@ -74,6 +69,7 @@ def retrieve_toolchain_session_from_db(database : Session,
     assert session_db_entry.author == user_auth.username, f"User not authorized ('{session_db_entry.author}' vs '{user_auth.username}')"
     
     toolchain_get = get_toolchain_from_db(database, session_db_entry.toolchain_id, auth)
+    toolchain_misc_data : dict = json.loads(session_db_entry.misc_data) if session_db_entry.misc_data != "" else {}
     
     session = ToolchainSession(database,
                                auth,
@@ -90,7 +86,8 @@ def retrieve_toolchain_session_from_db(database : Session,
                  not session_db_entry.file_state is None else {},
         "session_hash_id": session_db_entry.id,
         "firing_queue": json.loads(session_db_entry.firing_queue) if session_db_entry.firing_queue != "" else {},
-        "first_event_fired": session_db_entry.first_event_fired
+        "first_event_fired": session_db_entry.first_event_fired,
+        "local_cache": toolchain_misc_data["local_cache"] if "local_cache" in toolchain_misc_data else {}
     }, toolchain_get)
 
     return session
@@ -136,10 +133,11 @@ def get_toolchain_from_db(database: Session,
                           toolchain_id : str,
                           auth : AuthType):
     """
-    TODO: Revisit this for permission locks.
+    TODO: Revisit this for permission locks once users can create new toolchains.
     """
     (user, user_auth) = get_user(database, auth)
     toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
+    assert not toolchain_db is None, f"Toolchain not found (id: `{toolchain_id}`)"
     return ToolChain(**json.loads(toolchain_db.content))
 
 def fetch_toolchain_config(database: Session,

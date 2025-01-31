@@ -74,7 +74,11 @@ class ToolchainSession():
         self.toolchain_session_files : Dict[str, ToolChainSessionFile] = {}
         self.database = database
         self.user_auth = auth
-        self.first_event_fired = False
+        self.first_event_fired : bool = False
+        
+        # This is for the browser, operates kind of like cookies but just for this session.
+        # You might, for example, have a model selection that you don't want to change.
+        self.local_cache = {}
 
     def reset_everything(self):
         """
@@ -917,7 +921,8 @@ class ToolchainSession():
             "files": self.toolchain_session_files,
             "session_hash_id": self.session_hash,
             "firing_queue": self.firing_queue,
-            "first_event_fired": self.first_event_fired
+            "first_event_fired": self.first_event_fired,
+            "local_cache": self.local_cache
         }
         
     def write_logs(self):
@@ -947,3 +952,4 @@ class ToolchainSession():
         self.state["title"] = data["title"]
         self.firing_queue = data["firing_queue"]
         self.first_event_fired = data["first_event_fired"]
+        self.local_cache = data["local_cache"]

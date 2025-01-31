@@ -794,6 +794,7 @@ class UmbrellaClass:
                             "toolchain_session_id": toolchain_session.session_hash,
                             "toolchain_id": toolchain_session.toolchain_id,
                             "state": toolchain_session.state,
+                            "first_event_fired": toolchain_session.first_event_fired
                         }
                     
                     elif command == "toolchain/create":
@@ -824,6 +825,11 @@ class UmbrellaClass:
                         event_result = await api.toolchain_event_call(**true_args, system_args=system_args, session=toolchain_session)
                         result = {"event_result": event_result}
                         toolchain_session.first_event_fired = True
+                        
+                    elif command == "toolchain/update_local_cache":
+                        assert "local_cache" in arguments, "No local cache provided"
+                        toolchain_session.local_cache = arguments["local_cache"]
+                        result = {"success": True}
                         
                     if toolchain_session.first_event_fired:
                         print("SAVING TOOLCHAIN")
