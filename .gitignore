@@ -6,3 +6,4 @@ toolchain_sessions_logs
 tmp
 models
 config.json
+config.yaml
