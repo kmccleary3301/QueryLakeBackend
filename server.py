@@ -607,30 +607,6 @@ class UmbrellaClass:
         """
         
         try:
-            
-            
-            
-            
-            # if file is None:
-            #     arguments_consumed_stream = await asyncio.wait_for(req.json(), timeout=10)
-            # else:
-            #     arguments_consumed_stream = {}
-            
-            # print("Calling:", rest_of_path)
-            
-            # if not file is None:
-            #     print("File:", file.filename)
-            
-            # if "parameters" in req.query_params._dict:
-            #     arguments = json.loads(req.query_params._dict["parameters"])
-            # else:
-            #     # We use ujson because normal `await req.json()` completely stalls on large inputs.
-            #     # print("Awaiting JSON")
-                
-            #     arguments = arguments_consumed_stream
-                
-            #     print("Arguments 2:", arguments)
-            
             print("Calling:", rest_of_path)
             
             if not file is None:

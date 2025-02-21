@@ -289,17 +289,17 @@ class MarkerDeployment:
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
         self,
-        doc: List[bytes], 
-        request_id: List[str]
+        doc: List[bytes]
+        # request_id: List[str]
         # pages: List[List[Page]]
         # inputs: List[bytes]
     ):
         results = []
         for i in range(len(doc)):
             doc_local = doc[i]
-            request_id_local = request_id[i]
+            # request_id_local = request_id[i]
             
-            self.queued_outputs[request_id_local] = False
+            # self.queued_outputs[request_id_local] = False
             
             doc_bytes = BytesIO(doc_local)
             doc_bytes.name = "test.pdf"
@@ -310,11 +310,11 @@ class MarkerDeployment:
                 batch_multiplier=4,
                 langs=["en"]
             )
-            self.queued_outputs[request_id_local] = (full_text, doc_images, out_meta, pages, text_blocks)
+            results.append((full_text, doc_images, out_meta, pages, text_blocks))
         
         return results
 
-    async def __call__(self, doc: bytes, request_id: str, already_made: bool = False):
+    async def __call__(self, doc: bytes):
         # doc_wrapped = PdfDocument(doc)
         # result = await self.handle_batch(doc_wrapped, pages)
         
@@ -325,9 +325,9 @@ class MarkerDeployment:
         
         
         # Forcefully wait for 30 seconds to test the timeout conditions
-        for i in range(30):
-            print("Sleeping for %4d seconds   " % (30-i), end="\r")
-            time.sleep(1)
+        # for i in range(30):
+        #     print("Sleeping for %4d seconds   " % (30-i), end="\r")
+        #     time.sleep(1)
         
         # if request_id in self.queued_outputs:
         #     if self.queued_outputs[request_id] == False:

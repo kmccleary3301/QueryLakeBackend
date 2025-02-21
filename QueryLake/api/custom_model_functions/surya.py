@@ -83,6 +83,9 @@ async def process_pdf_with_surya(
     Returns:
         Tuple containing the full text, dictionary of images, and output metadata.
     """
+    
+    time.sleep(40)
+    
     _, _ = get_user(database, auth)
     
     assert any([file, document_id]), "Must provide either file or document_id"
@@ -114,49 +117,20 @@ async def process_pdf_with_surya(
     print("Server Surya Handles:", list(server_surya_handles.keys()))
     marker_handle = server_surya_handles['Marker (V1)']
     
-    
-    request_id, request_queued, request_response = random_hash(), False, "REQUEST_IN_PROGRESS"
-    
-    # for i in range(30):
-    #     print("Sleeping for %4d seconds   " % (30-i), end="\r")
-    #     time.sleep(1)
-    
     # Get the reference from the async call
     
-    while isinstance(request_response, str) and \
-        request_response in ["QUEUE_NOT_FOUND", "REQUEST_IN_PROGRESS"]:
-        
-        try:
-            marker_handle_new = marker_handle.handle_options()
-            
-            marker_results = marker_handle.remote(
-                doc=doc_ref,
-                request_id=request_id,
-                already_made=request_queued,
-            )
-            
-            print("Marker results type:", type(marker_results))
-            
-            _, pending = ray.wait([marker_results], timeout=5)
-            
-            print("Pending:", pending)
-            
-            # Process the result
-            marker_results = ray.cloudpickle.load(BytesIO(base64.b64decode(marker_results)))
-        except Exception as e:
-            print("Error:", e)
-            print("Error type:", type(e))
-            raise e
-        
-        request_response = marker_results
-        
-        if not request_queued:
-            request_queued = True
-        
-        
+    marker_results = await marker_handle.remote(
+        doc=doc_ref
+    )
     
     print("Marker results type:", type(marker_results))
     
+    # Decode the result
+    marker_results = ray.cloudpickle.load(BytesIO(base64.b64decode(marker_results)))
     
+    
+    print("Marker results type:", type(marker_results))
     
     return marker_results
+    
+    return True
