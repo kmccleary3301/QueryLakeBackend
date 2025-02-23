@@ -50,18 +50,15 @@ import asyncio
 
 from psycopg2.errors import InFailedSqlTransaction
 
-from fastapi import FastAPI, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict
-from fastapi_login import LoginManager
-from fastapi_login.exceptions import InvalidCredentialsException
-# from passlib.context import CryptContext
+from fastapi import FastAPI
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
 from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls, basic_stream_results
 from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
+from QueryLake.routing.openai_completions import openai_chat_completion, ChatCompletionRequest
 
 from asyncio import gather
 from pynvml import nvmlInit, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
@@ -338,6 +335,16 @@ class UmbrellaClass:
         else:
             return external_llm_count_tokens(input_string, model_id)
     
+    
+    
+    @fastapi_app.post("/v1/chat/completions")
+    async def openai_chat_completions_endpoint(
+        self,
+        request: ChatCompletionRequest,
+        raw_request : Request
+    ):
+        return await openai_chat_completion(self, request, raw_request)
+    
     async def llm_call(self,
                        auth : AuthType, 
                        question : str = None,
@@ -396,7 +403,7 @@ class UmbrellaClass:
                                          set_input_token_count=set_input_token_count)
         else:
             model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
-                                                .where(sql_db_tables.model.id == self.config.default_models.llm)).first()
+                                                .where(sql_db_tables.model.id == model_choice)).first()
             
             model_parameters_true = {
                 **json.loads(model_entry.default_settings),

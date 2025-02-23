@@ -72,15 +72,23 @@ def safe_serialize(obj, **kwargs) -> str:
     """
     Serialize an object, but if an element is not serializable, return a string representation of said element.
     """
+    serialize_attempts = [
+        lambda d: d.__dict__,
+        lambda d: d.dict(),
+        lambda d: d.to_dict()
+    ]
+
     def default_callable(o):
-        if isinstance(o, BaseModel):
-            return o.model_dump(exclude_defaults=True)
+        nonlocal serialize_attempts
         
-        try:
-            return o.dict()
-        except:
-            return f"<<non-serializable: {type(o).__qualname__}>>"
-    
+        for attempt in serialize_attempts:
+            try:
+                return attempt(o)
+            except:
+                pass
+        
+        return f"<<non-serializable: {type(o).__qualname__}>>"
+
     # default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     default = lambda o: default_callable(o)
     return json.dumps(obj, default=default, **kwargs)

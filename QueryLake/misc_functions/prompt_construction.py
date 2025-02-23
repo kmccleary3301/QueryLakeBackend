@@ -61,34 +61,32 @@ def construct_chat_history_old(max_tokens : int,
     system_instruction_prompt = sys_instr_pad.replace("{system_instruction}", chat_history[0].content)
     sys_token_count = token_counter(system_instruction_prompt)    
     
-    chat_history_new, chat_history_new_formated, token_counts = [], [], []
-    # for i, entry in enumerate(chat_history[1:]):
-    # print("CHAT HISTORY", chat_history)
-    
-    
-    print("Wrapping chat entries:", [i for i in range(len(chat_history), 0, -2)])
+    chat_history_new, chat_history_new_formatted, token_counts = [], [], []
     
     begin_prefix = bot_response_pad.split("{response}")[0]
     prefix_tokens = token_counter(begin_prefix)
     
     for i in range(1, len(chat_history), 2):
         if i == len(chat_history) - 1: # Last entry is a user question
-            new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)
-            new_entry_formatted = {"role": "user", "content": chat_history[i].content}
+            new_entries = [usr_entry_pad.replace("{question}", chat_history[i].content)]
+            new_entries_formatted = [{"role": "user", "content": chat_history[i].content}]
         else: 
-            new_entry = usr_entry_pad.replace("{question}", chat_history[i].content)+bot_response_pad.replace("{response}", chat_history[i+1].content)
-            new_entry_formatted = [{"role": "user", "content": chat_history[i].content}, {"role": "assistant", "content": chat_history[i+1].content}]
+            new_entries = [usr_entry_pad.replace("{question}", chat_history[i].content), bot_response_pad.replace("{response}", chat_history[i+1].content)]
+            new_entries_formatted = [{"role": "user", "content": chat_history[i].content}, {"role": "assistant", "content": chat_history[i+1].content}]
         
-        token_counts.append(token_counter(new_entry))
-        chat_history_new.append(new_entry)
-        chat_history_new_formated.append(new_entry_formatted)
+        
+        for i, new_entry_formatted in enumerate(new_entries_formatted):
+            token_counts.append(token_counter(new_entries[i]))
+            chat_history_new.append(new_entries[i])
+            chat_history_new_formatted.append(new_entry_formatted)
     
     
     token_count_total = sys_token_count
     construct_prompt_array, construct_chat_history_array = [], []
     
     token_counts = token_counts[::-1]
-    chat_history_new_formated = chat_history_new_formated[::-1]
+    chat_history_new_formatted = chat_history_new_formatted[::-1]
+    
     
     for i, entry in enumerate(chat_history_new[::-1]):
         token_count_tmp = token_counts[i]
@@ -96,10 +94,10 @@ def construct_chat_history_old(max_tokens : int,
             break
         token_count_total += token_counts[i]
         construct_prompt_array.append(entry)
-        if isinstance(chat_history_new_formated[i], list):
-            construct_chat_history_array.extend(chat_history_new_formated[i][::-1])
+        if isinstance(chat_history_new_formatted[i], list):
+            construct_chat_history_array.extend(chat_history_new_formatted[i][::-1])
         else:
-            construct_chat_history_array.append(chat_history_new_formated[i])
+            construct_chat_history_array.append(chat_history_new_formatted[i])
     
     final_result = system_instruction_prompt + "".join(construct_prompt_array[::-1]) + begin_prefix
     final_result_formatted = [{"role": "system", "content": chat_history[0].content}] + construct_chat_history_array[::-1]
