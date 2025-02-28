@@ -30,6 +30,7 @@ from vllm.config import ModelConfig
 from pydantic import BaseModel
 from vllm.entrypoints.openai.protocol import (
     ChatCompletionRequest,
+    ChatCompletionResponse,
     BeamSearchParams,
     RequestResponseMetadata,
 )
@@ -95,6 +96,8 @@ def encode_chat(
                 tools=tools,
             )
         else:
+            
+            print("Conversation: ", conversation)
             
             prompt_data = apply_hf_chat_template(
                 tokenizer,
@@ -432,7 +435,66 @@ class VLLMDeploymentClass(OpenAIServingChat):
         
         return results_generator
     
-    async def create_chat_completion(
+    
+    async def create_chat_completion_original(
+        self,
+        request: ChatCompletionRequest,
+        raw_request: Optional[Request] = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Chat Completion API similar to OpenAI's API.
+
+        See https://platform.openai.com/docs/api-reference/chat/create
+        for the API specification. This API mimics the OpenAI
+        Chat Completion API.
+        
+        
+        Some modifications made, as calls to this Ray deployment must
+        always recieve a generator. Hence, we wrap all responses in an async generator.
+        """
+        
+        async def single_response_generator_protocol(
+            content_message: str,
+            prefix: str
+        ):
+            if not isinstance(content_message, str):
+                if isinstance(content_message, BaseModel):
+                    content_message = json.dumps(content_message.model_dump())
+                else:
+                    content_message = str(content_message)
+            
+            for _ in range(1):
+                yield f"{prefix} | {content_message}"
+            
+        def error_generator_protocol(error_message):
+            return single_response_generator_protocol(error_message, ">>>>>>>>>>>ERROR")
+        
+        def single_generator_protocol(error_message):
+            return single_response_generator_protocol(error_message, ">>>>>>>>>>>STANDARD")
+        
+        async def stream_prepend_generator(
+            generator: AsyncGenerator[str, None],
+        ) -> AsyncGenerator[str, None]:
+            yield ">>>>>>>>>>>STREAM"
+            
+            async for x in generator:
+                yield x
+                
+                
+        result = await self.create_chat_completion(
+            request, 
+            raw_request
+        )
+        
+        if isinstance(result, AsyncGenerator):
+            return stream_prepend_generator(result)
+        elif isinstance(result, ChatCompletionResponse):
+            return single_generator_protocol(result)
+        else:
+            return error_generator_protocol(result)
+    
+    
+    async def create_chat_completion_new(
         self,
         request: ChatCompletionRequest,
         raw_request: Optional[Request] = None,

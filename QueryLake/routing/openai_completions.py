@@ -7,12 +7,18 @@ from ..api.single_user_auth import get_user
 from ray.serve.handle import DeploymentHandle
 from fastapi.responses import StreamingResponse, JSONResponse
 import json
+from pydantic import BaseModel
+from typing import Any
 
 MESSAGE_PREPENDS = {
     "stream": ">>>>>>>>>>>STREAM",
     "error": ">>>>>>>>>>>ERROR",
     "standard": ">>>>>>>>>>>STANDARD"
 }
+
+class MockRequest(BaseModel):
+    headers: Any
+    state: Any
 
 
 # @with_cancellation
@@ -47,12 +53,13 @@ async def openai_chat_completion(
     assert model_choice in umbrella_class.llm_handles, "Model choice not found"
     llm_handle : DeploymentHandle = umbrella_class.llm_handles[model_choice]
     
-    # We disguise the request as a ChatCompletionRequest object for the second argument.
+    # We disguise the raw_request for the second argument.
     # The endpoint only cares about the raw request's headers and state.
-    setattr(request, "headers", raw_request.headers)
-    setattr(request, "state", raw_request.state)
+    mock_request = MockRequest(headers=raw_request.headers, state=raw_request.state)
     
-    generator = llm_handle.create_chat_completion.remote(request, request)
+    
+    # generator = llm_handle.create_chat_completion_new.remote(request, request)
+    generator = llm_handle.create_chat_completion_original.remote(request, mock_request)
     
     # The endpoint's first yield is an indicator of response type
     # We assume a generator, but it may return a static type delivered via generator.
@@ -66,8 +73,8 @@ async def openai_chat_completion(
         
         elif first_yield_value.startswith(MESSAGE_PREPENDS["error"]):
             message_content = first_yield_value[len(MESSAGE_PREPENDS["error"])+3:]
-            # error = ErrorResponse(**json.loads(message_content))
-            return JSONResponse(content=json.loads(message_content), status_code=message_content.get("code", 500))
+            error = json.loads(message_content)
+            return JSONResponse(content=error, status_code=error.get("code", 500))
         
         elif first_yield_value.startswith(MESSAGE_PREPENDS["standard"]):
             message_content = first_yield_value[len(MESSAGE_PREPENDS["standard"])+3:]
