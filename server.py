@@ -1,73 +1,52 @@
-import asyncio
-import traceback
-# import logging
-
-from typing import Annotated, Callable, Any
-import json, os
-from fastapi import FastAPI, File, UploadFile, APIRouter, Request, WebSocket, Form
-from starlette.requests import Request
-from sqlmodel import Session, SQLModel, create_engine, select
+import json, os, re
 import inspect
-import re
 from copy import deepcopy
+from pynvml import (
+    nvmlInit, 
+    nvmlDeviceGetCount, 
+    nvmlDeviceGetHandleByIndex, 
+    nvmlDeviceGetMemoryInfo
+)
+
+from fastapi import FastAPI, UploadFile, Request, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware import Middleware
+
+from typing import Literal, Tuple, Union, List, Dict, Awaitable, Callable
+
+from ray import serve
+from ray.serve.handle import DeploymentHandle
 
 from QueryLake.api import api
-from QueryLake.database import database_admin_operations, encryption, sql_db_tables
+from QueryLake.database import database_admin_operations
 from QueryLake.database.create_db_session import initialize_database_engine
-from threading import Timer
-
-from contextlib import asynccontextmanager
-from fastapi.responses import StreamingResponse, FileResponse, Response
-from starlette.background import BackgroundTask
-from starlette.testclient import TestClient
-
-import re, json
-from typing import AsyncGenerator, Optional, Literal, Tuple, Union, List, AsyncIterator, Dict, Awaitable
-from pydantic import BaseModel
-
-from fastapi import FastAPI, WebSocket, BackgroundTasks
-from starlette.requests import Request
-from starlette.websockets import WebSocketDisconnect
-
-from ray import serve, get
-from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
-
-
-from QueryLake.typing.config import Config, AuthType, getUserType, Padding, ModelArgs, Model
+from QueryLake.typing.config import Config, AuthType, Model
 from QueryLake.typing.toolchains import *
-from QueryLake.operation_classes.toolchain_session import ToolchainSession
-from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass, format_chat_history
-# from QueryLake.operation_classes.ray_exllamav2_class import ExllamaV2DeploymentClass
+from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
+from QueryLake.operation_classes.ray_surya_class import MarkerDeployment
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview, get_function_specs
 from QueryLake.typing.function_calling import FunctionCallDefinition
 
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware import Middleware
-import asyncio
-
-from psycopg2.errors import InFailedSqlTransaction
-
-from fastapi import FastAPI
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import Depends
 
 from QueryLake.api.single_user_auth import global_public_key, global_private_key
-from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
-from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls, basic_stream_results
+from QueryLake.misc_functions.external_providers import external_llm_count_tokens
+from QueryLake.misc_functions.server_class_functions import find_function_calls
 from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
 from QueryLake.routing.openai_completions import openai_chat_completion, ChatCompletionRequest
-
-from asyncio import gather
-from pynvml import nvmlInit, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
-
-from QueryLake.operation_classes.ray_surya_class import (
-    MarkerDeployment
+from QueryLake.routing.api_call_router import api_general_call
+from QueryLake.routing.llm_call import llm_call
+from QueryLake.routing.upload_documents import handle_document
+from QueryLake.routing.misc_models import (
+    embedding_call,
+    rerank_call,
+    web_scrape_call
 )
 
-from io import BytesIO
+
+
 
 origins = [
     "http://localhost:3001",
@@ -129,22 +108,19 @@ def clean_function_arguments_for_api(system_args : dict,
             synth_args[key] = system_args[key]
     return synth_args
 
-@fastapi_app.get("/api/python")
-def hello_world():
-    return {"message": "Hello World"}
-
 @serve.deployment(max_ongoing_requests=100)
 @serve.ingress(fastapi_app)
 class UmbrellaClass:
-    def __init__(self,
-                 configuration: Config,
-                 toolchains: Dict[str, ToolChain],
-                 web_scraper_handle: DeploymentHandle,
-                 llm_handles: Dict[str, DeploymentHandle] = {},
-                 embedding_handles: Dict[str, DeploymentHandle] = None,
-                 rerank_handles: Dict[str, DeploymentHandle] = None,
-                 surya_handles: Dict[str, DeploymentHandle] = None,
-                 ):
+    def __init__(
+        self,
+        configuration: Config,
+        toolchains: Dict[str, ToolChain],
+        web_scraper_handle: DeploymentHandle,
+        llm_handles: Dict[str, DeploymentHandle] = {},
+        embedding_handles: Dict[str, DeploymentHandle] = None,
+        rerank_handles: Dict[str, DeploymentHandle] = None,
+        surya_handles: Dict[str, DeploymentHandle] = None,
+    ):
         
         print("INITIALIZING UMBRELLA CLASS")
         self.config : Config = configuration
@@ -176,7 +152,6 @@ class UmbrellaClass:
             "server_web_scraper_handle": self.web_scraper_handle,
             "server_surya_handles": self.surya_handles,
             
-            
             "database": self.database,
             "toolchains_available": self.toolchain_configs,
             "public_key": global_public_key,
@@ -190,8 +165,8 @@ class UmbrellaClass:
             "llm_count_tokens": self.llm_count_tokens,
             "embedding": self.embedding_call,
             "rerank": self.rerank_call,
-            "find_function_calls": find_function_calls,
             "web_scrape": self.web_scrape_call,
+            "find_function_calls": find_function_calls,
             "function_help": self.get_all_function_descriptions
         }
         
@@ -211,121 +186,32 @@ class UmbrellaClass:
         
         print("DONE INITIALIZING UMBRELLA CLASS")
         print("CONFIG ENABLED MODELS:", self.config.enabled_model_classes)
-        # all_users = self.database.exec(select(sql_db_tables.user)).all()
-        # print("All users:")
-        # print(all_users)
-    
-    @fastapi_app.post("/get_auth_token")
-    async def login(self, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
-        try:
-            arguments = {"username": form_data.username, "password": form_data.password}
-            
-            true_args = clean_function_arguments_for_api(
-                self.default_function_arguments, 
-                arguments, 
-                function_object=api.create_oauth2_token
-            )
-            return api.create_oauth2_token(**true_args)
-        except Exception as e:
-            if isinstance(e, InFailedSqlTransaction):
-                self.database.rollback()
-            error_message = str(e)
-            stack_trace = traceback.format_exc()
-            return {"success": False, "error": error_message, "trace": stack_trace}
     
     async def embedding_call(self, 
                              auth : AuthType,
                              inputs : List[str],
                              model: str = None):
-        assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
-        if model is None:
-            model = self.config.default_models.embedding
-        assert model in self.embedding_handles, f"Model choice [{model}] not available for embeddings"
-        (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
-        result = await self.embedding_handles[model].run.remote({"text": inputs})
-        
-        if isinstance(result, list):
-            embedding = [e["embedding"] for e in result]
-            total_tokens = sum([e["token_count"] for e in result])
-        else:
-            embedding = result["embedding"]
-            total_tokens = result["token_count"]
-        
-        api.increment_usage_tally(self.database, user_auth, {
-            "embedding": {
-                self.config.default_models.embedding: {"tokens": total_tokens}
-            }
-        }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
-        
-        return embedding
+        return await embedding_call(self, auth, inputs, model)
     
-    async def rerank_call(self, 
-                          auth : AuthType,
-                          inputs : Union[List[Tuple[str, str]], Tuple[str, str]],
-                          normalize : Union[bool, List[bool]] = True,
-                          model: str = None):
-        assert self.config.enabled_model_classes.rerank, "Rerank models are disabled on this QueryLake Deployment"
-        if model is None:
-            model = self.config.default_models.rerank
-        assert model in self.rerank_handles, f"Model choice [{model}] not available for rerankers"
-        (user, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
-        
-        if isinstance(inputs, list):
-            if not isinstance(normalize, list):
-                normalize = [normalize for _ in range(len(inputs))]
-            assert len(normalize) == len(inputs), \
-                "All input lists must be the same length"
-            result = await gather(*[self.rerank_handles[model].run.remote(
-                inputs[i],
-                normalize=normalize[i]
-            ) for i in range(len(inputs))])
-            scores = [e["score"] for e in result]
-            total_tokens = sum([e["token_count"] for e in result])
-            
-        else:
-            result = await self.rerank_handles[model].run.remote(inputs, normalize=normalize)
-            scores = result["score"]
-            total_tokens = result["token_count"]
-        
-        api.increment_usage_tally(self.database, user_auth, {
-            "rerank": {
-                self.config.default_models.rerank: {"tokens": total_tokens}
-            }
-        }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
-        
-        return scores
+    async def rerank_call(
+        self, 
+        auth : AuthType,
+        inputs : Union[List[Tuple[str, str]], Tuple[str, str]],
+        normalize : Union[bool, List[bool]] = True,
+        model: str = None
+    ):
+        return await rerank_call(self, auth, inputs, normalize, model)
     
-    async def web_scrape_call(self, 
-                              auth : AuthType,
-                              inputs : Union[str, List[str]],
-                              timeout : Union[float, List[float]] = 10,
-                              markdown : Union[bool, List[bool]] = True,
-                              load_strategy : Union[Literal["full", "eager", "none"], list] = "full",
-                              summary: Union[bool, List[bool]] = False) -> List[List[float]]:
-        
-        (_, _) = api.get_user(self.database, auth)
-        
-        if isinstance(inputs, list):
-            if not isinstance(timeout, list):
-                timeout = [timeout for _ in range(len(inputs))]
-            if not isinstance(markdown, list):
-                markdown = [markdown for _ in range(len(inputs))]
-            if not isinstance(summary, list):
-                summary = [summary for _ in range(len(inputs))]
-            if not isinstance(load_strategy, list):
-                load_strategy = [load_strategy for _ in range(len(inputs))]
-            
-            assert all([len(timeout) == len(inputs), len(markdown) == len(inputs), len(summary) == len(inputs)]), \
-                "All input lists must be the same length"   
-            
-            return await gather(*[self.web_scraper_handle.run.remote(
-                inputs[i],
-                timeout=timeout[i],
-                markdown=markdown[i],
-                summary=summary[i]
-            ) for i in range(len(inputs))])
-        else:
-            return await self.web_scraper_handle.run.remote(inputs, timeout, markdown, summary)
+    async def web_scrape_call(
+        self, 
+        auth : AuthType,
+        inputs : Union[str, List[str]],
+        timeout : Union[float, List[float]] = 10,
+        markdown : Union[bool, List[bool]] = True,
+        load_strategy : Union[Literal["full", "eager", "none"], list] = "full",
+        summary: Union[bool, List[bool]] = False
+    ):
+        return await web_scrape_call(self, auth, inputs, timeout, markdown, load_strategy, summary)
     
     async def llm_count_tokens(self, model_id : str, input_string : str):
         model_specified = model_id.split("/")
@@ -334,8 +220,6 @@ class UmbrellaClass:
             return await self.llm_handles_no_stream[model_id].count_tokens.remote(input_string)
         else:
             return external_llm_count_tokens(input_string, model_id)
-    
-    
     
     @fastapi_app.post("/v1/chat/completions")
     async def openai_chat_completions_endpoint(
@@ -355,168 +239,14 @@ class UmbrellaClass:
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
                        functions_available: List[Union[FunctionCallDefinition, dict]] = None,
                        only_format_prompt: bool = False):
-        """
-        Call an LLM model, possibly with parameters.
-        """
-        (_, user_auth, original_auth, auth_type) = api.get_user(self.database, auth, return_auth_type=True)
-        
-        if not question is None:
-            chat_history = [{"role": "user", "content": question}]
-        
-        if not chat_history is None:
-            model_parameters["chat_history"] = chat_history
-        
-        on_new_token = None
-        if not stream_callables is None and "output" in stream_callables:
-            on_new_token = stream_callables["output"]
-        
-        if not model is None:
-            model_choice = model
-        else:
-            model_choice : str = model_parameters.pop("model", self.config.default_models.llm)
-        
-        model_specified = model_choice.split("/")
-        return_stream_response = model_parameters.pop("stream", False)
-        
-        input_token_count = -1
-        def set_input_token_count(input_token_value: int):
-            nonlocal input_token_count
-            input_token_count = input_token_value
-        
-        if len(model_specified) > 1:
-            # External LLM provider (OpenAI, Anthropic, etc)
-            
-            new_chat_history = format_chat_history(
-                chat_history,
-                sources=sources,
-                functions_available=functions_available
-            )
-            model_parameters.update({
-                "messages": new_chat_history,
-                "chat_history": new_chat_history
-            })
-            gen = external_llm_generator(self.database, 
-                                         auth, 
-                                         provider=model_specified[0],
-                                         model="/".join(model_specified[1:]),
-                                         request_dict=model_parameters,
-                                         set_input_token_count=set_input_token_count)
-        else:
-            model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
-                                                .where(sql_db_tables.model.id == model_choice)).first()
-            
-            model_parameters_true = {
-                **json.loads(model_entry.default_settings),
-            }
-            
-            model_parameters_true.update(model_parameters)
-            
-            
-            
-            stop_sequences = model_parameters_true["stop"] if "stop" in model_parameters_true else []
-            
-            assert self.config.enabled_model_classes.llm, "LLMs are disabled on this QueryLake Deployment"
-            assert model_choice in self.llm_handles, f"Model choice [{model_choice}] not available for LLMs"
-            
-            llm_handle : DeploymentHandle = self.llm_handles[model_choice]
-            gen : DeploymentResponseGenerator = (
-                llm_handle.get_result_loop.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
-            )
-            # print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
-            
-            if self.llm_configs[model_choice].engine == "exllamav2":
-                async for result in gen:
-                    print("GENERATOR OUTPUT:", result)
-            
-            
-            # input_token_count = self.llm_count_tokens(model_choice, model_parameters_true["text"])
-            generated_prompt = await self.llm_handles_no_stream[model_choice].generate_prompt.remote(
-                deepcopy(model_parameters_true), 
-                sources=sources, 
-                functions_available=functions_available
-            )
-            if only_format_prompt:
-                return generated_prompt
-            input_token_count = generated_prompt["tokens"]
-        
-        if "n" in model_parameters and model_parameters["n"] > 1:
-            results = []
-            async for result in gen:
-                results = result
-            # print(results)
-            return [e.text for e in results.outputs]
-        
-        increment_usage_args = {
-            "database": self.database, 
-            "auth": user_auth,
-            **({"api_key_id": original_auth} if auth_type == 2 else {})
-        }
-        
-        total_output_tokens = 0
-        def increment_token_count():
-            nonlocal total_output_tokens
-            total_output_tokens += 1
-        
-        def on_finish():
-            nonlocal total_output_tokens, input_token_count, user_auth, original_auth, auth_type
-            api.increment_usage_tally(self.database, user_auth, {
-                "llm": {
-                    model_choice: {
-                        "input_tokens": input_token_count,
-                        "output_tokens": total_output_tokens
-                    }
-                }
-            }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
-        
-        
-        
-        
-        if return_stream_response:
-            if len(model_specified) == 1:
-                return StreamingResponse(
-                    stream_results_tokens(
-                        gen, 
-                        self.llm_configs[model_choice],
-                        on_new_token=on_new_token,
-                        increment_token_count=increment_token_count,
-                        encode_output=False, 
-                        stop_sequences=stop_sequences
-                    ),
-                    background=BackgroundTask(on_finish)
-                )
-            else:
-                return StreamingResponse(basic_stream_results(gen, on_new_token=on_new_token))
-        else:
-            results = []
-            if len(model_specified) == 1:
-                async for result in stream_results_tokens(
-                    gen, 
-                    self.llm_configs[model_choice],
-                    on_new_token=on_new_token,
-                    increment_token_count=increment_token_count,
-                    stop_sequences=stop_sequences
-                ):
-                    results.append(result)
-                on_finish()
-            else:
-                async for result in basic_stream_results(gen, on_new_token=on_new_token):
-                    results.append(result)
-        
-        
-        text_outputs = "".join(results)
-        
-        call_results = {}
-        if not functions_available is None:
-            calls = find_function_calls(text_outputs)
-            calls_possible = [
-                e.name if isinstance(e, FunctionCallDefinition) else e["name"] 
-                for e in functions_available 
-            ]
-            
-            calls = [e for e in calls if ("function" in e and e["function"] in calls_possible)]
-            call_results = {"function_calls": calls}
-        
-        return {"output": text_outputs, "output_token_count": len(results), "input_token_count": input_token_count, **call_results}
+        return await llm_call(
+            self, auth, question,
+            model_parameters,
+            model, sources, chat_history,
+            stream_callables,
+            functions_available,
+            only_format_prompt
+        )
     
     def get_all_function_descriptions(self):
         """
@@ -533,71 +263,8 @@ class UmbrellaClass:
     
     @fastapi_app.post("/update_documents")
     @fastapi_app.post("/upload_document")
-    async def upload_document_new(self, req : Request, file : UploadFile):
-        endpoint = req.scope['path']
-        try:
-            
-            # We have to take the arguments in the header, because the body is the file.
-            arguments = json.loads(req.query_params._dict["parameters"])
-            file_name = file.filename
-            file_ext = file_name.split(".")[-1]
-            if endpoint.strip() == "/update_documents":
-                target_func, target_func_str = api.update_documents, "update_documents"
-            elif file_ext in ["zip", "7z", "rar", "tar"]:
-                target_func, target_func_str = api.upload_archive, "upload_archive"
-            else:
-                target_func, target_func_str = api.upload_document, "upload_document"
-            
-            true_arguments = clean_function_arguments_for_api({
-                **self.default_function_arguments,
-                "file": file,
-            }, arguments, target_func_str)
-            return {"success": True, "result": await target_func(**true_arguments)}
-        
-        except Exception as e:
-            # if isinstance(e, InFailedSqlTransaction):
-            self.database.rollback()
-            self.database.flush()
-            error_message = str(e)
-            stack_trace = traceback.format_exc()
-            return_msg = {"success": False, "note": error_message, "trace": stack_trace}
-            # print(return_msg)
-            print(error_message[:2000])
-            return return_msg
-
-    @fastapi_app.get("/fetch_document")
-    async def get_document_2(self, req: Request):
-        try:
-            if "parameters" in req.query_params._dict:
-                arguments = json.loads(req.query_params._dict["parameters"])
-            else:
-                arguments = await req.json()
-            
-            function_actual = getattr(api, "fetch_document")
-            true_args = clean_function_arguments_for_api(
-                self.default_function_arguments, 
-                arguments, 
-                "fetch_document"
-            )
-            
-            print("Created args:", true_args)
-            
-            # Check if function is async
-            if inspect.iscoroutinefunction(function_actual):
-                args_get = await function_actual(**true_args)
-            else:
-                args_get = function_actual(**true_args)
-            
-            return args_get
-        except Exception as e:
-            if isinstance(e, InFailedSqlTransaction):
-                self.database.flush()
-                self.database.rollback()
-            error_message = str(e)
-            stack_trace = traceback.format_exc()
-            return_dict = {"success": False, "error": error_message, "trace": stack_trace}
-            print(json.dumps(return_dict, indent=4))
-            return return_dict
+    async def upload_document(self, req : Request, file : UploadFile):
+        return await handle_document(self, clean_function_arguments_for_api, req, file)
     
     @fastapi_app.get("/api/ping")
     async def ping_function(self, req: Request):
@@ -608,73 +275,13 @@ class UmbrellaClass:
     @fastapi_app.post("/api/{rest_of_path:path}")
     @fastapi_app.get("/api/{rest_of_path:path}")
     async def api_general_call(self, req: Request, rest_of_path: str, file: UploadFile = None):
-        """
-        This is a wrapper around every api function that is allowed. 
-        It will call the function with the arguments provided, after filtering them for security.
-        """
-        
-        try:
-            print("Calling:", rest_of_path)
-            
-            if not file is None:
-                print("File:", file.filename)
-            
-            if "parameters" in req.query_params._dict:
-                arguments = json.loads(req.query_params._dict["parameters"])
-            else:
-                # We use ujson because normal `await req.json()` completely stalls on large inputs.
-                # print("Awaiting JSON")
-                
-                arguments = await asyncio.wait_for(req.json(), timeout=10)
-            
-            
-            
-            # print("arguments:", arguments)
-            route = req.scope['path']
-            route_split = route.split("/")
-            print("/".join(route_split[:3]))
-            if rest_of_path == "help":
-                if len(route_split) > 3:
-                    function_name = route_split[3]
-                    return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
-                else:
-                    print(API_FUNCTION_HELP_GUIDE)
-                    return {"success": True, "note": API_FUNCTION_HELP_GUIDE}
-            else:
-                function_actual = self.api_function_getter(rest_of_path.split("/")[0])
-                true_args = clean_function_arguments_for_api(
-                    self.default_function_arguments, 
-                    arguments, 
-                    function_object=function_actual
-                )
-                
-                if inspect.iscoroutinefunction(function_actual):
-                    args_get = await function_actual(**true_args)
-                else:
-                    args_get = function_actual(**true_args)
-                
-                # print("Type of args_get:", type(args_get))
-                
-                if type(args_get) is StreamingResponse:
-                    return args_get
-                elif type(args_get) is FileResponse:
-                    return args_get
-                elif type(args_get) is Response:
-                    return args_get
-                elif args_get is True:
-                    return {"success": True}
-                return {"success": True, "result": args_get}
-        except Exception as e:
-            
-            self.database.rollback()
-            self.database.flush()
-            
-            error_message = str(e)
-            stack_trace = traceback.format_exc()
-            return_dict = {"success": False, "error": error_message, "trace": stack_trace}
-            print("RETURNING:", json.dumps(return_dict, indent=4))
-            return return_dict
-            # return {"success": False, "note": str(e)}
+        return await api_general_call(
+            self,
+            clean_function_arguments_for_api,
+            API_FUNCTION_HELP_DICTIONARY,
+            API_FUNCTION_HELP_GUIDE,
+            req, rest_of_path, file
+        )
     
     @fastapi_app.websocket("/toolchain")
     async def toolchain_websocket_handler(self, ws: WebSocket):
@@ -691,7 +298,6 @@ class UmbrellaClass:
 
 SERVER_DIR = os.path.dirname(os.path.realpath(__file__))
 os.chdir(SERVER_DIR)
-
 
 with open("config.json", 'r', encoding='utf-8') as f:
     GLOBAL_CONFIG = f.read()
@@ -732,7 +338,6 @@ gpus = sorted(check_gpus(), key=lambda x: x["total_vram"], reverse=True)
 if len(gpus) > 1:
     print("Multiple GPUs detected. QueryLake isn't optimized for multi-GPU usage yet. Continue at your own risk.")
 MAX_GPU_VRAM = gpus[0]["total_vram"]
-
 
 LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
 

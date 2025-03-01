@@ -573,7 +573,6 @@ async def update_documents(database : Session,
     database.commit()
     return True
         
-
 def delete_document(database : Session, 
                     auth : AuthType,
                     hash_id: Union[List[str], str] = None,
@@ -731,7 +730,6 @@ async def download_document(database : Session,
     
     return StreamingResponse(file_io)
 
-
 def fetch_document(
     database : Session,
     auth: AuthType,
@@ -882,7 +880,6 @@ def trigger_database_sql_error(database : Session,
     database.commit()
     return True
 
-
 def call_surya_model(
         database : Session,
         server_surya_handles: Dict[str, Any],
@@ -901,7 +898,6 @@ def call_surya_model(
     #     file.name = file_name
     
     print("Server surya handles:", server_surya_handles)
-
 
 def ping_4():
     time.sleep(40)

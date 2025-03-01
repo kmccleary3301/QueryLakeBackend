@@ -73,23 +73,35 @@ def safe_serialize(obj, **kwargs) -> str:
     Serialize an object, but if an element is not serializable, return a string representation of said element.
     """
     serialize_attempts = [
-        lambda d: d.__dict__,
         lambda d: d.dict(),
-        lambda d: d.to_dict()
+        lambda d: d.to_dict(),
+        # lambda d: d.__dict__,
     ]
 
     def default_callable(o):
         nonlocal serialize_attempts
         
+        serialized = None
+        
         for attempt in serialize_attempts:
             try:
-                return attempt(o)
+                serialized = attempt(o)
             except:
                 pass
         
-        return f"<<non-serializable: {type(o).__qualname__}>>"
+        if serialized is None:
+            return f"<<non-serializable: {type(o).__qualname__}>>"
+        
+        if not isinstance(serialized, (dict, list)):
+            return f"<<non-serializable: {type(o).__qualname__}>>"
+        
+        if not all([isinstance(k, (str, int)) for k in serialized.keys()]):
+            return f"<<non-serializable: {type(o).__qualname__}>>"
+        
+            
+        return serialized
+        
 
-    # default = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     default = lambda o: default_callable(o)
     return json.dumps(obj, default=default, **kwargs)
 
