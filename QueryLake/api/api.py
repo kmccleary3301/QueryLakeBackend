@@ -12,7 +12,7 @@ from .custom_model_functions.multi_search import llm_multistep_search
 from .custom_model_functions.self_guided_search import self_guided_search
 from .search import *
 from .usage_tracking import *
-from .custom_model_functions.surya import process_pdf_with_surya
+from .custom_model_functions.surya import process_pdf_with_surya, process_pdf_with_surya_2
 from ..operation_classes.ray_vllm_class import format_chat_history
 # from .patho_report_stager import *
 

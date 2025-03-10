@@ -638,7 +638,7 @@ def get_document_secure(database : Session,
     
     if return_document:
         return document
-    return {"password": document_password, "hash_id": document.id}
+    return {"password": document_password, "hash_id": document.id, "file_name": document.file_name}
 
 def craft_document_access_token(database : Session, 
                                 public_key: str,

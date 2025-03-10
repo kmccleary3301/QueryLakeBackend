@@ -26,7 +26,15 @@ from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
-from QueryLake.operation_classes.ray_surya_class import MarkerDeployment
+from QueryLake.operation_classes.ray_surya_class import (
+    MarkerDeployment,
+    SuryaDetectionDeployment,
+    SuryaLayoutDeployment,
+    SuryaOCRDeployment,
+    SuryaOrderDeployment,
+    SuryaTableDeployment,
+    SuryaTexifyDeployment
+)
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview, get_function_specs
 from QueryLake.typing.function_calling import FunctionCallDefinition
 
@@ -411,6 +419,12 @@ surya_handles = {}
 if GLOBAL_CONFIG.enabled_model_classes.surya:
     surya_model_map = {
         "marker": MarkerDeployment,
+        "surya_detection": SuryaDetectionDeployment,
+        "surya_layout": SuryaLayoutDeployment,
+        "surya_recognition": SuryaOCRDeployment,
+        "surya_order": SuryaOrderDeployment,
+        "surya_table_recognition": SuryaTableDeployment,
+        "surya_texify": SuryaTexifyDeployment
     }
     
     for surya_model in GLOBAL_CONFIG.other_local_models.surya_models:

@@ -521,48 +521,220 @@ class MarkerDeployment:
 #         print("Done with results, returning")
         
 #         return result_ref_encoded
+
+from surya.ordering import batch_ordering
+
+class SuryaOrderDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA ORDER DEPLOYMENT")
+
+        surya_settings_module = sys.modules['surya.settings']
+        surya_settings_module.settings.ORDER_MODEL_CHECKPOINT = model_card.system_path
+
+        self.model = load_order_model(checkpoint=model_card.system_path)
+        self.processor = load_order_processor(checkpoint=model_card.system_path)
+        setattr(self.model, "processor", self.processor)
+        print("DONE INITIALIZING SURYA ORDER DEPLOYMENT")
+
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+        bboxes: List[List[List[float]]]
+    ):
+        return batch_ordering(images, bboxes, self.model, self.processor, batch_size=8)
+
+    async def run(
+        self,
+        image: Image.Image,
+        bboxes: List[List[float]]
+    ) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image, bboxes)
         
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 
+from surya.tables import batch_table_recognition
 
+class SuryaTableDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA TABLE DEPLOYMENT")
+
+        surya_settings_module = sys.modules['surya.settings']
+        surya_settings_module.settings.TABLE_REC_MODEL_CHECKPOINT = model_card.system_path
+
+        self.model = load_table_model(checkpoint=model_card.system_path)
+        self.processor = load_table_processor()
+        setattr(self.model, "processor", self.processor)
+        print("DONE INITIALIZING SURYA TABLE DEPLOYMENT")
+
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+        table_cells: List[List[Dict]]
+    ):
+        return batch_table_recognition(images, table_cells=table_cells, model=self.model, processor=self.processor, batch_size=8)
+
+    async def run(
+        self,
+        image: Image.Image,
+        table_cells: List[Dict]
+    ) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image, table_cells)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
+
+from surya.layout import batch_layout_detection, TextDetectionResult
+
+class SuryaLayoutDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA LAYOUT DEPLOYMENT")
+
+        surya_settings_module = sys.modules['surya.settings']
+        surya_settings_module.settings.LAYOUT_MODEL_CHECKPOINT = model_card.system_path
+
+        self.model = load_detection_model(checkpoint=model_card.system_path)
+        self.processor = load_detection_processor(checkpoint=model_card.system_path)
+        setattr(self.model, "processor", self.processor)
+        print("DONE INITIALIZING SURYA LAYOUT DEPLOYMENT")
+
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+        # text_detection_results: List[TextDetectionResult | None]
+    ):
+        return batch_layout_detection(images, self.model, self.processor, batch_size=8)
+
+    async def run(
+        self,
+        image: Image.Image,
+    ) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
+
+
+from marker.ocr.detection import batch_text_detection as batch_text_detection_original
+
+class SuryaDetectionDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA DETECTION DEPLOYMENT")
+
+        surya_settings_module = sys.modules['surya.settings']
+        surya_settings_module.settings.DETECTOR_MODEL_CHECKPOINT = model_card.system_path
+
+        self.model = load_detection_model(checkpoint=model_card.system_path)
+        self.processor = load_detection_processor(checkpoint=model_card.system_path)
+        setattr(self.model, "processor", self.processor)
+        print("DONE INITIALIZING SURYA DETECTION DEPLOYMENT")
+
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+    ) -> List[TextDetectionResult]:
+        return batch_text_detection_original(images, self.model, self.processor, batch_size=8)
+
+    async def run(
+        self,
+        image: Image.Image,
+    ) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(result, result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
+
+from surya.recognition import batch_recognition
+class SuryaOCRDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA RECOGNITION DEPLOYMENT")
+
+        surya_settings_module = sys.modules['surya.settings']
+        surya_settings_module.settings.RECOGNITION_MODEL_CHECKPOINT = model_card.system_path
+
+        self.model = load_recognition_model(checkpoint=model_card.system_path)
+        self.processor = load_recognition_processor()
+        setattr(self.model, "processor", self.processor)
+        self.langs = replace_langs_with_codes(None)
+        print("DONE INITIALIZING SURYA RECOGNITION DEPLOYMENT")
+
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+        languages: List[str]
+    ):
+        # TODO: Maybe handle langs differently here
+        return batch_recognition(images, languages, self.model, self.processor, batch_size=8)
+
+    async def run(
+        self,
+        image: Image.Image,
+        languages: str
+    ) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image, languages)
+        
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        
+        return result_ref_encoded
 
 
 
 
 # Old code
+from marker.equations.inference import get_total_texify_tokens, get_latex_batched
 
-# class SuryaTexifyDeployment:
-#     def __init__(self, model_card: LocalModel):
-#         print("INITIALIZING SURYA TEXIFY DEPLOYMENT")
-#         texify_settings_module = sys.modules['texify.settings']
-#         texify_settings_module.settings.MODEL_CHECKPOINT = model_card.system_path
+class SuryaTexifyDeployment:
+    def __init__(self, model_card: LocalModel):
+        print("INITIALIZING SURYA TEXIFY DEPLOYMENT")
+        texify_settings_module = sys.modules['texify.settings']
+        texify_settings_module.settings.MODEL_CHECKPOINT = model_card.system_path
         
-#         self.model = load_texify_model(checkpoint=model_card.system_path)
-#         self.processor = load_texify_processor()
-#         setattr(self.model, "processor", self.processor)
-#         print("DONE INITIALIZING SURYA TEXIFY DEPLOYMENT")
+        self.model = load_texify_model(checkpoint=model_card.system_path)
+        self.processor = load_texify_processor()
+        setattr(self.model, "processor", self.processor)
+        print("DONE INITIALIZING SURYA TEXIFY DEPLOYMENT")
 
-#     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
-#     async def handle_batch(
-#         self,
-#         doc: List[PdfDocument], 
-#         pages: List[List[Page]]
-#     ):
-#         results = []
-#         for i in range(len(doc)):
-#             doc_local = doc[i]
-#             pages_local = pages[i]
-#             with torch.no_grad():
-#                 result = replace_equations(doc_local, pages_local, self.model, batch_multiplier=1)
-#             results.append(result)
-#         return results
+    @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
+    async def handle_batch(
+        self,
+        images: List[Image.Image],
+        token_counts: List[int]
+    ):
+        results = []
+        results = get_latex_batched(images, token_counts, self.model, batch_multiplier=8)
+        return results
 
-#     async def run(self, doc: bytes, pages: List[Page]) -> Tuple[List[Dict], Dict]:
-#         doc_wrapped = PdfDocument(doc)
-#         result = await self.handle_batch(doc_wrapped, pages)
+    async def run(self, image: Image.Image, token_count: int) -> Tuple[List[Dict], Dict]:
+        result = await self.handle_batch(image, token_count)
         
-#         result_buf = BytesIO()
-#         cloudpickle.dump(ray.put(result), result_buf)
-#         result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
+        result_buf = BytesIO()
+        cloudpickle.dump(ray.put(result), result_buf)
+        result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
         
-#         return result_ref_encoded
+        return result_ref_encoded
+    
+    async def get_total_texify_tokens(
+        self,
+        text
+    ):
+        return get_total_texify_tokens(text, self.processor)
