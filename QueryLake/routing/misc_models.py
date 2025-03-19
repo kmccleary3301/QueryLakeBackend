@@ -15,7 +15,8 @@ async def embedding_call(
     self, # Umbrella class, can't type hint because of circular imports
     auth : AuthType,
     inputs : List[str],
-    model: str = None
+    model: str = None,
+    return_tokens_usage = False
 ):
     assert self.config.enabled_model_classes.embedding, "Embedding models are disabled on this QueryLake Deployment"
     if model is None:
@@ -37,7 +38,7 @@ async def embedding_call(
         }
     }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
     
-    return embedding
+    return embedding if not return_tokens_usage else (embedding, total_tokens)
 
 async def rerank_call(
     self, # Umbrella class, can't type hint because of circular imports
