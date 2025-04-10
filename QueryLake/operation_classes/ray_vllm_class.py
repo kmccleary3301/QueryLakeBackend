@@ -44,6 +44,7 @@ from vllm.entrypoints.openai.serving_models import OpenAIServingModels, BaseMode
 from fastapi import Request
 from vllm.usage.usage_lib import UsageContext
 import traceback
+from vllm.lora.request import LoRARequest
 
 def encode_chat(
     llm_engine: AsyncLLMEngine,
@@ -233,6 +234,48 @@ class VLLMDeploymentClass(OpenAIServingChat):
             **(self.model_config_t.engine_args if not self.model_config_t.engine_args is None else {})
         }
         
+        # --- LoRA Configuration Start ---
+        self.loras_map_t: Dict[str, Dict[str, Any]] = {}
+        enable_lora = False
+        if self.model_config_t.loras and len(self.model_config_t.loras) > 0:
+            print(f"Found {len(self.model_config_t.loras)} LoRAs in config.")
+            enable_lora = True
+            # Assign unique integer IDs and store paths
+            for i, lora_config in enumerate(self.model_config_t.loras):
+                if lora_config.id and lora_config.system_path:
+                    # Basic check if path exists (can be enhanced)
+                    if not os.path.exists(lora_config.system_path):
+                         print(f"Warning: LoRA path does not exist: {lora_config.system_path} for LoRA ID: {lora_config.id}")
+                    
+                    self.loras_map_t[lora_config.id] = {
+                        "path": lora_config.system_path,
+                        "int_id": i + 1 # VLLM uses 1-based integer IDs
+                    }
+                    print(f"  - Registered LoRA ID '{lora_config.id}' (int_id={i+1}) at path '{lora_config.system_path}'")
+                else:
+                     print(f"Warning: Skipping LoRA config due to missing id or system_path: {lora_config}")
+
+            # Set engine args for LoRA, allowing overrides from model_config.engine_args
+            engine_args_make.setdefault("enable_lora", enable_lora)
+            # Default max_loras to number of configured LoRAs, min 1 if enabled
+            engine_args_make.setdefault("max_loras", max(1, len(self.loras_map_t)))
+            # Default max_lora_rank, common value is 64
+            engine_args_make.setdefault("max_lora_rank", 64)
+             # Default max_cpu_loras, often same as max_loras
+            engine_args_make.setdefault("max_cpu_loras", engine_args_make["max_loras"])
+            
+            print(f"LoRA Engine Args set: enable_lora={engine_args_make['enable_lora']}, max_loras={engine_args_make['max_loras']}, max_lora_rank={engine_args_make['max_lora_rank']}, max_cpu_loras={engine_args_make['max_cpu_loras']}")
+
+        elif "enable_lora" in engine_args_make and engine_args_make["enable_lora"]:
+             # Handle case where enable_lora is true in engine_args but no loras defined in config
+             enable_lora = True
+             print("LoRA enabled via engine_args, but no specific LoRAs found in model config.")
+             engine_args_make.setdefault("max_loras", 1) # Default to 1 if enabled but none specified
+             engine_args_make.setdefault("max_lora_rank", 64)
+             engine_args_make.setdefault("max_cpu_loras", engine_args_make["max_loras"])
+             print(f"LoRA Engine Args set: enable_lora={engine_args_make['enable_lora']}, max_loras={engine_args_make['max_loras']}, max_lora_rank={engine_args_make['max_lora_rank']}, max_cpu_loras={engine_args_make['max_cpu_loras']}")
+        # --- LoRA Configuration End ---
+
         args = AsyncEngineArgs( 
             **engine_args_make,
             model=self.model_config_t.system_path,
@@ -351,7 +394,12 @@ class VLLMDeploymentClass(OpenAIServingChat):
             
             # Try normal chat formatting.
             try:
-                prompt = self.tokenizer_t.apply_chat_template(stripped_chat_history, add_generation_prompt=True, continue_final_message=False)
+                prompt = self.tokenizer_t.apply_chat_template(
+                    stripped_chat_history, 
+                    add_generation_prompt=True, 
+                    continue_final_message=False,
+                    chat_template=self.chat_template_t
+                )
                 return {"formatted_prompt": prompt, "chat_history": chopped_chat_history, "tokens": self.count_tokens(prompt)}
             except:
                 pass
@@ -370,20 +418,76 @@ class VLLMDeploymentClass(OpenAIServingChat):
         self, 
         request_dict : dict, 
         sources : List[dict] = [],
-        functions_available: List[Union[FunctionCallDefinition, dict]] = None
+        functions_available: List[Union[FunctionCallDefinition, dict]] = None,
+        lora_id: Optional[str] = None
     ):
         """
         This is the standard QL VLLM generator endpoint.
         It predates the OpenAI serving chat generator, and is used for
         some of QueryLake's internal code.
         """
-        generate_prompt_dict = self.generate_prompt(request_dict, sources, functions_available, get_multi_modal_history=True)
+        generate_prompt_dict = self.generate_prompt(
+            request_dict, 
+            sources, 
+            functions_available, 
+            get_multi_modal_history=True
+        )
         prompt = generate_prompt_dict["formatted_prompt"]
+        chopped_chat_history = generate_prompt_dict.get("chat_history") # Use .get for safety
+        chat_history_multi_modal = generate_prompt_dict.get("chat_history_multi_modal")
         
+        # Determine the final prompt format for the engine
+        prompt_to_use: Union[str, TextPrompt, TokensPrompt]
         
+        if chat_history_multi_modal:
+            if not self.chat_template_t:
+                # Log or raise? Multi-modal generally requires a template.
+                print("ERROR: Multi-modal input received but no chat_template found!")
+                raise ValueError("Chat template required for multi-modal input.")
+            print("Encoding multi-modal chat history using chat template.")
+            # This path was already handled correctly before, re-verified.
+            prompt_to_use = encode_chat(
+                self.engine_t, 
+                self.tokenizer_t, 
+                chat_history_multi_modal, 
+                chat_template=self.chat_template_t
+            )[0]
+        elif self.chat_template_t and chopped_chat_history:
+            # If a template exists and we have chopped history (not raw prompt input)
+            # print("Encoding chopped chat history using chat template.")
+            # prompt_to_use = encode_chat(
+            #     self.engine_t, 
+            #     self.tokenizer_t, 
+            #     chopped_chat_history, 
+            #     chat_template=self.chat_template_t
+            # )[0]
+            prompt_to_use = prompt
+        else:
+            # Fallback: Use the pre-formatted string from generate_prompt
+            # This covers raw prompt input or cases where no chat template exists.
+            print("Using pre-formatted prompt string (no template or raw input).")
+            prompt_to_use = prompt
+            
         # assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
         
         request_id = random_uuid()
+        
+        # --- LoRA Request Handling Start ---
+        lora_request: Optional[LoRARequest] = None
+        if lora_id:
+            if lora_id in self.loras_map_t:
+                lora_info = self.loras_map_t[lora_id]
+                lora_request = LoRARequest(
+                    lora_name=lora_id, # Use the provided string ID as the LoRA name
+                    lora_int_id=lora_info["int_id"], # Internal integer ID
+                    lora_path=lora_info["path"] # Path to adapter weights
+                )
+                print(f"Using LoRA: ID='{lora_id}', Path='{lora_info['path']}'")
+            else:
+                # Option: Raise error or log warning and proceed without LoRA
+                print(f"Warning: Requested LoRA ID '{lora_id}' not found in configuration. Proceeding without LoRA.")
+                # raise ValueError(f"Requested LoRA ID '{lora_id}' not found.") 
+        # --- LoRA Request Handling End ---
         
         grammar_options = request_dict.pop("grammar", None)
         
@@ -424,14 +528,20 @@ class VLLMDeploymentClass(OpenAIServingChat):
         if not logits_processor_local is None:
             sampling_params.logits_processors = [logits_processor_local]
         
-        if "chat_history_multi_modal" in generate_prompt_dict:
-            pre_encode_prompt = generate_prompt_dict["chat_history_multi_modal"]
-            prompt = encode_chat(
-                self.engine_t, self.tokenizer_t, pre_encode_prompt,
-                chat_template=self.chat_template_t
-            )[0]
+        # The multi-modal case was handled above by encode_chat already.
+        # if "chat_history_multi_modal" in generate_prompt_dict:
+        #     pre_encode_prompt = generate_prompt_dict["chat_history_multi_modal"]
+        #     prompt = encode_chat(
+        #         self.engine_t, self.tokenizer_t, pre_encode_prompt,
+        #         chat_template=self.chat_template_t
+        #     )[0]
         
-        results_generator = self.engine_t.generate(prompt, sampling_params, request_id)
+        results_generator = self.engine_t.generate(
+            prompt_to_use, 
+            sampling_params, 
+            request_id, 
+            lora_request=lora_request # Pass LoRA request to engine
+        )
         
         return results_generator
     

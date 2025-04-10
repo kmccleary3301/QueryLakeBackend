@@ -21,6 +21,11 @@ class Padding(BaseModel):
     question_wrap: str
     response_wrap: str
 
+
+class ModelLoras(BaseModel):
+    id : str
+    system_path: Optional[str] = None
+
 class Model(BaseModel):
     name: str
     id : str
@@ -30,6 +35,7 @@ class Model(BaseModel):
     system_path: Optional[str] = None
     default_parameters: Dict[str, Any]
     max_model_len: int
+    loras: Optional[List[ModelLoras]] = []
     padding: Padding
     default_system_instruction: str
     disabled: Optional[bool] = False

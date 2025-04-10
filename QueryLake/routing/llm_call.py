@@ -24,6 +24,7 @@ async def llm_call(
     question : str = None,
     model_parameters : dict = {},
     model : str = None,
+    lora_id : str = None,
     sources : List[dict] = [],
     chat_history : List[dict] = None,
     stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
@@ -80,6 +81,10 @@ async def llm_call(
         model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
                                             .where(sql_db_tables.model.id == model_choice)).first()
         
+        
+        assert not model_entry is None, f"Model choice [{model_choice}] not found in database"
+        assert model_entry.id == model_choice, "Model choice and model ID do not match"
+        
         model_parameters_true = {
             **json.loads(model_entry.default_settings),
         }
@@ -94,8 +99,14 @@ async def llm_call(
         assert model_choice in self.llm_handles, f"Model choice [{model_choice}] not available for LLMs"
         
         llm_handle : DeploymentHandle = self.llm_handles[model_choice]
+        
         gen : DeploymentResponseGenerator = (
-            llm_handle.get_result_loop.remote(deepcopy(model_parameters_true), sources=sources, functions_available=functions_available)
+            llm_handle.get_result_loop.remote(
+                deepcopy(model_parameters_true), 
+                sources=sources, 
+                functions_available=functions_available,
+                lora_id=lora_id
+            )
         )
         # print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
         

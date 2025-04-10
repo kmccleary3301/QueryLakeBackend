@@ -256,6 +256,7 @@ class UmbrellaClass:
                        question : str = None,
                        model_parameters : dict = {},
                        model : str = None,
+                       lora_id : str = None,
                        sources : List[dict] = [],
                        chat_history : List[dict] = None,
                        stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
@@ -264,7 +265,7 @@ class UmbrellaClass:
         return await llm_call(
             self, auth, question,
             model_parameters,
-            model, sources, chat_history,
+            model, lora_id, sources, chat_history,
             stream_callables,
             functions_available,
             only_format_prompt

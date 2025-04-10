@@ -164,11 +164,13 @@ def premade_models_setup(config_current : Config, default_models : Config, gpus 
             
             
             print("Models wanted:", [e.name for e in models_wanted])
-            setattr(config_current.enabled_model_classes, s_1, enable_get)
-            if s_1 == "llm":
-                setattr(config_current, current_attr_field, models_wanted)
-            else:
-                setattr(config_current.other_local_models, current_attr_field, models_wanted)
+        setattr(config_current.enabled_model_classes, s_1, enable_get)
+        if s_1 == "llm":
+            setattr(config_current, current_attr_field, models_wanted)
+        else:
+            setattr(config_current.other_local_models, current_attr_field, models_wanted)
+        # else:
+        #     setattr(config_current, current_attr_field, models_wanted)
         
         
     # enable_llms = input(f"Would you like to enable LLMs? {Fore.YELLOW}[Y/n] -> ").strip().lower()[:1]

@@ -97,11 +97,13 @@ class ToolchainSession():
         self.reset_firing_queue()
     
     def log_event(self, header: str, event : dict):
-        tab_make = "\t"*1
+        # TODO: Re-use this in a debug mode.
+        # tab_make = "\t"*1
         
-        string_make = header + "\n" +  tab_make + safe_serialize(event, indent=4).replace("\n", "\n"+tab_make)
-        assert isinstance(string_make, str), f"Log event is not a string: {string_make}"
-        self.log.append(string_make)
+        # string_make = header + "\n" +  tab_make + safe_serialize(event, indent=4).replace("\n", "\n"+tab_make)
+        # assert isinstance(string_make, str), f"Log event is not a string: {string_make}"
+        # self.log.append(string_make)
+        pass
     
     async def send_websocket_msg(self, message : json, ws : WebSocket = None):
         # self.log_event("WEBSOCKET MESSAGE", message)
@@ -929,11 +931,12 @@ class ToolchainSession():
         if not os.path.exists("toolchain_sessions_logs"):
             os.mkdir("toolchain_sessions_logs")
         
-        print("DUMPING LOGS WITH LENGTH", len(self.log))
+        # TODO: Add some form of debug mode where this becomes useful.
+        # print("DUMPING LOGS WITH LENGTH", len(self.log))
         
-        with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
-            f.write("\n\n".join(self.log))
-            f.close()
+        # with open("toolchain_sessions_logs/%.2f_%s.txt" % (time(), self.session_hash), "w") as f:
+        #     f.write("\n\n".join(self.log))
+        #     f.close()
     
     def load(self, data, toolchain: ToolChain):
         
