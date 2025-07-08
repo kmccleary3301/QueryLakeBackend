@@ -46,8 +46,18 @@ async def upload_document(database : Session,
     Upload file to server. Possibly with encryption.
     Can be a user document, organization document, or global document, or a toolchain_session document.
     In the very last case, provide the toolchain session hash id as the collection hash id.
+    
+    Returns: A dictionary breaking down time spent on different tasks.
+    
+    Named keys:
+        - "chunking"
+        - "embedding"
+        - "database_add"
+        - "zipping"
+        - "total"
     """
     time_start = time.time()
+    time_dict = {}
     
     print("Adding document to collection")
     
@@ -118,22 +128,12 @@ async def upload_document(database : Session,
             key=None, 
             file_data=file_data_bytes_io
         )
-        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-        #     "key": None, 
-        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-        #     "save_path": file_zip_save_path
-        # })
     else:
         encrypted_bytes = encryption.aes_encrypt_zip_file(
             key=encryption_key,
             file_data=file_data_bytes_io
         )
-        # zip_thread = Thread(target=encryption.aes_encrypt_zip_file, kwargs={
-        #     "key": encryption_key, 
-        #     "file_data": {file.filename: BytesIO(file_data_bytes)}, 
-        #     "save_path": file_zip_save_path
-        # })
-    # zip_thread.start()
+    time_dict["zipping"] = time.time() - zip_start_time
     
     new_file_blob = sql_db_tables.document_zip_blob(
         file_count=1,
@@ -144,6 +144,7 @@ async def upload_document(database : Session,
     
     database.add(new_file_blob)
     database.commit()
+    
     
     new_db_file = sql_db_tables.document_raw(
         # server_zip_archive_path=file_zip_save_path,
@@ -165,19 +166,23 @@ async def upload_document(database : Session,
         document_collection_id=collection.id
     )
     
-    print("Saved file in %.2fs" % (time.time()-zip_start_time))
-    print("Collection type:", collection.collection_type)
     collection.document_count += 1
     database.add(new_db_file)
     database.commit()
+    
     if await_embedding and scan_text:
-        await chunk_documents(toolchain_function_caller,
-                              database,
-                              auth, 
-                              [new_db_file.id], 
-                              [file_name],
-                              document_bytes_list=[file_data_bytes], 
-                              create_embeddings=create_embeddings)
+        time_dict_chunking = await chunk_documents(
+            toolchain_function_caller,
+            database,
+            auth, 
+            [new_db_file.id], 
+            [file_name],
+            document_bytes_list=[file_data_bytes], 
+            create_embeddings=create_embeddings
+        )
+        time_dict.update(time_dict_chunking)
+        if "total" in time_dict:
+            del time_dict["total"]
     elif scan_text:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
@@ -189,18 +194,20 @@ async def upload_document(database : Session,
     
     time_taken = time.time() - time_start
 
-    
     database.refresh(new_db_file)
     
-    print("Took %.2fs to upload" % (time_taken))
     if return_file_hash:
         return {"hash_id": new_db_file.id, "file_name": file_name, "finished_processing": new_db_file.finished_processing}
 
+    time_dict["misc"] = time_taken - sum(list(time_dict.values()))
+    time_dict["total"] = time_taken
+    
     return {
         "hash_id": new_db_file.id, 
         "title": file_name, 
         "size": file_size_as_string(len(file_data_bytes)), 
-        "finished_processing": new_db_file.finished_processing
+        "finished_processing": new_db_file.finished_processing,
+        "time_log": time_dict
     }
 
 async def upload_archive(database : Session,
@@ -217,8 +224,8 @@ async def upload_archive(database : Session,
     The user uploads a zip archive of all files.
     The files must all be in the top level directory of the zip archive.
     """
-    
-    print("Extracting document archive and adding to collection")
+    start_time = time.time()
+    time_dict = {}
     collection_type_lookup = {
         "user": "user_document_collection_hash_id", 
         "organization": "organization_document_collection_hash_id",
@@ -276,7 +283,7 @@ async def upload_archive(database : Session,
     files_retrieved_bytes : List[bytes] = []
     files_retrieved_names, coroutines = [], []
     
-    
+    unzip_start_time = time.time()
     
     if file_ext == "7z":
         with py7zr.SevenZipFile(file_bytes_io, mode='r') as z:
@@ -331,9 +338,12 @@ async def upload_archive(database : Session,
     else:
         raise ValueError(f"File extension `{file_ext}` not supported for archival, only .7z and .zip")
     
+    time_dict["unzipping"] = time.time() - unzip_start_time
+    
     if len(files_retrieved) == 0:
         return []
     
+    zip_start_time = time.time()
     gen_directories = list(map(lambda x: random_hash(), files_retrieved_names))
     file_blob_dict = {gen_directories[i]: files_retrieved[i] for i in range(len(files_retrieved))}
     
@@ -347,6 +357,8 @@ async def upload_archive(database : Session,
             key=encryption_key, 
             file_data=file_blob_dict
         )
+    time_dict["zipping"] = time.time() - zip_start_time
+    db_add_start_time = time.time()
     
     new_file_blob = sql_db_tables.document_zip_blob(
         file_count=len(gen_directories),
@@ -358,7 +370,6 @@ async def upload_archive(database : Session,
     database.add(new_file_blob)
     database.commit()
     
-    results, new_doc_ids = [], []
     new_doc_db_entries : List[sql_db_tables.document_raw] = []
     
     for i in range(len(files_retrieved)):
@@ -379,24 +390,34 @@ async def upload_archive(database : Session,
             md={"file_name": file_name, "integrity_sha256": file_integrity, "size_bytes": file_size},
             document_collection_id=collection.id
         )
-        database.add(new_db_file)
-        
-        new_doc_ids.append(new_db_file.id)
         new_doc_db_entries.append(new_db_file)
     
+    if len(new_doc_db_entries) > 0:
+        database.add_all(new_doc_db_entries)
+    
     # Increment the doc count
-    collection.document_count += len(new_doc_ids)
+    collection.document_count += len(new_doc_db_entries)
     # Commit the docs, before we start chunking them.
     database.commit()
     
+    for doc in new_doc_db_entries:
+        database.refresh(doc)
+    
+    time_dict["database_add"] = time.time() - db_add_start_time
+    
     if await_embedding and scan_text:
-        await chunk_documents(toolchain_function_caller,
-                              database,
-                              auth, 
-                              new_doc_db_entries, 
-                              files_retrieved_names,
-                              document_bytes_list=files_retrieved_bytes, 
-                              create_embeddings=create_embeddings)
+        time_dict_chunking = await chunk_documents(
+            toolchain_function_caller,
+            database,
+            auth, 
+            new_doc_db_entries, 
+            files_retrieved_names,
+            document_bytes_list=files_retrieved_bytes, 
+            create_embeddings=create_embeddings
+        )
+        time_dict.update(time_dict_chunking)
+        if "total" in time_dict:
+            del time_dict["total"]
     elif scan_text:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
@@ -405,17 +426,24 @@ async def upload_archive(database : Session,
                                             files_retrieved_names,
                                             document_bytes_list=files_retrieved_bytes, 
                                             create_embeddings=create_embeddings))
-    
+    refresh_start_time = time.time()
+    results = []
     for i, new_db_file in enumerate(new_doc_db_entries):
-        database.refresh(new_db_file)
         results.append({
             "hash_id": new_db_file.id, 
             "title": files_retrieved_names[i], 
             "size": file_size_as_string(len(files_retrieved_bytes[i])), 
             "finished_processing": new_db_file.finished_processing
         })
+    time_dict["final_db_refresh"] = time.time() - refresh_start_time
+    time_taken = time.time() - start_time
+    time_dict["misc"] = time_taken - sum(list(time_dict.values()))
+    time_dict["total"] = time_taken
     
-    return results
+    return {
+        "document_results": results,
+        "time_log": time_dict
+    }
 
 async def update_documents(database : Session,
                            toolchain_function_caller: Callable[[Any], Union[Callable, Awaitable[Callable]]],
