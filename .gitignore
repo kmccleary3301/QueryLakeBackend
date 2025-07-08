@@ -7,3 +7,6 @@ tmp
 models
 config.json
 config.yaml
+ray_gpu_strategy_working/
+.opencode/
+*.log

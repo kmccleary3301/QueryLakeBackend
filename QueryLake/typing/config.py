@@ -4,6 +4,7 @@ from ..database.sql_db_tables import user
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from .toolchains import ToolChain
 
 class ModelArgs(BaseModel):
     stream: Optional[bool] = False
@@ -83,6 +84,13 @@ class ConfigEnabledModelClasses(BaseModel):
     embedding: bool
     surya: bool
 
+class RayClusterConfig(BaseModel):
+    head_port: int
+    dashboard_port: int
+    worker_port_base: int
+    worker_port_step: int
+    default_gpu_strategy: str
+
 class Config(BaseModel):
     default_toolchain: str
     default_models: ConfigDefaultModels
@@ -91,6 +99,7 @@ class Config(BaseModel):
     external_model_providers: Dict[str, List[ExternalModelProviders]]
     providers: Optional[List[str]] = []
     other_local_models: OtherLocalModelsField
+    ray_cluster: RayClusterConfig
     
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]

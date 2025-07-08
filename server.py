@@ -16,6 +16,9 @@ from typing import Literal, Tuple, Union, List, Dict, Awaitable, Callable
 
 from ray import serve
 from ray.serve.handle import DeploymentHandle
+from ray.util.placement_group import PlacementGroup
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+from contextlib import asynccontextmanager
 
 from QueryLake.api import api
 from QueryLake.database import database_admin_operations
@@ -57,6 +60,9 @@ from QueryLake.routing.misc_models import (
     rerank_call,
     web_scrape_call
 )
+
+# This import was added in error and is being removed.
+# from QueryLake.log_utils import set_up_logger
 
 
 
@@ -319,159 +325,257 @@ class UmbrellaClass:
             api.toolchain_event_call
         )
 
+# This function is the new entrypoint for the application, called by start_querylake.py
+def _get_placement_bundle() -> Dict[str, Union[int, float]]:
+    """Get the placement group bundle configuration (GPU, VRAM_MB, CPU) for this deployment."""
+    try:
+        import ray
+        import pynvml
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        
+        bundle = {"GPU": 1}
+        
+        # Add VRAM if we can detect it
+        if device_count > 0:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            vram_mb = memory_info.total // (1024 * 1024)
+            bundle["VRAM_MB"] = vram_mb
+        
+        # Add CPU - calculate CPU allocation per GPU node based on actual per-node CPU availability
+        gpu_nodes = [node for node in ray.nodes() if node.get("Resources", {}).get("GPU", 0) > 0 and node.get("alive", False)]
+        if gpu_nodes:
+            # Use 90% of CPUs from a single GPU node, leaving 10% for system overhead
+            node_cpus = gpu_nodes[0].get("Resources", {}).get("CPU", 48)
+            cpus_per_gpu_node = max(2, int(node_cpus * 0.9))  # Use 90% of node CPUs, minimum 2
+            bundle["CPU"] = cpus_per_gpu_node
+        else:
+            bundle["CPU"] = 40  # Conservative fallback
+            
+        return bundle
+    except Exception:
+        # Fallback bundle
+        return {"GPU": 1, "CPU": 2}
+
+def _get_placement_group_config(strategy: str, num_replicas: int, replica_resources: Dict = None) -> Dict:
+    """
+    Ray Serve has its own built-in resource management and scheduling mechanisms.
+    Placement groups are not directly compatible with Ray Serve deployments.
+    This function now returns an empty dict to disable placement group usage.
+    
+    Ray Serve automatically handles:
+    - Resource allocation across available nodes
+    - Replica placement and load balancing  
+    - Scaling based on traffic and resource utilization
+    
+    The strategy parameter is noted but not applied since Ray Serve manages placement internally.
+    """
+    print(f"ℹ️ Ray Serve deployment with {num_replicas} replicas using strategy: {strategy}")
+    print(f"   Ray Serve will handle resource allocation and replica placement automatically")
+    print(f"   Replica resources: {replica_resources}")
+    
+    # Ray Serve manages its own scheduling and resource allocation
+    # Placement groups are not needed and not supported for Serve deployments
+    return {}
+
+def build_and_run_application(
+    strategy: str,
+    global_config: Config,
+    toolchains: Dict[str, ToolChain]
+):
+    """
+    Builds the Ray Serve application graph and runs it.
+    This function is called by the new CLI orchestrator.
+    """
+    LOCAL_MODEL_BINDINGS: Dict[str, DeploymentHandle] = {}
+    ENGINE_CLASSES = {"vllm": VLLMDeploymentClass}
+    ENGINE_CLASS_NAMES = {"vllm": "vllm"}
+
+    if global_config.enabled_model_classes.llm:
+        for model_entry in global_config.models:
+            if model_entry.disabled:
+                continue
+            elif model_entry.deployment_config is None:
+                print("CANNOT DEPLOY; No deployment config for enabled model:", model_entry.id)
+                continue
+            if model_entry.engine not in ENGINE_CLASSES:
+                print("CANNOT DEPLOY; Engine not recognized:", model_entry.engine)
+                continue
+            
+            assert "vram_required" in model_entry.deployment_config, f"No VRAM requirement specified for {model_entry.id}"
+            
+            class_choice = ENGINE_CLASSES[model_entry.engine]
+            
+            # New resource model: Explicit VRAM request, no more VRAM fraction hack.
+            # We request a tiny amount of GPU to ensure it's a GPU actor, and the real
+            # constraint is the custom VRAM_MB resource.
+            deployment_config = model_entry.deployment_config.copy()
+            ray_actor_options = deployment_config.get("ray_actor_options", {})
+            ray_actor_options["num_gpus"] = 0.01 
+            ray_actor_options["resources"] = ray_actor_options.get("resources", {})
+            ray_actor_options["resources"]["VRAM_MB"] = deployment_config.pop("vram_required")
+            deployment_config["ray_actor_options"] = ray_actor_options
+            
+            # Log the strategy being used - Ray Serve will handle placement internally
+            replica_count = deployment_config.get("num_replicas", deployment_config.get("min_replicas", 1))
+            replica_resources = {
+                "GPU": ray_actor_options["num_gpus"],
+                "CPU": ray_actor_options.get("num_cpus", 2),
+                "VRAM_MB": ray_actor_options["resources"]["VRAM_MB"]
+            }
+            # Note: Ray Serve handles resource allocation and placement automatically
+            _get_placement_group_config(strategy, replica_count, replica_resources)
+            
+            class_choice_decorated: serve.Deployment = serve.deployment(
+                _func_or_class=class_choice,
+                name=ENGINE_CLASS_NAMES[model_entry.engine] + ":" + model_entry.id,
+                **deployment_config
+            )
+            LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice_decorated.bind(
+                model_config=model_entry,
+                max_model_len=model_entry.max_model_len,
+            )
+
+    embedding_models = {}
+    if global_config.enabled_model_classes.embedding:
+        for embedding_model in global_config.other_local_models.embedding_models:
+            assert "vram_required" in embedding_model.deployment_config, f"No VRAM requirement specified for {embedding_model.id}"
+            
+            deployment_config = embedding_model.deployment_config.copy()
+            ray_actor_options = deployment_config.get("ray_actor_options", {})
+            ray_actor_options["num_gpus"] = 0.01
+            ray_actor_options["resources"] = ray_actor_options.get("resources", {})
+            ray_actor_options["resources"]["VRAM_MB"] = deployment_config.pop("vram_required", None)
+            
+            deployment_config["ray_actor_options"] = ray_actor_options
+            
+            # Log the strategy being used - Ray Serve will handle placement internally
+            replica_count = deployment_config.get("num_replicas", deployment_config.get("min_replicas", 1))
+            replica_resources = {
+                "GPU": ray_actor_options["num_gpus"],
+                "CPU": ray_actor_options.get("num_cpus", 2),
+                "VRAM_MB": ray_actor_options["resources"]["VRAM_MB"]
+            }
+            # Note: Ray Serve handles resource allocation and placement automatically
+            _get_placement_group_config(strategy, replica_count, replica_resources)
+            
+            
+            emb_pg_bundle = replica_resources.copy()
+            p_group_strategy = strategy
+            
+            class_choice_decorated : serve.Deployment = serve.deployment(
+                _func_or_class=EmbeddingDeployment,
+                name="embedding" + ":" + embedding_model.id,
+                **deployment_config,
+                placement_group_bundles=[emb_pg_bundle],
+                placement_group_strategy=p_group_strategy
+            )
+            embedding_models[embedding_model.id] = class_choice_decorated.bind(
+                model_card=embedding_model
+            )
+
+    rerank_models = {}
+    if global_config.enabled_model_classes.rerank:
+        for rerank_model in global_config.other_local_models.rerank_models:
+            assert "vram_required" in rerank_model.deployment_config, f"No VRAM requirement specified for {rerank_model.id}"
+            
+            deployment_config = rerank_model.deployment_config.copy()
+            ray_actor_options = deployment_config.get("ray_actor_options", {})
+            ray_actor_options["num_gpus"] = 0.01
+            ray_actor_options["resources"] = ray_actor_options.get("resources", {})
+            ray_actor_options["resources"]["VRAM_MB"] = deployment_config.pop("vram_required", None)
+            
+            deployment_config["ray_actor_options"] = ray_actor_options
+            
+            # Log the strategy being used - Ray Serve will handle placement internally
+            replica_count = deployment_config.get("num_replicas", deployment_config.get("min_replicas", 1))
+            replica_resources = {
+                "GPU": ray_actor_options["num_gpus"],
+                "CPU": ray_actor_options.get("num_cpus", 2),
+                "VRAM_MB": ray_actor_options["resources"]["VRAM_MB"]
+            }
+            # Note: Ray Serve handles resource allocation and placement automatically
+            _get_placement_group_config(strategy, replica_count, replica_resources)
+            
+            class_choice_decorated : serve.Deployment = serve.deployment(
+                _func_or_class=RerankerDeployment,
+                name="rerank" + ":" + rerank_model.id,
+                **deployment_config
+            )
+            
+            rerank_models[rerank_model.id] = class_choice_decorated.bind(
+                model_card=rerank_model
+            )
+    
+    surya_handles = {}
+    if global_config.enabled_model_classes.surya:
+        surya_model_map = {
+            "marker": MarkerDeployment,
+            "surya_detection": SuryaDetectionDeployment,
+            "surya_layout": SuryaLayoutDeployment,
+            "surya_recognition": SuryaOCRDeployment,
+            "surya_order": SuryaOrderDeployment,
+            "surya_table_recognition": SuryaTableDeployment,
+            "surya_texify": SuryaTexifyDeployment
+        }
+        for surya_model in global_config.other_local_models.surya_models:
+            class_to_use = surya_model_map[surya_model.id]
+            assert "vram_required" in surya_model.deployment_config, f"No VRAM requirement specified for {surya_model.name}"
+            
+            deployment_config = surya_model.deployment_config.copy()
+            ray_actor_options = deployment_config.get("ray_actor_options", {})
+            ray_actor_options["num_gpus"] = 0.01
+            ray_actor_options["resources"] = ray_actor_options.get("resources", {})
+            ray_actor_options["resources"]["VRAM_MB"] = deployment_config.pop("vram_required", None)
+            
+            deployment_config["ray_actor_options"] = ray_actor_options
+            
+            # Log the strategy being used - Ray Serve will handle placement internally
+            replica_count = deployment_config.get("num_replicas", deployment_config.get("min_replicas", 1))
+            replica_resources = {
+                "GPU": ray_actor_options["num_gpus"],
+                "CPU": ray_actor_options.get("num_cpus", 2),
+                "VRAM_MB": ray_actor_options["resources"]["VRAM_MB"]
+            }
+            # Note: Ray Serve handles resource allocation and placement automatically
+            _get_placement_group_config(strategy, replica_count, replica_resources)
+            
+            deployment_class = serve.deployment(
+                _func_or_class=class_to_use,
+                name=f"surya:{surya_model.id}",
+                **deployment_config
+            )
+            surya_handles[surya_model.name] = deployment_class.bind(
+                model_card=surya_model
+            )
+
+    # Bind the main UmbrellaClass with all the model handles
+    deployment = UmbrellaClass.bind(
+        configuration=global_config,
+        toolchains=toolchains,
+        web_scraper_handle=WebScraperDeployment.bind(),
+        llm_handles=LOCAL_MODEL_BINDINGS,
+        embedding_handles=embedding_models,
+        rerank_handles=rerank_models,
+        surya_handles=surya_handles
+    )
+
+    # Run the application
+    # The application is now deployed within the existing Ray cluster
+    # started by start_querylake.py
+    serve.run(deployment)
+
+
 SERVER_DIR = os.path.dirname(os.path.realpath(__file__))
 os.chdir(SERVER_DIR)
 
-with open("config.json", 'r', encoding='utf-8') as f:
-    GLOBAL_CONFIG = f.read()
-    f.close()
-GLOBAL_CONFIG, TOOLCHAINS = Config.model_validate_json(GLOBAL_CONFIG), {}
-
-default_toolchain = "chat_session_normal"
-
-toolchain_files_list = os.listdir("toolchains")
-for toolchain_file in toolchain_files_list:
-    if not toolchain_file.split(".")[-1] == "json":
-        continue
-    with open("toolchains/"+toolchain_file, 'r', encoding='utf-8') as f:
-        toolchain_retrieved = json.loads(f.read())
-        f.close()
-    try:
-        TOOLCHAINS[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
-    except Exception as e:
-        print("Toolchain error:", json.dumps(toolchain_retrieved, indent=4))
-        raise e
-
-def check_gpus():
-    nvmlInit()
-    device_count = nvmlDeviceGetCount()
-    gpus = []
-    for i in range(device_count):
-        handle = nvmlDeviceGetHandleByIndex(i)
-        memory_info = nvmlDeviceGetMemoryInfo(handle)
-        gpus.append({
-            "index": i,
-            "total_vram": memory_info.total // (1024 ** 2)  # Convert bytes to MB
-        })
-    return gpus
-
-# Calculate VRAM fractions for each class to adjust serve resource configurations on deployment.
-
-gpus = sorted(check_gpus(), key=lambda x: x["total_vram"], reverse=True)
-if len(gpus) > 1:
-    print("Multiple GPUs detected. QueryLake isn't optimized for multi-GPU usage yet. Continue at your own risk.")
-MAX_GPU_VRAM = gpus[0]["total_vram"]
-
-LOCAL_MODEL_BINDINGS : Dict[str, DeploymentHandle] = {}
-
-# ENGINE_CLASSES = {"vllm": VLLMDeploymentClass, "exllamav2": ExllamaV2DeploymentClass}
-ENGINE_CLASSES = {"vllm": VLLMDeploymentClass}
-ENGINE_CLASS_NAMES = {"vllm": "vllm", "exllamav2": "exl2"}
-
-if GLOBAL_CONFIG.enabled_model_classes.llm:
-    for model_entry in GLOBAL_CONFIG.models:
-        
-        if model_entry.disabled:
-            continue
-        elif model_entry.deployment_config is None:
-            print("CANNOT DEPLOY; No deployment config for enabled model:", model_entry.id)
-            continue
-        if not model_entry.engine in ENGINE_CLASSES:
-            print("CANNOT DEPLOY; Engine not recognized:", model_entry.engine)
-            continue
-        assert "vram_required" in model_entry.deployment_config, f"No VRAM requirement specified for {model_entry.id}"
-        
-        class_choice = ENGINE_CLASSES[model_entry.engine]
-        
-        vram_fraction = model_entry.deployment_config.pop("vram_required") / MAX_GPU_VRAM
-        if model_entry.engine == "vllm":
-            model_entry.engine_args["gpu_memory_utilization"] = vram_fraction
-        model_entry.deployment_config["ray_actor_options"]["num_gpus"] = vram_fraction 
-        
-        class_choice_decorated : serve.Deployment = serve.deployment(
-            _func_or_class=class_choice,
-            name=ENGINE_CLASS_NAMES[model_entry.engine]+":"+model_entry.id,
-            **model_entry.deployment_config
-        )
-        LOCAL_MODEL_BINDINGS[model_entry.id] = class_choice_decorated.bind(
-            model_config=model_entry,
-            max_model_len=model_entry.max_model_len,
-        )
-
-embedding_models = {}
-if GLOBAL_CONFIG.enabled_model_classes.embedding:
-    for embedding_model in GLOBAL_CONFIG.other_local_models.embedding_models:
-        assert "vram_required" in embedding_model.deployment_config, f"No VRAM requirement specified for {embedding_model.id}"
-        vram_fraction = embedding_model.deployment_config.pop("vram_required") / MAX_GPU_VRAM
-        embedding_model.deployment_config["ray_actor_options"]["num_gpus"] = vram_fraction
-        class_choice_decorated : serve.Deployment = serve.deployment(
-            _func_or_class=EmbeddingDeployment,
-            name="embedding"+":"+embedding_model.id,
-            **embedding_model.deployment_config
-        )
-        embedding_models[embedding_model.id] = class_choice_decorated.bind(
-            model_card=embedding_model
-        )
-
-rerank_models = {}
-if GLOBAL_CONFIG.enabled_model_classes.rerank:
-    for rerank_model in GLOBAL_CONFIG.other_local_models.rerank_models:
-        assert "vram_required" in rerank_model.deployment_config, f"No VRAM requirement specified for {rerank_model.id}"
-        vram_fraction = rerank_model.deployment_config.pop("vram_required") / MAX_GPU_VRAM
-        rerank_model.deployment_config["ray_actor_options"]["num_gpus"] = vram_fraction
-        class_choice_decorated : serve.Deployment = serve.deployment(
-            _func_or_class=RerankerDeployment,
-            name="rerank"+":"+rerank_model.id,
-            **rerank_model.deployment_config
-        )
-        
-        rerank_models[rerank_model.id] = class_choice_decorated.bind(
-            model_card=rerank_model
-        )
-
-# Add Surya model bindings
-surya_handles = {}
-if GLOBAL_CONFIG.enabled_model_classes.surya:
-    surya_model_map = {
-        "marker": MarkerDeployment,
-        "surya_detection": SuryaDetectionDeployment,
-        "surya_layout": SuryaLayoutDeployment,
-        "surya_recognition": SuryaOCRDeployment,
-        "surya_order": SuryaOrderDeployment,
-        "surya_table_recognition": SuryaTableDeployment,
-        "surya_texify": SuryaTexifyDeployment
-    }
-    
-    for surya_model in GLOBAL_CONFIG.other_local_models.surya_models:
-        # Map model name to deployment class
-        class_to_use = surya_model_map[surya_model.id]
-        
-        # Configure VRAM fraction
-        assert "vram_required" in surya_model.deployment_config, f"No VRAM requirement specified for {surya_model.name}"
-        vram_fraction = surya_model.deployment_config.pop("vram_required") / MAX_GPU_VRAM
-        surya_model.deployment_config["ray_actor_options"]["num_gpus"] = vram_fraction
-        
-        # Create deployment
-        deployment_class = serve.deployment(
-            _func_or_class=class_to_use,
-            name=f"surya:{surya_model.id}",
-            **surya_model.deployment_config
-        )
-        
-        surya_handles[surya_model.name] = deployment_class.bind(
-            model_card=surya_model
-        )
-
-
-deployment = UmbrellaClass.bind(
-    configuration=GLOBAL_CONFIG,
-    toolchains=TOOLCHAINS,
-    web_scraper_handle=WebScraperDeployment.bind(),
-    llm_handles=LOCAL_MODEL_BINDINGS,
-    embedding_handles=embedding_models,
-    rerank_handles=rerank_models,
-    surya_handles=surya_handles
-)
-
-if __name__ == "__main__":
-    serve.run(deployment)
+# The old startup logic is now removed.
+# The following code is no longer needed as start_querylake.py handles it.
+# with open("config.json", 'r', encoding='utf-8') as f:
+#     GLOBAL_CONFIG = f.read()
+#     f.close()
+# GLOBAL_CONFIG, TOOLCHAINS = Config.model_validate_json(GLOBAL_CONFIG), {}
+# ... and so on ...
+# if __name__ == "__main__":
+#    serve.run(deployment)
