@@ -20,6 +20,16 @@ server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2
 
 system_arguments = ["database", "vector_database", "llm_ensemble", "public_key", "server_private_key"]
 
+
+def health():
+    """Lightweight health probe for /api/health."""
+    return {"success": True, "note": "QueryLake API responsive"}
+
+
+def healthz():
+    """Alias so /api/healthz mirrors /healthz."""
+    return {"success": True}
+
 excluded_member_function_descriptions = [
     # Janitorial
     "prune_empty_chat_sessions",
@@ -281,3 +291,55 @@ upload_document
 
 remaining_independent_api_functions = [x.strip() for x in remaining_independent_api_functions if x.strip() != ""]
 
+from ..typing.toolchains import ToolChainV2
+from ..database import sql_db_tables
+from sqlmodel import select
+import json as _json
+
+def register_toolchain_v2(
+    database: Session,
+    global_config: Config,
+    auth: AuthInputType,
+    toolchain: dict,
+) -> dict:
+    """
+    Admin helper to upsert a native v2 toolchain definition directly into the DB.
+    """
+    # TODO: Add proper admin/role checks
+    tc = ToolChainV2.model_validate(toolchain)
+    existing = database.exec(
+        select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == tc.id)
+    ).first()
+    if existing:
+        existing.title = tc.name
+        existing.category = tc.category
+        existing.content = _json.dumps(tc.model_dump(exclude_none=True), indent=4)
+    else:
+        row = sql_db_tables.toolchain(
+            toolchain_id=tc.id,
+            title=tc.name,
+            category=tc.category,
+            content=_json.dumps(tc.model_dump(exclude_none=True), indent=4),
+        )
+        database.add(row)
+    database.commit()
+    return {"toolchain_id": tc.id}
+
+
+# -------------------------
+# Files helper API (v2)
+# -------------------------
+
+async def files_process_version(
+    database: Session,
+    auth: AuthInputType,
+    umbrella,
+    file_id: str,
+    version_id: str,
+):
+    """Process a specific file version through the Files runtime (Phase 2).
+
+    Returns {"job_id": ..., "status": ...}.
+    """
+    _ = database  # present for parity; not required here
+    return await umbrella.files_runtime.process_version(file_id, version_id, auth=auth)

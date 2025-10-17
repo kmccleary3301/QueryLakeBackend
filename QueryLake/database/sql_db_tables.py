@@ -34,13 +34,23 @@ id_type_1 = str
 id_factories = {
     "document_chunk": generator_1,
     "collections": generator_1,
-    "document_raw": generator_1
+    "document_raw": generator_1,
+    # Files v2
+    "file": generator_1,
+    "file_version": generator_1,
+    "file_page": generator_1,
+    "file_chunk": generator_1,
 }
 
 id_types = {
     "document_chunk": id_type_1,
     "collections": id_type_1,
-    "document_raw": id_type_1
+    "document_raw": id_type_1,
+    # Files v2
+    "file": id_type_1,
+    "file_version": id_type_1,
+    "file_page": id_type_1,
+    "file_chunk": id_type_1,
 }
 
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
@@ -96,6 +106,133 @@ class toolchain_session(SQLModel, table=True):
     queue_inputs: Optional[str] = Field(default="")
     firing_queue: Optional[str] = Field(default="")
     first_event_fired: Optional[bool] = Field(default=False, index=True)
+
+
+class ToolchainSessionEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: str = Field(foreign_key=f"{toolchain_session.__tablename__}.id", index=True)
+    rev: int = Field(index=True)
+    ts: float = Field(default_factory=time)
+    kind: str
+    payload: dict = Field(sa_column=Column(JSONB))
+    actor: Optional[str] = None
+    correlation_id: Optional[str] = None
+
+
+class ToolchainSessionSnapshot(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: str = Field(foreign_key=f"{toolchain_session.__tablename__}.id", index=True)
+    rev: int = Field(index=True)
+    ts: float = Field(default_factory=time)
+    state: dict = Field(sa_column=Column(JSONB))
+    files: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+
+
+class ToolchainJob(SQLModel, table=True):
+    job_id: str = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
+    session_id: str = Field(foreign_key=f"{toolchain_session.__tablename__}.id", index=True)
+    node_id: str
+    status: str
+    request_id: Optional[str] = None
+    progress: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    result_meta: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    created_at: float = Field(default_factory=time)
+    updated_at: float = Field(default_factory=time, index=True)
+
+
+class ToolchainDeadLetter(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: str = Field(foreign_key=f"{toolchain_session.__tablename__}.id", index=True)
+    rev: Optional[int] = Field(default=None)
+    ts: float = Field(default_factory=time)
+    event: dict = Field(sa_column=Column(JSONB))
+    error: Optional[str] = None
+
+# -----------------------------
+# Files subsystem (Phase 1–2)
+# -----------------------------
+
+class file(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["file"], primary_key=True, index=True, unique=True)
+    logical_name: str
+    created_at: float = Field(default_factory=time)
+    created_by: Optional[str] = Field(default=None, index=True)
+    # Foreign key to document_collection (optional); avoid forward ref for simplicity
+    collection_id: Optional[str] = Field(default=None, index=True)
+
+
+class file_version(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["file_version"], primary_key=True, index=True, unique=True)
+    file_id: str = Field(foreign_key=f"{file.__tablename__}.id", index=True)
+    version_no: int
+    bytes_cas: str = Field(index=True)
+    size_bytes: int
+    mime_type: Optional[str] = Field(default=None)
+    processing_fingerprint: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    created_at: float = Field(default_factory=time)
+
+
+class file_page(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["file_page"], primary_key=True, index=True, unique=True)
+    file_version_id: str = Field(foreign_key=f"{file_version.__tablename__}.id", index=True)
+    page_num: int
+    width_px: Optional[int] = Field(default=None)
+    height_px: Optional[int] = Field(default=None)
+    ocr_json_cas: Optional[str] = Field(default=None)
+    image_cas: Optional[str] = Field(default=None)
+    text_span_offsets: Optional[str] = Field(default=None)
+
+
+class file_chunk(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["file_chunk"], primary_key=True, index=True, unique=True)
+    file_version_id: str = Field(foreign_key=f"{file_version.__tablename__}.id", index=True)
+    page_start: Optional[int] = Field(default=None)
+    page_end: Optional[int] = Field(default=None)
+    byte_start: Optional[int] = Field(default=None)
+    byte_end: Optional[int] = Field(default=None)
+    text: str
+    md: dict = Field(sa_column=Column(JSONB), default={})
+    anchors: list = Field(sa_column=Column(JSONB), default=[])
+    embedding: Optional[List[float]] = Field(sa_column=Column(HALFVEC(1024)), default=None)
+    created_at: float = Field(default_factory=time)
+
+# Fields supported by ParadeDB BM25 for file_chunk
+FILE_CHUNK_INDEXED_COLUMNS = [
+    "id",
+    "text",
+    "md",
+    "created_at",
+]
+
+
+class file_event(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    file_id: str = Field(foreign_key=f"{file.__tablename__}.id", index=True)
+    version_id: str = Field(foreign_key=f"{file_version.__tablename__}.id", index=True)
+    rev: int = Field(index=True)
+    ts: float = Field(default_factory=time)
+    kind: str
+    payload: dict = Field(sa_column=Column(JSONB))
+
+
+class file_job(SQLModel, table=True):
+    job_id: str = Field(primary_key=True, index=True, unique=True)
+    file_id: str = Field(foreign_key=f"{file.__tablename__}.id", index=True)
+    version_id: str = Field(foreign_key=f"{file_version.__tablename__}.id", index=True)
+    status: str
+    progress: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    result_meta: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    created_at: float = Field(default_factory=time)
+    updated_at: float = Field(default_factory=time, index=True)
+
+
+class file_dead_letter(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    file_id: str = Field(foreign_key=f"{file.__tablename__}.id", index=True)
+    version_id: Optional[str] = Field(default=None, foreign_key=f"{file_version.__tablename__}.id", index=True)
+    ts: float = Field(default_factory=time)
+    event: dict = Field(sa_column=Column(JSONB))
+    error: Optional[str] = None
 
 class document_access_token(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)

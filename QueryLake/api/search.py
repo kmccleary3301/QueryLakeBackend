@@ -12,6 +12,7 @@ import time
 import re
 from ..misc_functions.paradedb_query_parser import parse_search
 from ..database.sql_db_tables import DocumentChunk, document_raw, CHUNK_INDEXED_COLUMNS, DOCUMENT_INDEXED_COLUMNS
+from ..database.sql_db_tables import file_chunk as FileChunkTable, file_version as FileVersionTable, file as FileTable, FILE_CHUNK_INDEXED_COLUMNS as FILE_FIELDS
 from ..typing.config import AuthType
 from .single_user_auth import get_user
 from .collections import assert_collections_priviledge
@@ -527,6 +528,84 @@ def count_chunks(database: Session,
     ).first()
     
     return count
+
+# --------------------
+# File chunk search
+# --------------------
+
+def search_file_chunks(
+    database: Session,
+    auth: AuthType,
+    query: str,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    sort_by: str = "score",
+    sort_dir: str = "DESC",
+    return_statement: bool = False,
+):
+    # Restrict to current user's files
+    (_, user_auth) = get_user(database, auth)
+    username = user_auth.username
+
+    assert isinstance(query, str), "query must be a string"
+    assert (isinstance(limit, int) and 0 <= limit <= 2000), "limit must be 0..2000"
+    assert (isinstance(offset, int) and offset >= 0), "offset must be >= 0"
+
+    formatted_query, _ = parse_search(query, FILE_FIELDS, catch_all_fields=["text"])
+
+    score_field = "paradedb.score(fc.id) AS score, " if formatted_query != "()" else ""
+    assert not (sort_by == "score" and formatted_query == "()"), "Cannot sort by score if no query is specified"
+    assert sort_by in FILE_FIELDS or sort_by == "score", f"sort_by must be one of {FILE_FIELDS} or 'score'"
+    assert sort_dir in ["DESC", "ASC"], "sort_dir must be 'DESC' or 'ASC'"
+
+    if sort_by == "score":
+        order_by_field = "ORDER BY score DESC, fc.id ASC"
+    else:
+        order_by_field = f"ORDER BY {sort_by} {sort_dir}" + (", fc.id ASC" if sort_by != "id" else "")
+
+    parse_field = formatted_query if formatted_query != "()" else "()"
+
+    STMT = text(f"""
+    SELECT fc.id, {score_field}fc.id, fc.text, fc.md, fc.created_at, fc.file_version_id
+    FROM {FileChunkTable.__tablename__} fc
+    JOIN {FileVersionTable.__tablename__} fv ON fc.file_version_id = fv.id
+    JOIN {FileTable.__tablename__} f ON fv.file_id = f.id
+    WHERE f.created_by = :username
+      AND fc.id @@@ paradedb.parse('{parse_field}')
+    {order_by_field}
+    LIMIT :limit
+    OFFSET :offset;
+    """).bindparams(
+        username=username,
+        limit=limit,
+        offset=offset,
+    )
+
+    if return_statement:
+        return str(STMT.compile(compile_kwargs={"literal_binds": True}))
+
+    try:
+        subset_start = 1 if formatted_query == "()" else 2
+        rows = list(database.exec(STMT))
+        results = []
+        for row in rows:
+            # row layout: [fc.id, maybe score, fc.id, fc.text, fc.md, fc.created_at, fc.file_version_id]
+            idx = subset_start
+            results.append(
+                {
+                    "id": row[idx + 0],
+                    "text": row[idx + 1],
+                    "md": row[idx + 2],
+                    "created_at": float(row[idx + 3]),
+                    "file_version_id": row[idx + 4],
+                    **({"bm25_score": float(row[1])} if formatted_query != "()" else {}),
+                }
+            )
+        return {"results": results}
+    except Exception as e:
+        database.rollback()
+        raise e
 
 def expand_document_segment(database: Session,
                             auth : AuthType,

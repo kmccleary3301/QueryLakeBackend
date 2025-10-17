@@ -16,6 +16,7 @@ try:
 except ImportError:
     PYNVML_AVAILABLE = False
 from ..typing.config import LocalModel
+from .runtime_introspection import RuntimeIntrospectionMixin
 
 def get_physical_gpu_info():
     """Get the actual physical GPU index and information."""
@@ -77,12 +78,18 @@ def get_physical_gpu_info():
                 pass
         return f"Error getting GPU info: {str(e)}"
 
-class EmbeddingDeployment:
+class EmbeddingDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card : LocalModel):
         print("INITIALIZING EMBEDDING DEPLOYMENT")
+        self._runtime_role = "embedding"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
         self.tokenizer = AutoTokenizer.from_pretrained(model_card.system_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = BGEM3FlagModel(model_card.system_path, use_fp16=True, device=self.device)
+        self._runtime_extra_metadata["device"] = self.device
         
         # Get GPU assignment information for placement verification
         gpu_ids = ray.get_gpu_ids()
@@ -103,6 +110,7 @@ class EmbeddingDeployment:
         else:
             print(f"   Physical GPU Info: {physical_gpu_info}")
         
+        self._publish_runtime_metadata()
         print("DONE INITIALIZING EMBEDDING DEPLOYMENT")
 
     @serve.batch(max_batch_size=128, batch_wait_timeout_s=0.05)

@@ -38,6 +38,8 @@ python-jose
 passlib
 lxml_html_clean
 exllamav2
+jsonpatch
+jsonpath-ng
 peft
 # pluggy
 # rich

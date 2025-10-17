@@ -1,6 +1,7 @@
 import os, json
 from copy import deepcopy, copy
 from typing import Callable, Any, List, Dict, Union, Awaitable
+from pydantic import BaseModel
 from ..typing.toolchains import *
 from ..typing.config import AuthInputType
 from ..api.single_user_auth import get_user

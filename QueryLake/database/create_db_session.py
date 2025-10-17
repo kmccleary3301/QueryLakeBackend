@@ -1,13 +1,18 @@
+import os
 import time
 import random
+import logging
 from typing import Optional
 from sqlmodel import Field, SQLModel, Session, create_engine
 from sqlalchemy import Column, DDL, event, text, Index
 from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.exc import OperationalError
 from typing import List, Tuple
 from pgvector.sqlalchemy import Vector
 
 from .sql_db_tables import *
+
+logger = logging.getLogger(__name__)
 
 
 CHECK_INDEX_EXISTS_SQL = f"""
@@ -20,12 +25,32 @@ SELECT EXISTS (
 );
 """
 
+CHECK_FILE_INDEX_EXISTS_SQL = f"""
+SELECT EXISTS (
+    SELECT 1
+    FROM   pg_class c
+    JOIN   pg_namespace n ON n.oid = c.relnamespace
+    WHERE  c.relname = '{file_chunk.__tablename__}_vector_cos_idx'
+    AND    n.nspname = 'public'
+);
+"""
+
 CREATE_VECTOR_INDEX_SQL = f"""
 DO $$
 BEGIN
 	EXECUTE 'CREATE INDEX {DocumentChunk.__tablename__}_vector_cos_idx ON {DocumentChunk.__tablename__}
 				USING hnsw (embedding halfvec_cosine_ops)
 				WITH (m = 16, ef_construction = 64);';
+END
+$$;
+"""
+
+CREATE_FILE_VECTOR_INDEX_SQL = f"""
+DO $$
+BEGIN
+    EXECUTE 'CREATE INDEX {file_chunk.__tablename__}_vector_cos_idx ON {file_chunk.__tablename__}
+                USING hnsw (embedding halfvec_cosine_ops)
+                WITH (m = 16, ef_construction = 64);';
 END
 $$;
 """
@@ -52,6 +77,12 @@ USING bm25 (id, text, document_id, document_name, website_url, collection_id, cr
 WITH (key_field = 'id');
 """
 
+CREATE_BM25_FILE_CHUNK_INDEX_SQL = f"""
+CREATE INDEX search_{file_chunk.__tablename__}_idx ON {file_chunk.__tablename__}
+USING bm25 (id, text, md, created_at)
+WITH (key_field = 'id');
+"""
+
 DELETE_BM25_CHUNK_INDEX_SQL = f"""
 DROP INDEX search_{DocumentChunk.__tablename__}_idx;
 """
@@ -71,37 +102,57 @@ def check_index_created(database: Session):
     index_exists = list(result)[0][0]
     return index_exists
 
+def check_file_index_created(database: Session):
+    result = database.exec(text(CHECK_FILE_INDEX_EXISTS_SQL))
+    index_exists = list(result)[0][0]
+    return index_exists
+
 def initialize_database_engine() -> Session:
     url = "postgresql://querylake_access:querylake_access_password@localhost:5444/querylake_database"
-    engine = create_engine(url)
-    print("PG URL:", url)
+    connect_timeout = int(os.environ.get("QUERYLAKE_DB_CONNECT_TIMEOUT", "5"))
+    engine = create_engine(
+        url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": connect_timeout},
+    )
+    logger.info("Connecting to ParadeDB/Postgres at %s (timeout=%ss)", url, connect_timeout)
     
     REBUILD_INDEX = False
     
     # Create tables
-    SQLModel.metadata.create_all(engine)
+    try:
+        SQLModel.metadata.create_all(engine)
+    except OperationalError as exc:
+        logger.error("Unable to reach ParadeDB/Postgres at %s: %s", url, exc)
+        logger.error("Is the database container running and listening on port 5444?")
+        raise
     
     # Create initial session
     database = Session(engine)
+    try:
+        database.exec(text("SELECT 1"))
+    except OperationalError as exc:
+        logger.error("Database session validation failed: %s", exc)
+        raise
     
     if REBUILD_INDEX:
-        print("Deleting existing indices...")
+        logger.info("Dropping existing vector and BM25 indices per configuration")
         database.exec(text(DELETE_VECTOR_INDEX_SQL))
         database.exec(text(DELETE_BM25_CHUNK_INDEX_SQL))
         database.exec(text(DELETE_BM25_DOC_INDEX_SQL))
         database.commit()
-        print("Deleting existing indices...")
+        logger.info("Existing indices dropped successfully")
     
     
     # Check if indices exist
     index_exists = check_index_created(database)
-    print("CHECKING IF SEARCH INDICES CREATED:", index_exists)
+    logger.debug("Vector/BM25 indices present: %s", index_exists)
     
     if not index_exists:
         # Close current session and create a temporary one just for index creation
         
         try:
-            print("ATTEMPTING TO ADD INDICES...")
+            logger.info("Creating vector and BM25 indices for DocumentChunk/document_raw")
             database.exec(text(CREATE_VECTOR_INDEX_SQL))
             database.exec(text(CREATE_BM25_CHUNK_INDEX_SQL))
             database.exec(text(CREATE_BM25_DOC_INDEX_SQL))
@@ -109,7 +160,7 @@ def initialize_database_engine() -> Session:
             
             # Verify indices were created
             index_exists = check_index_created(database)
-            print("VERIFYING INDICES CREATED:", index_exists)
+            logger.debug("Vector/BM25 indices created: %s", index_exists)
         finally:
             database.close()
         
@@ -125,11 +176,40 @@ def initialize_database_engine() -> Session:
         del database, engine
         
         # Create fresh session after index creation
-        engine_2 = create_engine(url)
+        engine_2 = create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": connect_timeout},
+        )
         database_2 = Session(engine_2)
-        
+
+        # Ensure new Files indices are present as well
+        try:
+            file_idx_exists = check_file_index_created(database_2)
+            logger.debug("File chunk indices present: %s", file_idx_exists)
+            if not file_idx_exists:
+                logger.info("Creating file chunk vector/BM25 indices")
+                database_2.exec(text(CREATE_FILE_VECTOR_INDEX_SQL))
+                database_2.exec(text(CREATE_BM25_FILE_CHUNK_INDEX_SQL))
+                database_2.commit()
+                logger.info("File chunk indices created successfully")
+        except Exception as e:
+            logger.warning("Failed to create file chunk indices: %s", e)
+
         # Return the *fresh* sessions to prevent the aforementioned bug
         return database_2, engine_2
         
-    
+    # Ensure Files indices are present
+    try:
+        file_idx_exists = check_file_index_created(database)
+        logger.debug("File chunk indices present: %s", file_idx_exists)
+        if not file_idx_exists:
+            logger.info("Creating file chunk vector/BM25 indices")
+            database.exec(text(CREATE_FILE_VECTOR_INDEX_SQL))
+            database.exec(text(CREATE_BM25_FILE_CHUNK_INDEX_SQL))
+            database.commit()
+            logger.info("File chunk indices created successfully")
+    except Exception as e:
+        logger.warning("Failed to create file chunk indices: %s", e)
+
     return database, engine

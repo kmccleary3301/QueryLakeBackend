@@ -1,0 +1,53 @@
+{
+  "name": "Demo PDF Upload V2",
+  "id": "demo_pdf_upload_v2",
+  "category": "demo",
+  "initial_state": {
+    "title": "Demo PDF Upload",
+    "uploads": [],
+    "last_job": null
+  },
+  "nodes": [
+    {
+      "id": "attach_pdf",
+      "type": "transform",
+      "mappings": [
+        {
+          "destination": {"kind": "files"},
+          "path": "$.uploads",
+          "value": {"ref": {"source": "inputs", "path": "$.file_meta"}},
+          "mode": "append"
+        },
+        {
+          "destination": {"kind": "node", "id": "process_pdf"},
+          "path": "$.bundle",
+          "value": {
+            "literal": {
+              "file_id": {"ref": {"source": "inputs", "path": "$.file_meta.file_id"}},
+              "version_id": {"ref": {"source": "inputs", "path": "$.file_meta.version_id"}}
+            }
+          },
+          "mode": "merge"
+        }
+      ]
+    },
+    {
+      "id": "process_pdf",
+      "type": "api",
+      "api_function": "files_process_version",
+      "inputs": {
+        "file_id": {"ref": {"source": "inputs", "path": "$.bundle.file_id"}},
+        "version_id": {"ref": {"source": "inputs", "path": "$.bundle.version_id"}}
+      },
+      "mappings": [
+        {
+          "destination": {"kind": "state"},
+          "path": "$.last_job",
+          "value": {"ref": {"source": "outputs", "path": "$"}},
+          "mode": "set"
+        }
+      ],
+      "metadata": {"track_job": true}
+    }
+  ]
+}

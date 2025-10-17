@@ -14,6 +14,7 @@ from PIL import Image
 import ray
 from pypdfium2 import PdfDocument
 from ray.serve.handle import DeploymentHandle
+import logging
 
 
 
@@ -26,6 +27,8 @@ from tabled.inference.recognition import (
 
 import base64
 import time
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -91,7 +94,7 @@ async def process_pdf_with_surya(
 
     doc_ref = ray.put(file_bytes)
     
-    print("Server Surya Handles:", list(server_surya_handles.keys()))
+    logger.debug("Surya handles available: %s", list(server_surya_handles.keys()))
     marker_handle = server_surya_handles['Marker (V1)']
     
     # Get the reference from the async call
@@ -100,13 +103,13 @@ async def process_pdf_with_surya(
         doc=doc_ref
     )
     
-    print("Marker results type:", type(marker_results))
+    logger.debug("Marker results type: %s", type(marker_results))
     
     # Decode the result
     marker_results = ray.cloudpickle.load(BytesIO(base64.b64decode(marker_results)))
     
     
-    print("Marker results type:", type(marker_results))
+    logger.debug("Marker results type after decode: %s", type(marker_results))
     
     return marker_results
     
@@ -322,7 +325,7 @@ async def process_pdf_with_surya_2(
 
     out_meta["ocr_stats"] = ocr_stats
     if len([b for p in pages for b in p.blocks]) == 0:
-        print(f"Could not extract any text blocks for {file.name}")
+        logger.warning("No text blocks extracted for %s", getattr(file, "name", "<buffer>"))
         return "", {}, out_meta
 
 	# TODO: model call batch endpoint layout model

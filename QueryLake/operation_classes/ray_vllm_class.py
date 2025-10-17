@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import time
 
 import re, json
@@ -45,6 +47,9 @@ from fastapi import Request
 from vllm.usage.usage_lib import UsageContext
 import traceback
 from vllm.lora.request import LoRARequest
+from QueryLake.operation_classes.runtime_introspection import RuntimeIntrospectionMixin
+
+logger = logging.getLogger(__name__)
 
 def encode_chat(
     llm_engine: AsyncLLMEngine,
@@ -98,7 +103,7 @@ def encode_chat(
             )
         else:
             
-            print("Conversation: ", conversation)
+            logger.debug("Conversation parsed for chat template: %s", conversation)
             
             prompt_data = apply_hf_chat_template(
                 tokenizer,
@@ -183,7 +188,7 @@ def format_chat_history(chat_history : List[dict],
 #         "target_num_ongoing_requests_per_replica": 5,
 #     },
 # )
-class VLLMDeploymentClass(OpenAIServingChat):
+class VLLMDeploymentClass(RuntimeIntrospectionMixin, OpenAIServingChat):
     def __init__(
         self,
         model_config : Model,
@@ -225,6 +230,12 @@ class VLLMDeploymentClass(OpenAIServingChat):
         self.model_config_t = model_config
         self.padding_t : Padding = model_config.padding
         self.default_model_args_t = self.model_config_t.default_parameters
+        self._runtime_role = "llm"
+        self._runtime_model_id = model_config.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_config, "name", model_config.id),
+            "engine": getattr(model_config, "engine", "vllm"),
+        }
         
         engine_args_make = {
             **kwargs,
@@ -238,22 +249,31 @@ class VLLMDeploymentClass(OpenAIServingChat):
         self.loras_map_t: Dict[str, Dict[str, Any]] = {}
         enable_lora = False
         if self.model_config_t.loras and len(self.model_config_t.loras) > 0:
-            print(f"Found {len(self.model_config_t.loras)} LoRAs in config.")
+            logger.info("Found %s LoRA adapters in configuration", len(self.model_config_t.loras))
             enable_lora = True
             # Assign unique integer IDs and store paths
             for i, lora_config in enumerate(self.model_config_t.loras):
                 if lora_config.id and lora_config.system_path:
                     # Basic check if path exists (can be enhanced)
                     if not os.path.exists(lora_config.system_path):
-                         print(f"Warning: LoRA path does not exist: {lora_config.system_path} for LoRA ID: {lora_config.id}")
+                        logger.warning(
+                            "LoRA path does not exist for adapter %s at %s",
+                            lora_config.id,
+                            lora_config.system_path,
+                        )
                     
                     self.loras_map_t[lora_config.id] = {
                         "path": lora_config.system_path,
                         "int_id": i + 1 # VLLM uses 1-based integer IDs
                     }
-                    print(f"  - Registered LoRA ID '{lora_config.id}' (int_id={i+1}) at path '{lora_config.system_path}'")
+                    logger.info(
+                        "Registered LoRA adapter %s (int_id=%s) at %s",
+                        lora_config.id,
+                        i + 1,
+                        lora_config.system_path,
+                    )
                 else:
-                     print(f"Warning: Skipping LoRA config due to missing id or system_path: {lora_config}")
+                    logger.warning("Skipping LoRA config with missing id or system_path: %s", lora_config)
 
             # Set engine args for LoRA, allowing overrides from model_config.engine_args
             engine_args_make.setdefault("enable_lora", enable_lora)
@@ -261,19 +281,31 @@ class VLLMDeploymentClass(OpenAIServingChat):
             engine_args_make.setdefault("max_loras", max(1, len(self.loras_map_t)))
             # Default max_lora_rank, common value is 64
             engine_args_make.setdefault("max_lora_rank", 64)
-             # Default max_cpu_loras, often same as max_loras
+            # Default max_cpu_loras, often same as max_loras
             engine_args_make.setdefault("max_cpu_loras", engine_args_make["max_loras"])
             
-            print(f"LoRA Engine Args set: enable_lora={engine_args_make['enable_lora']}, max_loras={engine_args_make['max_loras']}, max_lora_rank={engine_args_make['max_lora_rank']}, max_cpu_loras={engine_args_make['max_cpu_loras']}")
+            logger.debug(
+                "LoRA engine args: enable_lora=%s, max_loras=%s, max_lora_rank=%s, max_cpu_loras=%s",
+                engine_args_make["enable_lora"],
+                engine_args_make["max_loras"],
+                engine_args_make["max_lora_rank"],
+                engine_args_make["max_cpu_loras"],
+            )
 
         elif "enable_lora" in engine_args_make and engine_args_make["enable_lora"]:
              # Handle case where enable_lora is true in engine_args but no loras defined in config
              enable_lora = True
-             print("LoRA enabled via engine_args, but no specific LoRAs found in model config.")
+             logger.warning("LoRA enabled via engine_args, but no adapters configured; using defaults")
              engine_args_make.setdefault("max_loras", 1) # Default to 1 if enabled but none specified
              engine_args_make.setdefault("max_lora_rank", 64)
              engine_args_make.setdefault("max_cpu_loras", engine_args_make["max_loras"])
-             print(f"LoRA Engine Args set: enable_lora={engine_args_make['enable_lora']}, max_loras={engine_args_make['max_loras']}, max_lora_rank={engine_args_make['max_lora_rank']}, max_cpu_loras={engine_args_make['max_cpu_loras']}")
+             logger.debug(
+                "LoRA engine args: enable_lora=%s, max_loras=%s, max_lora_rank=%s, max_cpu_loras=%s",
+                engine_args_make["enable_lora"],
+                engine_args_make["max_loras"],
+                engine_args_make["max_lora_rank"],
+                engine_args_make["max_cpu_loras"],
+            )
         # --- LoRA Configuration End ---
 
         args = AsyncEngineArgs( 
@@ -290,11 +322,11 @@ class VLLMDeploymentClass(OpenAIServingChat):
             
         self.chat_template_t = None
         if "chat_template" in tokenizer_config:
-            print("CHAT TEMPLATE FOUND")
+            logger.debug("Chat template found in tokenizer_config")
             self.chat_template_t = tokenizer_config["chat_template"]
         
         
-        print("INITIALIZING VLLM DEPLOYMENT")
+        logger.info("Initializing vLLM deployment for model %s", self.model_config_t.id)
         
         self.engine_t = AsyncLLMEngine.from_engine_args(args, usage_context=UsageContext.OPENAI_API_SERVER)
         self.tokenizer_t = self.engine_t.engine.get_tokenizer()
@@ -325,6 +357,10 @@ class VLLMDeploymentClass(OpenAIServingChat):
             chat_template=self.chat_template_t if not self.chat_template_t is None else "openai",
             chat_template_content_format="auto",
         )
+
+        self._job_request_lock = asyncio.Lock()
+        self._job_request_map: Dict[str, str] = {}
+        self._publish_runtime_metadata()
     
     def count_tokens(self, input_string : str):
         return len(self.tokenizer_t(input_string)["input_ids"])
@@ -419,7 +455,8 @@ class VLLMDeploymentClass(OpenAIServingChat):
         request_dict : dict, 
         sources : List[dict] = [],
         functions_available: List[Union[FunctionCallDefinition, dict]] = None,
-        lora_id: Optional[str] = None
+        lora_id: Optional[str] = None,
+        job_id: Optional[str] = None,
     ):
         """
         This is the standard QL VLLM generator endpoint.
@@ -442,9 +479,9 @@ class VLLMDeploymentClass(OpenAIServingChat):
         if chat_history_multi_modal:
             if not self.chat_template_t:
                 # Log or raise? Multi-modal generally requires a template.
-                print("ERROR: Multi-modal input received but no chat_template found!")
+                logger.error("Multi-modal input received but no chat_template found")
                 raise ValueError("Chat template required for multi-modal input.")
-            print("Encoding multi-modal chat history using chat template.")
+            logger.debug("Encoding multi-modal chat history using chat template")
             # This path was already handled correctly before, re-verified.
             prompt_to_use = encode_chat(
                 self.engine_t, 
@@ -465,7 +502,7 @@ class VLLMDeploymentClass(OpenAIServingChat):
         else:
             # Fallback: Use the pre-formatted string from generate_prompt
             # This covers raw prompt input or cases where no chat template exists.
-            print("Using pre-formatted prompt string (no template or raw input).")
+            logger.debug("Using pre-formatted prompt string (no template or raw input)")
             prompt_to_use = prompt
             
         # assert self.count_tokens(prompt) <= self.context_size, f"Prompt is too long."
@@ -482,10 +519,10 @@ class VLLMDeploymentClass(OpenAIServingChat):
                     lora_int_id=lora_info["int_id"], # Internal integer ID
                     lora_path=lora_info["path"] # Path to adapter weights
                 )
-                print(f"Using LoRA: ID='{lora_id}', Path='{lora_info['path']}'")
+                logger.info("Using LoRA adapter %s at %s", lora_id, lora_info["path"])
             else:
                 # Option: Raise error or log warning and proceed without LoRA
-                print(f"Warning: Requested LoRA ID '{lora_id}' not found in configuration. Proceeding without LoRA.")
+                logger.warning("Requested LoRA ID %s not found; continuing without LoRA", lora_id)
                 # raise ValueError(f"Requested LoRA ID '{lora_id}' not found.") 
         # --- LoRA Request Handling End ---
         
@@ -543,7 +580,46 @@ class VLLMDeploymentClass(OpenAIServingChat):
             lora_request=lora_request # Pass LoRA request to engine
         )
         
-        return results_generator
+        return self._track_job_stream(job_id, request_id, results_generator)
+
+    def _track_job_stream(
+        self,
+        job_id: Optional[str],
+        request_id: str,
+        generator: AsyncGenerator[Any, None],
+    ) -> AsyncGenerator[Any, None]:
+        if not job_id:
+            return generator
+
+        async def wrapped() -> AsyncGenerator[Any, None]:
+            async with self._job_request_lock:
+                self._job_request_map[job_id] = request_id
+            try:
+                async for item in generator:
+                    yield item
+            finally:
+                async with self._job_request_lock:
+                    existing = self._job_request_map.get(job_id)
+                    if existing == request_id:
+                        self._job_request_map.pop(job_id, None)
+
+        return wrapped()
+
+    async def cancel_job(self, job_id: str) -> bool:
+        async with self._job_request_lock:
+            request_id = self._job_request_map.get(job_id)
+        if request_id is None:
+            return False
+        await self.engine_t.abort(request_id)
+        async with self._job_request_lock:
+            existing = self._job_request_map.get(job_id)
+            if existing == request_id:
+                self._job_request_map.pop(job_id, None)
+        return True
+
+    async def get_request_id(self, job_id: str) -> Optional[str]:
+        async with self._job_request_lock:
+            return self._job_request_map.get(job_id)
     
     
     async def create_chat_completion_original(

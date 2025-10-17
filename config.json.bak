@@ -1,0 +1,627 @@
+{
+    "default_toolchain": "test_chat_session_normal_streaming",
+    "default_models": {
+        "llm": "llama-3.1-8b-instruct",
+        "rerank": "bge-reranker-v2-m3",
+        "embedding": "bge-m3"
+    },
+    "enabled_model_classes": {
+        "llm": true,
+        "rerank": true,
+        "embedding": true,
+        "surya": false
+    },
+    "models": [
+        {
+            "name": "Qwen2 VL 7B Instruct (AWQ)",
+            "id": "qwen2-vl-7b-instruct",
+            "source": "Qwen/Qwen2-VL-7B-Instruct-AWQ",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-AWQ",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2-VL-7B-Instruct-AWQ/snapshots/6ec2560b0afc3a618d4acc9b8e2967d1642f463d",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 16384,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2
+            },
+            "deployment_config": {
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Qwen2.5 VL 3B Instruct",
+            "id": "qwen2.5-vl-3b-instruct",
+            "source": "Qwen/Qwen2.5-VL-3B-Instruct-AWQ",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct-AWQ",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2.5-VL-3B-Instruct-AWQ/snapshots/e7b623934290c5a4da0ee3c6e1e57bfb6b5abbf2",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2
+            },
+            "deployment_config": {
+                "vram_required": 10000,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Qwen2.5 VL 7B Instruct",
+            "id": "qwen2.5-vl-7b-instruct",
+            "source": "Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2.5-VL-7B-Instruct-AWQ/snapshots/536a35794df8831aa814970ee8f89eff577e7718",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2
+            },
+            "deployment_config": {
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "LLaVA 1.6 7B",
+            "id": "llava-v1.6-7b",
+            "source": "liuhaotian/llava-v1.6-mistral-7b",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--liuhaotian--llava-v1.6-mistral-7b/snapshots/f13b6254afb9d96a82e6f568d7a01101923b3ed9",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2
+            },
+            "deployment_config": {
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Ovis2 1B",
+            "id": "ovis2-1b",
+            "source": "AIDC-AI/Ovis2-1B",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-1B",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-1B/snapshots/b5c50bc2836fd46a6cd0feb39269eeb5968fac1d",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 6000,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Ovis2 2B",
+            "id": "ovis2-2b",
+            "source": "AIDC-AI/Ovis2-2B",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-2B",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-2B/snapshots/f9b8be00c5b0b02549b88b5d6e01f116f492b909",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 10000,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Ovis2 4B",
+            "id": "ovis2-4b",
+            "source": "AIDC-AI/Ovis2-4B",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-4B",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-4B/snapshots/f8aef0fc14a4ac019e7bf471b2fdbab73be55bfd",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 12000,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Ovis2 8B",
+            "id": "ovis2-8b",
+            "source": "AIDC-AI/Ovis2-8B",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-8B",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-8B/snapshots/d0e09dbe6ce98dc788491976d3c69a539012d44f",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Ovis2 16B",
+            "id": "ovis2-16b",
+            "source": "AIDC-AI/Ovis2-16B",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-16B",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-16B/snapshots/9c6c34a4ad7bd5df95af7c851fe15cffa74ee806",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 32768,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 32000,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "Molmo 7B D 0924",
+            "id": "molmo-7b-d",
+            "source": "allenai/Molmo-7B-D-0924",
+            "engine": "vllm",
+            "modelcard": "https://huggingface.co/allenai/Molmo-7B-D-0924",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--allenai--Molmo-7B-D-0924/snapshots/ac032b93b84a7f10c9578ec59f9f20ee9a8990a2",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 4096,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.4,
+                "trust_remote_code": true
+            },
+            "deployment_config": {
+                "vram_required": 19656,
+                "ray_actor_options": {
+                    "num_gpus": 0.4
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "LLaMA 3.1 8B Instruct (AQLM PV 2BPW)",
+            "id": "llama-3.1-8b-instruct",
+            "source": "ISTA-DASLab/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
+            "engine": "vllm",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--ISTA-DASLab--Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf/snapshots/1f847893e24975c9aef4033a5d2ab36ed0bff784",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 16384,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.2
+            },
+            "deployment_config": {
+                "vram_required": 9828,
+                "ray_actor_options": {
+                    "num_gpus": 0.2
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 3,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 1e-05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        },
+        {
+            "name": "LLaMA 3.1 70B Instruct (AQLM PV 2BPW)",
+            "id": "llama-3.1-70b-instruct",
+            "source": "ISTA-DASLab/Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16",
+            "engine": "vllm",
+            "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
+            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--ISTA-DASLab--Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16/snapshots/d98577b240ab51fccb1dbe3575d7c9dab6ad887c",
+            "default_parameters": {
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "top_k": 20,
+                "top_p": 0.9,
+                "token_repetition_penalty": 1.15,
+                "stop": [
+                    "<|eot_id|>"
+                ]
+            },
+            "max_model_len": 8192,
+            "loras": [],
+            "padding": {
+                "system_instruction_wrap": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_instruction}<|eot_id|>",
+                "context_wrap": "<<context>>{context}<</context>>",
+                "question_wrap": "<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>",
+                "response_wrap": "<|start_header_id|>assistant<|end_header_id|>\n\n{response}<|eot_id|>"
+            },
+            "default_system_instruction": "You are a friendly assistant willing to answer any question as the user requests. When appropriate, respond with markdown and **always** format expressions (equations, symbols, etc) with latex in these enclosures: \\[ ... \\] for newline expressions and \\( ... \\) for inline expressions. DO NOT use dollar sign enclosures. Here's an example:\n\nGiven \\( f \\) and \\( x \\), we write the derivative as follows:\n\\[ f' = \\frac{df}{dx} \\]",
+            "disabled": false,
+            "engine_args": {
+                "gpu_memory_utilization": 0.6
+            },
+            "deployment_config": {
+                "vram_required": 29484,
+                "ray_actor_options": {
+                    "num_gpus": 0.6
+                },
+                "autoscaling_config": {
+                    "min_replicas": 0,
+                    "max_replicas": 1,
+                    "downscale_delay_s": 5,
+                    "downscaling_factor": 0.05,
+                    "target_ongoing_requests": 5
+                }
+            }
+        }
+    ],
+    "external_model_providers": {
+        "openai": [
+            {
+                "name": "GPT-4 Turbo",
+                "id": "gpt-4-1106-preview",
+                "context": 128000,
+                "modelcard": "https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo"
+            },
+            {
+                "name": "GPT-3.5 Turbo",
+                "id": "gpt-3.5-turbo-1106",
+                "context": 16384,
+                "modelcard": "https://platform.openai.com/docs/models/gpt-3-5"
+            }
+        ]
+    },
+    "providers": [
+        "OpenAI",
+        "Anthropic",
+        "Serper.dev",
+        "DeepInfra",
+        "Azure"
+    ],
+    "other_local_models": {
+        "rerank_models": [
+            {
+                "name": "BAAI M2 Reranker",
+                "id": "bge-reranker-v2-m3",
+                "source": "BAAI/bge-reranker-v2-m3",
+                "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--BAAI--bge-reranker-v2-m3/snapshots/953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+                "deployment_config": {
+                    "vram_required": 3931,
+                    "ray_actor_options": {
+                        "num_gpus": 0.08,
+                        "num_cpus": 2
+                    },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 2,
+                        "max_replicas": 4,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            }
+        ],
+        "embedding_models": [
+            {
+                "name": "BAAI M2 Embedding",
+                "id": "bge-m3",
+                "source": "BAAI/bge-m3",
+                "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181",
+                "deployment_config": {
+                    "vram_required": 1965,
+                    "ray_actor_options": {
+                        "num_gpus": 0.04,
+                        "num_cpus": 2
+                    },
+                    "autoscaling_config": {
+                        "max_ongoing_requests": 128,
+                        "min_replicas": 6,
+                        "max_replicas": 8,
+                        "downscale_delay_s": 5,
+                        "target_ongoing_requests": 128
+                    }
+                }
+            }
+        ],
+        "surya_models": []
+    },
+    "ray_cluster": {
+        "head_port": 6380,
+        "dashboard_port": 8266,
+        "worker_port_base": 10090,
+        "worker_port_step": 20,
+        "default_gpu_strategy": "SPREAD"
+    }
+}

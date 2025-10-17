@@ -6,6 +6,7 @@ toolchain_sessions_logs
 tmp
 models
 config.json
+config_v2_demo.json
 config.yaml
 ray_gpu_strategy_working/
 .opencode/

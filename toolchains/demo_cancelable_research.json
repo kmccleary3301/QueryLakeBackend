@@ -1,0 +1,175 @@
+{
+  "name": "Cancelable Research Sprint",
+  "id": "demo_cancelable_research",
+  "category": "demo",
+  "initial_state": {
+    "title": "Cancelable Research Sprint",
+    "status": "idle",
+    "report": {
+      "draft": "",
+      "chunks": []
+    }
+  },
+  "nodes": [
+    {
+      "id": "prepare",
+      "type": "transform",
+      "inputs": {
+        "prompt": {
+          "ref": {
+            "source": "inputs",
+            "path": "$.prompt"
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.status",
+          "value": {
+            "literal": "running"
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.report.draft",
+          "value": {
+            "literal": ""
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.report.chunks",
+          "value": {
+            "literal": []
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "node",
+            "id": "generate"
+          },
+          "path": "$.prompt",
+          "value": {
+            "ref": {
+              "source": "inputs",
+              "path": "$.prompt"
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    },
+    {
+      "id": "generate",
+      "type": "api",
+      "api_function": "llm",
+      "inputs": {
+        "chat_history": {
+          "literal": [
+            {
+              "role": "system",
+              "content": "Produce a structured briefing. Stream your findings as you go."
+            },
+            {
+              "role": "user",
+              "content": {
+                "ref": {
+                  "source": "inputs",
+                  "path": "$.prompt"
+                }
+              }
+            }
+          ]
+        },
+        "model_parameters": {
+          "literal": {
+            "max_tokens": 512,
+            "temperature": 0.3,
+            "stream": true
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.report.draft",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "append",
+          "stream": {
+            "enabled": true,
+            "mode": "append",
+            "initial": ""
+          }
+        },
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.report.chunks",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "append",
+          "stream": {
+            "enabled": true,
+            "mode": "append",
+            "initial": []
+          }
+        },
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.status",
+          "value": {
+            "literal": "complete"
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "user"
+          },
+          "path": "$.report",
+          "value": {
+            "literal": {
+              "status": {
+                "ref": {
+                  "source": "state",
+                  "path": "$.status"
+                }
+              },
+              "draft": {
+                "ref": {
+                  "source": "state",
+                  "path": "$.report.draft"
+                }
+              }
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    }
+  ]
+}

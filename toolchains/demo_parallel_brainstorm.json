@@ -1,0 +1,228 @@
+{
+  "name": "Parallel Brainstorm",
+  "id": "demo_parallel_brainstorm",
+  "category": "demo",
+  "initial_state": {
+    "title": "Parallel Brainstorm",
+    "request": {},
+    "ideas": {}
+  },
+  "nodes": [
+    {
+      "id": "ingest",
+      "type": "transform",
+      "inputs": {
+        "topic": {
+          "ref": {
+            "source": "inputs",
+            "path": "$.topic"
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.request.topic",
+          "value": {
+            "ref": {
+              "source": "inputs",
+              "path": "$.topic"
+            }
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "node",
+            "id": "brainstorm"
+          },
+          "path": "$.topic",
+          "value": {
+            "ref": {
+              "source": "inputs",
+              "path": "$.topic"
+            }
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "node",
+            "id": "critic"
+          },
+          "path": "$.topic",
+          "value": {
+            "ref": {
+              "source": "inputs",
+              "path": "$.topic"
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    },
+    {
+      "id": "brainstorm",
+      "type": "api",
+      "api_function": "llm",
+      "inputs": {
+        "chat_history": {
+          "literal": [
+            {
+              "role": "system",
+              "content": "List three creative marketing experiments in bullet form."
+            },
+            {
+              "role": "user",
+              "content": {
+                "ref": {
+                  "source": "inputs",
+                  "path": "$.topic"
+                }
+              }
+            }
+          ]
+        },
+        "model_parameters": {
+          "literal": {
+            "max_tokens": 256,
+            "temperature": 0.6
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.ideas.brainstorm",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "node",
+            "id": "synthesizer"
+          },
+          "path": "$.brainstorm",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    },
+    {
+      "id": "critic",
+      "type": "api",
+      "api_function": "llm",
+      "inputs": {
+        "chat_history": {
+          "literal": [
+            {
+              "role": "system",
+              "content": "Point out risks or missing angles for each idea succinctly."
+            },
+            {
+              "role": "user",
+              "content": {
+                "ref": {
+                  "source": "inputs",
+                  "path": "$.topic"
+                }
+              }
+            }
+          ]
+        },
+        "model_parameters": {
+          "literal": {
+            "max_tokens": 256,
+            "temperature": 0.4
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "state"
+          },
+          "path": "$.ideas.critic",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "set"
+        },
+        {
+          "destination": {
+            "kind": "node",
+            "id": "synthesizer"
+          },
+          "path": "$.critic",
+          "value": {
+            "ref": {
+              "source": "outputs",
+              "path": "$.output"
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    },
+    {
+      "id": "synthesizer",
+      "type": "transform",
+      "inputs": {
+        "brainstorm": {
+          "ref": {
+            "source": "state",
+            "path": "$.ideas.brainstorm"
+          }
+        },
+        "critic": {
+          "ref": {
+            "source": "state",
+            "path": "$.ideas.critic"
+          }
+        }
+      },
+      "mappings": [
+        {
+          "destination": {
+            "kind": "user"
+          },
+          "path": "$.summary",
+          "value": {
+            "literal": {
+              "brainstorm": {
+                "ref": {
+                  "source": "inputs",
+                  "path": "$.brainstorm"
+                }
+              },
+              "critic": {
+                "ref": {
+                  "source": "inputs",
+                  "path": "$.critic"
+                }
+              }
+            }
+          },
+          "mode": "set"
+        }
+      ]
+    }
+  ]
+}

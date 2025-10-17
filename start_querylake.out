@@ -1,0 +1,49 @@
+INFO 10-15 15:04:23 [__init__.py:239] Automatically detected platform cuda.
+2025-10-15 15:04:24,266 - INFO - Ray logging defaults in effect | rotation_max_bytes=104857600 | rotation_backups=10 | backend_level=warning | dedup=1 | temp_dir=/tmp/querylake_ray
+2025-10-15 15:04:24,267 - INFO - ✅ Loaded and validated configuration from config.json
+2025-10-15 15:04:24,276 - INFO - ✅ Loaded 11 toolchains
+2025-10-15 15:04:24,276 - INFO - 📋 Using GPU placement strategy: PACK
+2025-10-15 15:04:24,276 - INFO - 🚀 Starting in default mode: Head + Workers on this machine.
+2025-10-15 15:04:24,276 - INFO - 🧹 Cleaning up existing processes on target ports...
+2025-10-15 15:04:24,527 - INFO -   🔧 Found 45 process(es) on port 6391. Terminating...
+2025-10-15 15:04:24,537 - INFO -   ✅ Cleaned up port 6391
+2025-10-15 15:04:24,778 - INFO -   ✅ Port 8266 is already clean
+2025-10-15 15:04:26,802 - INFO - 🚀 Starting Ray head node on port 6391...
+2025-10-15 15:04:26,803 - INFO - ⏳ Waiting for head node to initialize (8s)...
+2025-10-15 15:04:34,811 - INFO - ✅ Head node started successfully and is accessible.
+2025-10-15 15:04:34,811 - INFO - 🖥️ Found 2 GPUs. Starting one worker per GPU.
+2025-10-15 15:04:34,811 - INFO -    - GPU 0: 49140MB VRAM
+2025-10-15 15:04:34,811 - INFO -    - GPU 1: 49140MB VRAM
+2025-10-15 15:04:34,811 - INFO - 🔧 Starting 2 worker nodes, connecting to 127.0.0.1:6391...
+2025-10-15 15:04:34,811 - INFO -   📦 Starting worker 1/2 for GPU 0...
+2025-10-15 15:04:34,812 - INFO -   ✅ Launched worker for GPU 0 (PID: 3447694, Ports: 10090-10109)
+2025-10-15 15:04:34,812 - INFO -      -> Waiting 3s before starting next worker...
+2025-10-15 15:04:37,815 - INFO -   📦 Starting worker 2/2 for GPU 1...
+2025-10-15 15:04:37,816 - INFO -   ✅ Launched worker for GPU 1 (PID: 3448036, Ports: 10110-10129)
+2025-10-15 15:04:37,816 - INFO - ⏳ Waiting 10s for all workers to register with the head node...
+2025-10-15 15:04:47,826 - INFO - 🔗 Connecting client to Ray cluster at 127.0.0.1:6391...
+[2025-10-15 15:04:47,853 I 3446069 3446069] logging.cc:302: Set ray log level from environment variable RAY_BACKEND_LOG_LEVEL to 1
+2025-10-15 15:04:48,412 - INFO - ✅ Client connected successfully to the 'querylake' namespace.
+2025-10-15 15:04:48,412 - INFO - 📊 Verifying cluster status...
+2025-10-15 15:04:48,412 - INFO -   - Alive nodes: 3
+2025-10-15 15:04:48,412 - INFO -   - GPU worker nodes: 2
+2025-10-15 15:04:48,412 - INFO -   - Total GPUs in cluster: 2.0
+2025-10-15 15:04:48,412 - INFO -   - Total VRAM in cluster: 98280.0MB
+2025-10-15 15:04:48,412 - INFO -   🎉 SUCCESS: All GPU workers registered correctly!
+2025-10-15 15:04:48,413 - INFO - 🚀 Deploying QueryLake application with 'PACK' strategy...
+2025-10-15 15:04:48,413 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 19656})
+2025-10-15 15:04:48,413 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 10000})
+2025-10-15 15:04:48,414 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 19656})
+2025-10-15 15:04:48,414 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 19656})
+2025-10-15 15:04:48,414 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 6000})
+2025-10-15 15:04:48,414 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 10000})
+2025-10-15 15:04:48,415 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 12000})
+2025-10-15 15:04:48,415 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 19656})
+2025-10-15 15:04:48,415 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 32000})
+2025-10-15 15:04:48,415 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 19656})
+2025-10-15 15:04:48,416 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 9828})
+2025-10-15 15:04:48,416 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 29484})
+2025-10-15 15:04:48,416 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 1965})
+2025-10-15 15:04:48,417 - INFO - Ray Serve deployment with 1 replicas using strategy PACK (resources={'GPU': 0.01, 'CPU': 2, 'VRAM_MB': 3931})
+INFO 2025-10-15 15:04:49,555 serve 3446069 -- Started Serve in namespace "serve".
+[2025-10-15 15:12:38,852 E 3446069 3451673] gcs_rpc_client.h:196: Failed to connect to GCS within 60 seconds. GCS may have been killed. It's either GCS is terminated by `ray stop` or is killed unexpectedly. If it is killed unexpectedly, see the log file gcs_server.out. https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#logging-directory-structure. The program will terminate.

@@ -3,7 +3,10 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 import asyncio
 import json
 import inspect
+import logging
 import traceback
+
+logger = logging.getLogger(__name__)
 
 async def api_general_call(
     self, # Umbrella class, can't type hint because of circular imports
@@ -20,31 +23,34 @@ async def api_general_call(
     """
     
     try:
-        print("Calling:", rest_of_path)
-        
+        logger.info("Routing API call to %s", rest_of_path)
+
         if not file is None:
-            print("File:", file.filename)
+            logger.debug("Attached file for API call: %s", file.filename)
         
         if "parameters" in req.query_params._dict:
             arguments = json.loads(req.query_params._dict["parameters"])
         else:
-            # We use ujson because normal `await req.json()` completely stalls on large inputs.
-            # print("Awaiting JSON")
-            
-            arguments = await asyncio.wait_for(req.json(), timeout=10)
-        
-        
+            body_bytes = await asyncio.wait_for(req.body(), timeout=10)
+            if not body_bytes:
+                arguments = {}
+            else:
+                try:
+                    arguments = json.loads(body_bytes)
+                except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+                    logger.debug("Non-JSON body for %s; treating as empty arguments", rest_of_path)
+                    arguments = {}
         
         # print("arguments:", arguments)
         route = req.scope['path']
         route_split = route.split("/")
-        print("/".join(route_split[:3]))
+        logger.debug("API route prefix: %s", "/".join(route_split[:3]))
         if rest_of_path == "help":
             if len(route_split) > 3:
                 function_name = route_split[3]
                 return {"success": True, "note": API_FUNCTION_HELP_DICTIONARY[function_name]}
             else:
-                print(API_FUNCTION_HELP_GUIDE)
+                logger.debug("API help guide requested")
                 return {"success": True, "note": API_FUNCTION_HELP_GUIDE}
         else:
             function_actual = self.api_function_getter(rest_of_path.split("/")[0])
@@ -78,5 +84,5 @@ async def api_general_call(
         error_message = str(e)
         stack_trace = traceback.format_exc()
         return_dict = {"success": False, "error": error_message, "trace": stack_trace}
-        print("RETURNING:", json.dumps(return_dict, indent=4))
+        logger.exception("API call to %s failed: %s", rest_of_path, error_message)
         return return_dict

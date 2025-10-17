@@ -25,6 +25,9 @@ import json
 import bisect
 from ..database.create_db_session import initialize_database_engine
 from ..typing.api_inputs import TextChunks
+import logging
+
+logger = logging.getLogger(__name__)
 
 def binary_search(sorted_list, target):
 	index = bisect.bisect_right(sorted_list, target)
@@ -224,7 +227,11 @@ async def create_text_chunks(database : Session,
         ), splits))
         m_2 = time() - m_1
         if m_2 > 1:
-            print("Split %16d segments in %5.2fs" % (len(text_segments), m_2))
+            logger.debug(
+                "Chunked %s segments into embeddings in %.2fs",
+                len(text_segments),
+                m_2,
+            )
         split_collections.append(splits)
     
     

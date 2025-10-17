@@ -1,8 +1,9 @@
 import json
+import logging
 from fastapi import Request
 import time
 from fastapi.responses import Response
-from typing import Tuple, Union, List
+from typing import List, Tuple, Union
 from pydantic import BaseModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import torch
@@ -11,6 +12,9 @@ from ray import serve
 import itertools
 from asyncio import gather
 from ..typing.config import LocalModel
+from .runtime_introspection import RuntimeIntrospectionMixin
+
+logger = logging.getLogger(__name__)
 
 
 def modified_sigmoid(x : Union[torch.Tensor, float]):
@@ -43,17 +47,24 @@ def F(x):
     return result
 
 
-class RerankerDeployment:
+class RerankerDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card : LocalModel):
-        print("INITIALIZING RERANKER DEPLOYMENT")
+        logger.info("Initializing reranker deployment for model %s", model_card.id)
         
+        self._runtime_role = "rerank"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
         
         self.tokenizer = AutoTokenizer.from_pretrained(model_card.system_path)
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
         self.model = AutoModelForSequenceClassification.from_pretrained(model_card.system_path).to(self.device)
-        print("DONE INITIALIZING RERANKER DEPLOYMENT")
+        logger.info("Reranker deployment initialization complete")
+        self._runtime_extra_metadata["device"] = self.device
         # self.model = FlagReranker(model_key, use_fp16=True)
+        self._publish_runtime_metadata()
     
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.05)
     async def handle_batch(self, inputs: List[Tuple[str, str]], normalize = List[bool]) -> List[float]:
@@ -72,7 +83,12 @@ class RerankerDeployment:
             mid_time = time.time()
             scores = self.model(**tokenized_inputs, return_dict=True).logits.view(-1, ).float().to("cpu") # This takes 8 seconds!!! WTF?!?!
             time_taken_model, time_taken_tokens = time.time() - mid_time, mid_time - start_time
-            print("Time taken for rerank inference: %.2f s + %.2f s = %.2f s" % (time_taken_model, time_taken_tokens, time_taken_model + time_taken_tokens))
+            logger.debug(
+                "Rerank inference timing: model=%.2fs, tokenization=%.2fs (total=%.2fs)",
+                time_taken_model,
+                time_taken_tokens,
+                time_taken_model + time_taken_tokens,
+            )
         
         scores = torch.exp(scores.clone().detach())
         scores_normed = F(scores)

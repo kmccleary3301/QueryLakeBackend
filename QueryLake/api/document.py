@@ -1,5 +1,6 @@
 from hashlib import sha256
-from typing import List, Callable, Awaitable, Dict, Any, Union, Literal, Tuple, Optional
+from typing import Awaitable, Callable, Dict, List, Any, Union, Literal, Tuple, Optional
+import logging
 import os, sys
 import re
 from fastapi import UploadFile
@@ -28,6 +29,8 @@ import asyncio
 import bisect
 import concurrent.futures
 from .collections import assert_collections_priviledge, get_collection_document_password
+
+logger = logging.getLogger(__name__)
 
 
 async def upload_document(database : Session,
@@ -59,7 +62,7 @@ async def upload_document(database : Session,
     time_start = time.time()
     time_dict = {}
     
-    print("Adding document to collection")
+    logger.info("Uploading document into collection %s", collection_hash_id)
     
 
     assert isinstance(scan_text, bool), "scan_text must be a boolean"
@@ -754,7 +757,11 @@ async def download_document(database : Session,
         fetch_parameters["hash_id"]
     )
     
-    print("fetch_document got", type(file_io), "with size", len(file_io.getvalue()))
+    logger.debug(
+        "Decrypted document stream: type=%s size=%s bytes",
+        type(file_io),
+        len(file_io.getvalue()),
+    )
     
     return StreamingResponse(file_io)
 
@@ -825,7 +832,10 @@ async def fetch_toolchain_document(database : Session,
 
     document_auth_access["hash_id"] = document_auth_access["document_hash_id"]
 
-    print("Document Request Access Auth:", document_auth_access)
+    logger.debug(
+        "Document access request resolved for hash_id=%s",
+        document_auth_access.get("hash_id"),
+    )
     
     document_access_token =  database.exec(select(sql_db_tables.document_access_token).where(sql_db_tables.document_access_token.hash_id == document_auth_access["token_hash"])).first()
     assert document_access_token.expiration_timestamp > time.time(), "Document Access Token Expired"
@@ -844,7 +854,11 @@ async def fetch_toolchain_document(database : Session,
         fetch_parameters["hash_id"]
     )
     
-    print("fetch_document got", type(file_io), "with size", len(file_io.getvalue()))
+    logger.debug(
+        "Decrypted document stream: type=%s size=%s bytes",
+        type(file_io),
+        len(file_io.getvalue()),
+    )
     
     return StreamingResponse(file_io)
 
@@ -925,12 +939,8 @@ def call_surya_model(
     #     file = BytesIO(file.file.read())
     #     file.name = file_name
     
-    print("Server surya handles:", server_surya_handles)
+    logger.debug("Surya handles available: %s", list(server_surya_handles.keys()))
 
 def ping_4():
     time.sleep(40)
     return True
-
-
-
-

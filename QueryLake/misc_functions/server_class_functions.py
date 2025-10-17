@@ -1,11 +1,14 @@
 from ray.serve.handle import DeploymentResponseGenerator
-from typing import Awaitable, Callable, AsyncGenerator, List, Optional, Union, Literal
+from typing import AsyncGenerator, Awaitable, Callable, List, Literal, Optional, Union
 import json, inspect
+import logging
 from pydantic import BaseModel
 from ..typing.function_calling import FunctionCallDefinition
 from ..typing.config import Model
 from copy import deepcopy
 import re
+
+logger = logging.getLogger(__name__)
 
 # function_call_description_template = """
 # You may call a function to execute an action.
@@ -88,7 +91,7 @@ def find_function_calls(text_in: str):
                 "arguments": arguments_parsed
             }
         except json.decoder.JSONDecodeError:
-            print("Failed to JSON load:", "{" + call_split.group(2) + "}")
+            logger.warning("Failed to JSON decode function arguments: {%s}", call_split.group(2))
             call_result = {
                 "error": "Failed to parse arguments",
                 "attempt": f"{{{call_split.group(2)}}}"
@@ -185,7 +188,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
             text_output = text_outputs[0][num_returned:]
             num_returned = num_returned + len(text_output)
         elif model_config.engine == "exllamav2":
-            print("Attempting to grab output from exllamav2")
+            logger.debug("Attempting to read output from exllamav2 generator")
             text_output = request_output.get("text", "")
         # The following code is responsible for withholding the output if 
         # a stop sequence is being matched. This avoids a partial stop sequence
@@ -208,7 +211,7 @@ async def stream_results_tokens(results_generator: DeploymentResponseGenerator,
                 stop_queue.append(text_output)
                 stop_queue_full = "".join(stop_queue)
                 if (any([stop_sequence in stop_queue_full for stop_sequence in stop_sequences])):
-                    print("Stopping sequence found:", stop_queue_full)
+                    logger.debug("Stop sequence detected in output: %s", stop_queue_full)
                     break
                 elif (check_stop_sequence(stop_queue_full)):
                     continue

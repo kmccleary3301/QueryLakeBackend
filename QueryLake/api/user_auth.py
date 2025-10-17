@@ -1,4 +1,5 @@
 from hashlib import sha256
+import logging
 import random
 from ..database import sql_db_tables
 from sqlmodel import Session, select, and_
@@ -20,6 +21,8 @@ from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from ..misc_functions.toolchain_state_management import run_sequence_action_on_object
+
+logger = logging.getLogger(__name__)
 
 
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -53,9 +56,9 @@ def add_user(
 
     private_key_encryption_key = hash_function(password, private_key_encryption_salt)
 
-    print("Adding user with private key:", [private_key])
+    logger.debug("Generating user keys for %s", username)
     tmp_encrypt = encryption.aes_encrypt_string(private_key_encryption_key, private_key)
-    print("Encrypted to:", [tmp_encrypt, type(tmp_encrypt)])
+    logger.debug("Encrypted private key payload size=%s", len(tmp_encrypt))
 
     new_user = sql_db_tables.user(
         name=username,

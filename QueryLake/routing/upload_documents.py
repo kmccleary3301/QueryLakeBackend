@@ -3,8 +3,11 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 import asyncio
 import json
 import inspect
+import logging
 import traceback
 from ..api import api
+
+logger = logging.getLogger(__name__)
 
 async def handle_document(
     self, # Umbrella class, can't type hint because of circular imports
@@ -39,6 +42,5 @@ async def handle_document(
         error_message = str(e)
         stack_trace = traceback.format_exc()
         return_msg = {"success": False, "note": error_message, "trace": stack_trace}
-        # print(return_msg)
-        print(error_message[:2000])
+        logger.exception("Upload handling failed for endpoint %s: %s", endpoint, error_message)
         return return_msg

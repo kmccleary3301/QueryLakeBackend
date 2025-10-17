@@ -8,6 +8,8 @@ import pickle
 import ray
 from io import BytesIO
 from ray import cloudpickle
+import logging
+from .runtime_introspection import RuntimeIntrospectionMixin
 
 
 
@@ -58,6 +60,8 @@ import base64
 import time
 
 from marker.ocr.detection import batch_text_detection, Page, get_batch_size
+
+logger = logging.getLogger(__name__)
 
 def surya_detection(images: list, pages: List[Page], det_model, det_processor, batch_multiplier=1):
 
@@ -134,7 +138,7 @@ def convert_single_pdf(
 
     out_meta["ocr_stats"] = ocr_stats
     if len([b for p in pages for b in p.blocks]) == 0:
-        print(f"Could not extract any text blocks for {file.name}")
+        logger.warning("No text blocks extracted for %s", getattr(file, "name", "<buffer>"))
         return "", {}, out_meta
 
     surya_layout(lowres_images, pages, layout_model, batch_multiplier=batch_multiplier)
@@ -208,9 +212,14 @@ def convert_single_pdf(
 
     return full_text, doc_images, out_meta, pages, text_blocks
 
-class MarkerDeployment:
+class MarkerDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING MARKER DEPLOYMENT")
+        logger.info("Initializing Marker deployment with model card %s", model_card.id)
+        self._runtime_role = "surya_marker"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
         texify_settings_module = sys.modules['texify.settings']
         texify_settings_module.settings.MODEL_CHECKPOINT = model_card.system_path
         
@@ -284,7 +293,8 @@ class MarkerDeployment:
         
         self.queued_outputs = {}
 
-        print("DONE INITIALIZING MARKER DEPLOYMENT")
+        logger.info("Marker deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -347,7 +357,7 @@ class MarkerDeployment:
         cloudpickle.dump(ray.put(result), result_buf)
         result_ref_encoded = base64.b64encode(result_buf.getvalue()).decode('ascii')
         
-        print("Done with results, returning")
+        logger.debug("Marker deployment returning encoded result")
         
         return result_ref_encoded
 
@@ -524,9 +534,14 @@ class MarkerDeployment:
 
 from surya.ordering import batch_ordering
 
-class SuryaOrderDeployment:
+class SuryaOrderDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA ORDER DEPLOYMENT")
+        logger.info("Initializing Surya order deployment with model %s", model_card.id)
+        self._runtime_role = "surya_order"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
 
         surya_settings_module = sys.modules['surya.settings']
         surya_settings_module.settings.ORDER_MODEL_CHECKPOINT = model_card.system_path
@@ -534,7 +549,8 @@ class SuryaOrderDeployment:
         self.model = load_order_model(checkpoint=model_card.system_path)
         self.processor = load_order_processor(checkpoint=model_card.system_path)
         setattr(self.model, "processor", self.processor)
-        print("DONE INITIALIZING SURYA ORDER DEPLOYMENT")
+        logger.info("Surya order deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -560,9 +576,14 @@ class SuryaOrderDeployment:
 
 from surya.tables import batch_table_recognition
 
-class SuryaTableDeployment:
+class SuryaTableDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA TABLE DEPLOYMENT")
+        logger.info("Initializing Surya table deployment with model %s", model_card.id)
+        self._runtime_role = "surya_table"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
 
         surya_settings_module = sys.modules['surya.settings']
         surya_settings_module.settings.TABLE_REC_MODEL_CHECKPOINT = model_card.system_path
@@ -570,7 +591,8 @@ class SuryaTableDeployment:
         self.model = load_table_model(checkpoint=model_card.system_path)
         self.processor = load_table_processor()
         setattr(self.model, "processor", self.processor)
-        print("DONE INITIALIZING SURYA TABLE DEPLOYMENT")
+        logger.info("Surya table deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -595,9 +617,14 @@ class SuryaTableDeployment:
 
 from surya.layout import batch_layout_detection, TextDetectionResult
 
-class SuryaLayoutDeployment:
+class SuryaLayoutDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA LAYOUT DEPLOYMENT")
+        logger.info("Initializing Surya layout deployment with model %s", model_card.id)
+        self._runtime_role = "surya_layout"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
 
         surya_settings_module = sys.modules['surya.settings']
         surya_settings_module.settings.LAYOUT_MODEL_CHECKPOINT = model_card.system_path
@@ -605,7 +632,8 @@ class SuryaLayoutDeployment:
         self.model = load_detection_model(checkpoint=model_card.system_path)
         self.processor = load_detection_processor(checkpoint=model_card.system_path)
         setattr(self.model, "processor", self.processor)
-        print("DONE INITIALIZING SURYA LAYOUT DEPLOYMENT")
+        logger.info("Surya layout deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -630,9 +658,14 @@ class SuryaLayoutDeployment:
 
 from marker.ocr.detection import batch_text_detection as batch_text_detection_original
 
-class SuryaDetectionDeployment:
+class SuryaDetectionDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA DETECTION DEPLOYMENT")
+        logger.info("Initializing Surya detection deployment with model %s", model_card.id)
+        self._runtime_role = "surya_detection"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
 
         surya_settings_module = sys.modules['surya.settings']
         surya_settings_module.settings.DETECTOR_MODEL_CHECKPOINT = model_card.system_path
@@ -640,7 +673,8 @@ class SuryaDetectionDeployment:
         self.model = load_detection_model(checkpoint=model_card.system_path)
         self.processor = load_detection_processor(checkpoint=model_card.system_path)
         setattr(self.model, "processor", self.processor)
-        print("DONE INITIALIZING SURYA DETECTION DEPLOYMENT")
+        logger.info("Surya detection deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -662,9 +696,14 @@ class SuryaDetectionDeployment:
         return result_ref_encoded
 
 from surya.recognition import batch_recognition
-class SuryaOCRDeployment:
+class SuryaOCRDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA RECOGNITION DEPLOYMENT")
+        logger.info("Initializing Surya recognition deployment with model %s", model_card.id)
+        self._runtime_role = "surya_recognition"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
 
         surya_settings_module = sys.modules['surya.settings']
         surya_settings_module.settings.RECOGNITION_MODEL_CHECKPOINT = model_card.system_path
@@ -673,7 +712,8 @@ class SuryaOCRDeployment:
         self.processor = load_recognition_processor()
         setattr(self.model, "processor", self.processor)
         self.langs = replace_langs_with_codes(None)
-        print("DONE INITIALIZING SURYA RECOGNITION DEPLOYMENT")
+        logger.info("Surya recognition deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(
@@ -703,16 +743,22 @@ class SuryaOCRDeployment:
 # Old code
 from marker.equations.inference import get_total_texify_tokens, get_latex_batched
 
-class SuryaTexifyDeployment:
+class SuryaTexifyDeployment(RuntimeIntrospectionMixin):
     def __init__(self, model_card: LocalModel):
-        print("INITIALIZING SURYA TEXIFY DEPLOYMENT")
+        logger.info("Initializing Surya texify deployment with model %s", model_card.id)
+        self._runtime_role = "surya_texify"
+        self._runtime_model_id = model_card.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_card, "name", model_card.id),
+        }
         texify_settings_module = sys.modules['texify.settings']
         texify_settings_module.settings.MODEL_CHECKPOINT = model_card.system_path
         
         self.model = load_texify_model(checkpoint=model_card.system_path)
         self.processor = load_texify_processor()
         setattr(self.model, "processor", self.processor)
-        print("DONE INITIALIZING SURYA TEXIFY DEPLOYMENT")
+        logger.info("Surya texify deployment initialization complete")
+        self._publish_runtime_metadata()
 
     @serve.batch(max_batch_size=8, batch_wait_timeout_s=0.1)
     async def handle_batch(

@@ -29,24 +29,59 @@ Key Architectural Principles:
 
     graceful shutdown of all managed processes.
 """
-import ray
-from ray import serve
 import argparse
 import asyncio
-import time
-import subprocess
 import json
-import os
 import logging
+import os
 import signal
+import socket
+import subprocess
 import sys
+import time
 import traceback
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+# Apply Ray logging defaults before importing ray so every Ray process inherits them.
+_DEFAULT_RAY_ENV: Dict[str, str] = {
+    "RAY_ROTATION_MAX_BYTES": str(100 * 1024 * 1024),  # 100 MiB
+    "RAY_ROTATION_BACKUP_COUNT": "10",
+    "RAY_BACKEND_LOG_LEVEL": "warning",
+    "RAY_DEDUP_LOGS": "1",
+}
+
+_DEFAULT_TMPDIR = (
+    os.environ.get("RAY_TMPDIR")
+    or os.environ.get("QUERYLAKE_RAY_TMPDIR")
+    or "/tmp/querylake_ray"
+)
+_DEFAULT_RAY_ENV["RAY_TMPDIR"] = _DEFAULT_TMPDIR
+
+_ENV_SETUP_WARNINGS: List[str] = []
+for _key, _value in _DEFAULT_RAY_ENV.items():
+    os.environ.setdefault(_key, _value)
+
+try:
+    tmp_dir_path = Path(os.environ["RAY_TMPDIR"])
+    tmp_dir_path.mkdir(parents=True, exist_ok=True)
+except OSError as _exc:  # pragma: no cover - best effort guardrail
+    _ENV_SETUP_WARNINGS.append(
+        f"Failed to ensure Ray temp directory {os.environ['RAY_TMPDIR']}: {_exc}"
+    )
+    os.environ.pop("RAY_TMPDIR", None)
+
+import ray  # noqa: E402  pylint: disable=wrong-import-position
+from ray import serve  # noqa: E402  pylint: disable=wrong-import-position
+try:
+    from ray.logging_config import LoggingConfig  # noqa: E402
+except ImportError:  # pragma: no cover
+    LoggingConfig = None  # type: ignore
 try:
     import pynvml
     PYNVML_AVAILABLE = True
 except ImportError:
     PYNVML_AVAILABLE = False
-from typing import List, Dict, Any, Optional, Tuple
 from pynvml import (
     nvmlInit,
     nvmlShutdown,
@@ -59,7 +94,11 @@ from pynvml import (
 
 
 # Import QueryLake's own Config validator and application builder
+from pydantic import ValidationError
+
 from QueryLake.typing.config import Config, ToolChain
+from QueryLake.typing.toolchains import ToolChainV2
+from QueryLake.toolchains.legacy_converter import convert_toolchain_dict
 # This function is the new entrypoint for the application, created in server.py
 from server import build_and_run_application
 
@@ -74,8 +113,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+if _ENV_SETUP_WARNINGS:
+    for _warning in _ENV_SETUP_WARNINGS:
+        logger.warning(_warning)
 
-def load_config_and_toolchains(config_path: str = "config.json") -> Tuple[Optional[Config], Dict[str, ToolChain]]:
+logger.info(
+    "Ray logging defaults in effect | rotation_max_bytes=%s | rotation_backups=%s | backend_level=%s | dedup=%s | temp_dir=%s",
+    os.environ.get("RAY_ROTATION_MAX_BYTES"),
+    os.environ.get("RAY_ROTATION_BACKUP_COUNT"),
+    os.environ.get("RAY_BACKEND_LOG_LEVEL"),
+    os.environ.get("RAY_DEDUP_LOGS"),
+    os.environ.get("RAY_TMPDIR") or "<ray default>",
+)
+
+def load_config_and_toolchains(
+    config_path: str = "config.json",
+) -> Tuple[Optional[Config], Dict[str, ToolChain], Dict[str, ToolChainV2]]:
     """Load and parse configuration using QueryLake's Pydantic models."""
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -84,35 +137,50 @@ def load_config_and_toolchains(config_path: str = "config.json") -> Tuple[Option
         config = Config.model_validate_json(config_json_str)
         logger.info(f"✅ Loaded and validated configuration from {config_path}")
 
-        toolchains = {}
+        toolchains_v1: Dict[str, ToolChain] = {}
+        toolchains_v2: Dict[str, ToolChainV2] = {}
         toolchain_files_list = os.listdir("toolchains")
         for toolchain_file in toolchain_files_list:
             if not toolchain_file.endswith(".json"):
                 continue
             with open(os.path.join("toolchains", toolchain_file), 'r', encoding='utf-8') as f:
                 toolchain_retrieved = json.load(f)
-            toolchains[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
-        logger.info(f"✅ Loaded {len(toolchains)} toolchains")
+            # Always attempt to load a legacy v1 object so DB storage remains compatible
+            try:
+                toolchains_v1[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
+            except ValidationError:
+                # If strict validation fails, fall back to permissive legacy model (may allow extras)
+                toolchains_v1[toolchain_retrieved["id"]] = ToolChain(**toolchain_retrieved)
 
-        return config, toolchains
+            # Prefer native v2 definitions when possible; otherwise convert from legacy v1
+            try:
+                v2_obj = ToolChainV2.model_validate(toolchain_retrieved)
+                toolchains_v2[v2_obj.id] = v2_obj
+            except ValidationError:
+                toolchains_v2[toolchain_retrieved["id"]] = convert_toolchain_dict(toolchain_retrieved)
+        logger.info(f"✅ Loaded {len(toolchains_v1)} toolchains")
+
+        return config, toolchains_v1, toolchains_v2
         
     except FileNotFoundError:
         logger.error(f"❌ Configuration file {config_path} not found")
-        return None, {}
+        return None, {}, {}
     except Exception as e:
         logger.error(f"❌ Invalid configuration: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        return None, {}
+        return None, {}, {}
 
 class RayGPUCluster:
     """
     Manages a Ray cluster using the "one-node-per-GPU" architecture.
     """
     
-    def __init__(self, config: Config, toolchains: Dict[str, ToolChain]):
+    def __init__(self, config: Config, toolchains: Dict[str, ToolChain], toolchains_v2: Dict[str, ToolChainV2]):
         self.config = config
         self.toolchains = toolchains
+        # Preserve the loaded v2 toolchains; do not overwrite with an empty dict
+        self.toolchains_v2 = toolchains_v2
         self.head_process = None
         self.worker_processes = []
         self.available_gpus = []
@@ -205,21 +273,69 @@ class RayGPUCluster:
                 logger.warning(f"  ⚠️ Error during cleanup for port {port}: {e}")
         time.sleep(2) # Give OS time to release ports
     
+    def force_stop_existing_cluster(self) -> None:
+        """Best-effort shutdown of any previously running local Ray cluster."""
+        try:
+            result = subprocess.run(
+                ["ray", "stop", "--force"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode == 0:
+                logger.info("🧹 Cleared lingering Ray cluster state with `ray stop --force`.")
+            else:
+                stderr = result.stderr.strip()
+                if stderr:
+                    logger.debug("`ray stop --force` stderr: %s", stderr)
+        except FileNotFoundError:
+            logger.debug("`ray` executable not found when attempting to stop existing cluster.")
+        except subprocess.TimeoutExpired:
+            logger.warning("`ray stop --force` timed out; continuing with manual cleanup.")
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Unexpected issue while running `ray stop --force`: %s", exc)
+    
     def start_head_node(self) -> bool:
         """Start the Ray head node (for coordination, with no GPUs allocated to it)."""
         cluster_config = self.config.ray_cluster
+        if not self.available_gpus:
+            self.available_gpus = self.get_gpu_info()
+        gpu_count = max(len(self.available_gpus) if self.available_gpus else 0, 1)
+        port_base = getattr(cluster_config, "worker_port_base", None)
+        port_step = getattr(cluster_config, "worker_port_step", None)
+        head_min_port = None
+        head_max_port = None
+        if port_base is not None and port_step is not None:
+            # Reserve one additional slot worth of ports for local drivers and job submissions.
+            head_min_port = port_base
+            head_max_port = port_base + port_step * (gpu_count + 1) - 1
         try:
             logger.info(f"🚀 Starting Ray head node on port {cluster_config.head_port}...")
             
             head_cmd = [
                 "ray", "start", "--head", "--num-gpus=0",
+                "--node-ip-address=127.0.0.1",
                 f"--dashboard-port={cluster_config.dashboard_port}",
                 f"--port={cluster_config.head_port}",
                 "--disable-usage-stats"
             ]
+            if head_min_port is not None and head_max_port is not None:
+                head_cmd.extend([
+                    f"--min-worker-port={head_min_port}",
+                    f"--max-worker-port={head_max_port}",
+                ])
+            ray_tmpdir = os.environ.get("RAY_TMPDIR")
+            if ray_tmpdir:
+                head_cmd.insert(-1, f"--temp-dir={ray_tmpdir}")
             
             with open("head_node.log", "w") as head_log:
-                self.head_process = subprocess.Popen(head_cmd, stdout=head_log, stderr=head_log)
+                self.head_process = subprocess.Popen(
+                    head_cmd,
+                    stdout=head_log,
+                    stderr=head_log,
+                    env=os.environ.copy(),
+                )
             
             logger.info("⏳ Waiting for head node to initialize (8s)...")
             time.sleep(8)
@@ -242,7 +358,8 @@ class RayGPUCluster:
         """Start one worker node per detected GPU."""
         cluster_config = self.config.ray_cluster
         try:
-            self.available_gpus = self.get_gpu_info()
+            if not self.available_gpus:
+                self.available_gpus = self.get_gpu_info()
             if not self.available_gpus:
                 logger.error("❌ No GPUs found. Cannot start GPU workers.")
                 return False
@@ -270,12 +387,16 @@ class RayGPUCluster:
                 
                 worker_cmd = [
                     "ray", "start", f"--address={head_address}",
+                    "--node-ip-address=127.0.0.1",
                     "--num-gpus=1",  # This worker provides exactly 1 GPU to the cluster
                     f"--resources={resources}",
                     f"--min-worker-port={min_port}",
                     f"--max-worker-port={max_port}",
                     "--disable-usage-stats"
                 ]
+                ray_tmpdir = os.environ.get("RAY_TMPDIR")
+                if ray_tmpdir:
+                    worker_cmd.insert(-1, f"--temp-dir={ray_tmpdir}")
                 
                 log_file = f"worker_node_{gpu['index']}.log"
                 with open(log_file, "w") as worker_log:
@@ -300,8 +421,22 @@ class RayGPUCluster:
         """Connect the current process to the Ray cluster."""
         try:
             logger.info(f"🔗 Connecting client to Ray cluster at {address}...")
+            init_kwargs: Dict[str, Any] = {
+                "address": address,
+                "namespace": "querylake",
+                "log_to_driver": False,
+                "logging_level": logging.WARNING,
+            }
+            ray_tmpdir = os.environ.get("RAY_TMPDIR")
+            if ray_tmpdir:
+                init_kwargs["_temp_dir"] = ray_tmpdir
+            if LoggingConfig is not None:
+                init_kwargs["logging_config"] = LoggingConfig(
+                    log_level="WARNING",
+                    encoding="TEXT",
+                )
             # We connect to an existing cluster, so we don't initialize a new one
-            ray.init(address=address, namespace="querylake")
+            ray.init(**init_kwargs)
             logger.info("✅ Client connected successfully to the 'querylake' namespace.")
             self.cluster_ready = True
             return True
@@ -352,7 +487,8 @@ class RayGPUCluster:
             build_and_run_application(
                 strategy=strategy,
                 global_config=self.config,
-                toolchains=self.toolchains
+                toolchains_v1=self.toolchains,
+                toolchains_v2=self.toolchains_v2,
             )
             return True
         except Exception as e:
@@ -437,7 +573,7 @@ Examples:
     if args.workers is not None and not args.head_node:
         parser.error("--head-node is required when using --workers")
 
-    config, toolchains = load_config_and_toolchains(args.config)
+    config, toolchains, toolchains_v2 = load_config_and_toolchains(args.config)
     if not config:
         sys.exit(1)
 
@@ -445,7 +581,7 @@ Examples:
     strategy = args.strategy or config.ray_cluster.default_gpu_strategy
     logger.info(f"📋 Using GPU placement strategy: {strategy}")
 
-    cluster = RayGPUCluster(config, toolchains)
+    cluster = RayGPUCluster(config, toolchains, toolchains_v2)
 
     try:
         if args.workers is None:
@@ -455,6 +591,7 @@ Examples:
             ports_to_clean = [cluster_config.head_port, cluster_config.dashboard_port]
             # Add worker ports to cleanup list later if needed
             
+            cluster.force_stop_existing_cluster()
             cluster.cleanup_ports(ports_to_clean)
             
             if not cluster.start_head_node():

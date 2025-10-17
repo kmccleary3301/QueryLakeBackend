@@ -1,4 +1,5 @@
 import os, json
+import logging
 
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
@@ -24,6 +25,8 @@ from ..misc_functions.toolchain_state_management import *
 from ..typing.toolchains import *
 from ..database.sql_db_tables import document_raw, document_collection
 import traceback
+
+logger = logging.getLogger(__name__)
 
 
 def convert_files_in_dict(input_dict : dict, 
@@ -332,14 +335,20 @@ class ToolchainSession():
             
             # TODO: Implement file retrieval.
             elif not node_input_arg.from_files is None:
-                print("PULLING FILE FROM FILES WITH FILES", self.toolchain_session_files)
+                logger.debug(
+                    "Fetching toolchain file input using schema %s", node_input_arg.from_files
+                )
                 
                 # assert node_input_arg.key in system_args, f"File argument \'{node_input_arg.key}\' not provided while firing node {node.id}"
                 
                 node_inputs[node_input_arg.key] = get_value_obj_global(node_input_arg.from_files, {}, {}, {}, self.toolchain_session_files, self.get_file_bytes)
                 
                 
-                print("PULLED FILE FROM FILES:", type(node_inputs[node_input_arg.key]))
+                logger.debug(
+                    "Resolved toolchain file input %s to %s",
+                    node_input_arg.key,
+                    type(node_inputs[node_input_arg.key]),
+                )
                 # file_pointer : ToolChainSessionFile = traverse_static_route_global
                 
                 # node_inputs[node_input_arg.key] = system_args[node_input_arg.key]

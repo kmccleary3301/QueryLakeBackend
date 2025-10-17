@@ -1,7 +1,8 @@
 import json
+import logging
 import traceback
 from copy import deepcopy
-from typing import Awaitable, Callable, Any
+from typing import Any, Awaitable, Callable
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
@@ -9,6 +10,8 @@ from QueryLake.typing.config import AuthType
 from QueryLake.typing.toolchains import *
 from QueryLake.operation_classes.toolchain_session import ToolchainSession
 from QueryLake.api.single_user_auth import process_input_as_auth_type, get_user
+
+logger = logging.getLogger(__name__)
 
 async def toolchain_websocket_handler(
     umbrella_class, 
@@ -159,7 +162,10 @@ async def toolchain_websocket_handler(
                     result = {"success": True}
                     
                 if toolchain_session.first_event_fired:
-                    print("SAVING TOOLCHAIN")
+                    logger.debug(
+                        "Persisting toolchain session %s after event",
+                        getattr(toolchain_session, "session_id", "<unknown>"),
+                    )
                     await save_toolchain_session(umbrella_class.database, toolchain_session)
                 
                 await ws.send_text((json.dumps(result)).encode("utf-8"))
@@ -171,10 +177,10 @@ async def toolchain_websocket_handler(
                 # await api.save_toolchain_session(self.database, toolchain_session)
             
             except WebSocketDisconnect:
-                print(">>>> Websocket disconnected")
+                logger.info("Toolchain websocket disconnected by client")
                 raise WebSocketDisconnect
             except Exception as e:
-                print("Error in websocket:", str(e))
+                logger.exception("Error during toolchain websocket handling: %s", e)
                 umbrella_class.database.rollback()
                 umbrella_class.database.flush()
                 
@@ -184,9 +190,12 @@ async def toolchain_websocket_handler(
                 await ws.send_text((json.dumps({"ACTION": "END_WS_CALL_ERROR"})))
                 await reset_session_state()
     except WebSocketDisconnect as e:
-        print(">>>> Websocket disconnected")
+        logger.info("Toolchain websocket disconnected")
         if not toolchain_session is None:
-            print("Unloading Toolchain")
+            logger.debug(
+                "Unloading toolchain session %s after disconnect",
+                getattr(toolchain_session, "session_id", "<unknown>"),
+            )
             
             if toolchain_session.first_event_fired:
                 await save_toolchain_session(umbrella_class.database, toolchain_session)

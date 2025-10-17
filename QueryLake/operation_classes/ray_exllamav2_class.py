@@ -1,6 +1,7 @@
 import time
 
 import re, json
+import logging
 
 from exllamav2 import ExLlamaV2, ExLlamaV2Config, ExLlamaV2Cache, ExLlamaV2Tokenizer
 from exllamav2.generator import ExLlamaV2DynamicGenerator, ExLlamaV2DynamicJob
@@ -12,15 +13,18 @@ from QueryLake.misc_functions.grammar_sampling_functions import get_token_id, ge
 from QueryLake.typing.config import Padding, Model
 from QueryLake.misc_functions.prompt_construction import construct_chat_history
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from typing import List, Union, AsyncIterator
+from typing import List, Union, AsyncIterator, Optional
 from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.server_class_functions import construct_functions_available_prompt
 import os
+from .runtime_introspection import RuntimeIntrospectionMixin
+
+logger = logging.getLogger(__name__)
 
 
 async def generator_wrapper(exl2_generator : ExLlamaV2DynamicJob) -> AsyncIterator:
      async for result in exl2_generator:
-        print("RESULT:", result)
+        logger.debug("exllamav2 dynamic generator yield: %s", result)
          
         # We'll only collect text here, but the result could contain other updates
         yield result
@@ -31,7 +35,7 @@ async def generator_wrapper(exl2_generator : ExLlamaV2DynamicJob) -> AsyncIterat
 # The solution may be to use non-async dynamic generator from exllamav2.
 # See here: https://github.com/turboderp/exllamav2/blob/master/examples/dynamic_gen.py
 @serve.deployment(ray_actor_options={"num_gpus": 0.4}, max_replicas_per_node=1)
-class ExllamaV2DeploymentClass:
+class ExllamaV2DeploymentClass(RuntimeIntrospectionMixin):
     def __init__(self,
                  model_config : Model,
                  **kwargs):
@@ -44,7 +48,13 @@ class ExllamaV2DeploymentClass:
         self.padding : Padding = model_config.padding
         self.default_model_args = self.model_config.default_parameters
         self.context_size = self.model_config.max_model_len
-        print("INITIALIZING EXLLAMAV2 DEPLOYMENT")
+        self._runtime_role = "llm"
+        self._runtime_model_id = model_config.id
+        self._runtime_extra_metadata = {
+            "model_name": getattr(model_config, "name", model_config.id),
+            "engine": "exllamav2",
+        }
+        logger.info("Initializing ExLlamaV2 deployment for model %s", self.model_config.id)
         # os.environ["FORCE_CUDA"] = "1"
         self.config = ExLlamaV2Config(self.model_config.system_path)
         self.config.arch_compat_overrides()
@@ -71,7 +81,8 @@ class ExllamaV2DeploymentClass:
         # self.special_token_ids = tokenizer_tmp.all_special_ids
         # self.space_tokens = [get_token_id(tokenizer_tmp, e) for e in ["\n", "\t", "\r", " \r"]]
         # self.tokenizer_data = build_vllm_token_enforcer_tokenizer_data(self.engine.engine)
-        print("DONE INITIALIZING EXLLAMAV2 DEPLOYMENT")
+        logger.info("ExLlamaV2 deployment initialization complete")
+        self._publish_runtime_metadata()
     
     def count_tokens(self, input_string : str):
         return len(self.tokenizer.encode(input_string, add_bos = False))
@@ -174,9 +185,10 @@ class ExllamaV2DeploymentClass:
     async def get_result_loop(self, 
                               request_dict : dict, 
                               sources : List[dict] = [],
-                              functions_available: List[Union[FunctionCallDefinition, dict]] = None):
+                              functions_available: List[Union[FunctionCallDefinition, dict]] = None,
+                              job_id: Optional[str] = None):
         generator = self.create_generator(request_dict, sources, functions_available)
-        print("Inside get_result_loop recieved Generator")
+        logger.debug("get_result_loop received ExLlamaV2 generator for job %s", job_id)
         results = []
         async for result in generator_wrapper(generator):
             yield result

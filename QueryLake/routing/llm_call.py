@@ -1,11 +1,13 @@
+import asyncio
 import json
+import logging
 from copy import deepcopy
 
 from QueryLake.api import api
 from QueryLake.database import sql_db_tables
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
-from typing import Union, List, Callable, Dict, Awaitable
+from typing import Union, List, Callable, Dict, Awaitable, Optional
 from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 
 
@@ -15,7 +17,10 @@ from QueryLake.typing.function_calling import FunctionCallDefinition
 
 from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls, basic_stream_results
+from QueryLake.runtime.signals import JobSignal
 from sqlmodel import select
+
+logger = logging.getLogger(__name__)
 
 
 async def llm_call(
@@ -29,7 +34,8 @@ async def llm_call(
     chat_history : List[dict] = None,
     stream_callables: Dict[str, Awaitable[Callable[[str], None]]] = None,
     functions_available: List[Union[FunctionCallDefinition, dict]] = None,
-    only_format_prompt: bool = False
+    only_format_prompt: bool = False,
+    job_signal: Optional[JobSignal] = None,
 ):
     """
     Call an LLM model, possibly with parameters.
@@ -53,6 +59,11 @@ async def llm_call(
     
     model_specified = model_choice.split("/")
     return_stream_response = model_parameters.pop("stream", False)
+    # When invoked from the Toolchains v2 runtime, we receive `stream_callables` so that tokens
+    # can be fanned out via SSE. In this case, do not return a FastAPI StreamingResponse;
+    # instead, consume the generator here and trigger the provided callbacks.
+    if stream_callables is not None:
+        return_stream_response = False
     
     input_token_count = -1
     def set_input_token_count(input_token_value: int):
@@ -71,12 +82,16 @@ async def llm_call(
             "messages": new_chat_history,
             "chat_history": new_chat_history
         })
-        gen = external_llm_generator(self.database, 
-                                        auth, 
-                                        provider=model_specified[0],
-                                        model="/".join(model_specified[1:]),
-                                        request_dict=model_parameters,
-                                        set_input_token_count=set_input_token_count)
+        gen = external_llm_generator(
+            self.database,
+            auth,
+            provider=model_specified[0],
+            model="/".join(model_specified[1:]),
+            request_dict=model_parameters,
+            set_input_token_count=set_input_token_count,
+        )
+        if job_signal is not None:
+            await job_signal.set_request_id(f"external:{model_choice}")
     else:
         model_entry : sql_db_tables.model = self.database.exec(select(sql_db_tables.model)
                                             .where(sql_db_tables.model.id == model_choice)).first()
@@ -105,14 +120,15 @@ async def llm_call(
                 deepcopy(model_parameters_true), 
                 sources=sources, 
                 functions_available=functions_available,
-                lora_id=lora_id
+                lora_id=lora_id,
+                job_id=job_signal.job_id if job_signal else None,
             )
         )
         # print("GOT LLM REQUEST GENERATOR WITH %d SOURCES" % len(sources))
         
         if self.llm_configs[model_choice].engine == "exllamav2":
             async for result in gen:
-                print("GENERATOR OUTPUT:", result)
+                logger.debug("exllamav2 generator output: %s", result)
         
         
         # input_token_count = self.llm_count_tokens(model_choice, model_parameters_true["text"])
@@ -124,6 +140,23 @@ async def llm_call(
         if only_format_prompt:
             return generated_prompt
         input_token_count = generated_prompt["tokens"]
+
+        if job_signal is not None:
+            handle_no_stream = self.llm_handles_no_stream[model_choice]
+
+            async def abort_remote() -> None:
+                await handle_no_stream.cancel_job.remote(job_signal.job_id)
+
+            await job_signal.on_stop(abort_remote)
+
+            request_id: Optional[str] = None
+            for _ in range(5):
+                request_id = await handle_no_stream.get_request_id.remote(job_signal.job_id)
+                if request_id:
+                    break
+                await asyncio.sleep(0)
+            if request_id:
+                await job_signal.set_request_id(request_id)
     
     if "n" in model_parameters and model_parameters["n"] > 1:
         results = []
