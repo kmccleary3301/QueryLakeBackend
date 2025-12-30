@@ -1,20 +1,10 @@
-from vllm.entrypoints.openai.protocol import (
-    ChatCompletionRequest,
-    ChatCompletionResponse,
-    EmbeddingRequest,
-    EmbeddingCompletionRequest,
-    EmbeddingChatRequest,
-    EmbeddingResponse,
-    EmbeddingResponseData,
-    UsageInfo
-)
 from fastapi import Request
 from ..api.single_user_auth import get_user, AuthType2
 from ray.serve.handle import DeploymentHandle
 from fastapi.responses import StreamingResponse, JSONResponse
 import json
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, List
 from .misc_models import embedding_call
 
 MESSAGE_PREPENDS = {
@@ -31,7 +21,6 @@ class MockRequest(BaseModel):
 # @with_cancellation
 async def openai_chat_completion(
     umbrella_class,
-    request: ChatCompletionRequest,
     raw_request : Request
 ):
     """
@@ -66,8 +55,7 @@ async def openai_chat_completion(
         mock_request = MockRequest(headers=raw_request.headers, state=raw_request.state)
         
         
-        # generator = llm_handle.create_chat_completion_new.remote(request, request)
-        generator = llm_handle.create_chat_completion_original.remote(request, mock_request)
+        generator = llm_handle.create_chat_completion_original.remote(request_body, mock_request)
         
         # The endpoint's first yield is an indicator of response type
         # We assume a generator, but it may return a static type delivered via generator.
@@ -81,13 +69,33 @@ async def openai_chat_completion(
             
             elif first_yield_value.startswith(MESSAGE_PREPENDS["error"]):
                 message_content = first_yield_value[len(MESSAGE_PREPENDS["error"])+3:]
-                error = json.loads(message_content)
-                return JSONResponse(content=error, status_code=error.get("code", 500))
+                try:
+                    error = json.loads(message_content)
+                    return JSONResponse(content=error, status_code=error.get("code", 500))
+                except json.JSONDecodeError:
+                    return JSONResponse(
+                        content={
+                            "object": "error",
+                            "type": "UpstreamError",
+                            "message": message_content,
+                        },
+                        status_code=500,
+                    )
             
             elif first_yield_value.startswith(MESSAGE_PREPENDS["standard"]):
                 message_content = first_yield_value[len(MESSAGE_PREPENDS["standard"])+3:]
-                standard_result = ChatCompletionResponse(**json.loads(message_content))
-                return JSONResponse(content=standard_result.model_dump())
+                try:
+                    standard_result = json.loads(message_content)
+                    return JSONResponse(content=standard_result)
+                except json.JSONDecodeError:
+                    return JSONResponse(
+                        content={
+                            "object": "error",
+                            "type": "UpstreamError",
+                            "message": message_content,
+                        },
+                        status_code=500,
+                    )
 
         return JSONResponse(content={"error": "First yield value not a string"})
     
@@ -101,7 +109,6 @@ async def openai_chat_completion(
 
 async def openai_create_embedding(
     umbrella_class,
-    request: EmbeddingRequest,
     raw_request : Request
 ):
     """
@@ -125,35 +132,56 @@ async def openai_create_embedding(
         (_, auth_type) = get_user(umbrella_class.database, auth_header)
         
         
-        model_choice = request.model
+        model_choice = request_body.get("model")
         
         assert not model_choice is None, "Model choice not specified"
     
-        if isinstance(request, EmbeddingChatRequest):
-            all_strings = request.messages
-            all_strings = [m.content for m in all_strings]
-        elif isinstance(request, EmbeddingCompletionRequest):
-            all_strings = request.input if isinstance(request.input, list) else [request.input]
+        all_strings: List[str] = []
+        if "messages" in request_body:
+            messages = request_body.get("messages") or []
+            for msg in messages:
+                if not isinstance(msg, dict):
+                    continue
+                content = msg.get("content")
+                if isinstance(content, str):
+                    all_strings.append(content)
+                elif isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        if part.get("type") == "text" and isinstance(part.get("text"), str):
+                            all_strings.append(part["text"])
+        elif "input" in request_body:
+            raw_input = request_body.get("input")
+            if isinstance(raw_input, list):
+                all_strings = [str(e) for e in raw_input]
+            elif raw_input is not None:
+                all_strings = [str(raw_input)]
+        else:
+            raise ValueError("No embedding input provided (expected `input` or `messages`).")
         
         (all_embeddings, total_tokens) = await embedding_call(
             umbrella_class, auth_header, all_strings, model_choice, return_tokens_usage=True
         )
         
-        final_response = EmbeddingResponse(
-            model=model_choice,
-            data=[
-                EmbeddingResponseData(
-                    embedding=embedding,
-                    index=emb_i
-                ) for emb_i, embedding in enumerate(all_embeddings)
+        final_response = {
+            "object": "list",
+            "model": model_choice,
+            "data": [
+                {
+                    "object": "embedding",
+                    "embedding": embedding,
+                    "index": emb_i,
+                }
+                for emb_i, embedding in enumerate(all_embeddings)
             ],
-            usage=UsageInfo(
-                prompt_tokens=total_tokens,
-                total_tokens=total_tokens
-            )
-        )
+            "usage": {
+                "prompt_tokens": total_tokens,
+                "total_tokens": total_tokens,
+            },
+        }
         
-        return JSONResponse(content=final_response.model_dump())
+        return JSONResponse(content=final_response)
         
     except Exception as e:
         return JSONResponse(content={

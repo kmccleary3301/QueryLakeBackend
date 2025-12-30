@@ -130,55 +130,6 @@ def encode_chat(
 	
     return prompts
 
-def format_chat_history(chat_history : List[dict],
-                        sources : List[dict] = [],
-                        functions_available: List[Union[FunctionCallDefinition, dict]] = None):
-    
-    for i in range(len(sources)):
-        if isinstance(sources[i], BaseModel):
-            sources[i] = sources[i].model_dump()
-    
-    # Turn chat history entry content fields into lists.
-    chat_history = [
-        e if not isinstance(e["content"], str) else {
-            **e, 
-            "content": [
-                {"type": "text", "text": e["content"]}
-            ]
-        }
-        for e in chat_history
-    ]
-    
-    padding = 2 if (functions_available is None and len(sources) == 0) else (100 + 300 * len(sources) + 300 * (len(functions_available) if isinstance(functions_available, list) else 0))
-    if len(sources) > 0:
-        new_entry = {
-            "type": "text",
-            "text": ("SYSTEM MESSAGE - PROVIDED SOURCES\n" +
-                     "Cite these sources in your response with the following notation " + 
-                     "for inline citations: {cite:source_number} (i.e. {cite:3})\n" +
-                     "<SOURCES>\n" +
-            '\n\n'.join(['[%d] Source %d\n\n%s' % (i+1, i+1, e['text']) for i, e in enumerate(sources)]) +
-            f"\n</SOURCES>\nEND SYSTEM MESSAGE\n")
-        }
-        chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
-    if not functions_available is None:
-        new_entry = {
-            "type": "text",
-            "text": f"SYSTEM MESSAGE - AVAILABLE FUNCTIONS\n<FUNCTIONS>{construct_functions_available_prompt(functions_available)}" + \
-            f"\n</FUNCTIONS>\nEND SYSTEM MESSAGE\n\n"
-        }
-        chat_history[-1]["content"] = [new_entry] + chat_history[-1]["content"]
-    
-    
-    stripped_chat_history = [{**e, "content": "\n".join([c["text"] for c in e["content"] if c["type"] == "text"])} for e in chat_history]
-    
-    # If it's all text, just return the stripped chat history.
-    if all([p["type"] == "text" for e in chat_history for p in e["content"]]):
-        chat_history = stripped_chat_history
-    
-    return chat_history
-
-
 # @serve.deployment(
 #     ray_actor_options={"num_gpus": 0.001}, 
 #     # max_replicas_per_node=1
@@ -624,7 +575,7 @@ class VLLMDeploymentClass(RuntimeIntrospectionMixin, OpenAIServingChat):
     
     async def create_chat_completion_original(
         self,
-        request: ChatCompletionRequest,
+        request_dict: dict,
         raw_request: Optional[Request] = None,
     ) -> AsyncGenerator[str, None]:
         """
@@ -667,10 +618,13 @@ class VLLMDeploymentClass(RuntimeIntrospectionMixin, OpenAIServingChat):
                 yield x
                 
                 
-        result = await self.create_chat_completion(
-            request, 
-            raw_request
+        request = (
+            request_dict
+            if isinstance(request_dict, ChatCompletionRequest)
+            else ChatCompletionRequest(**request_dict)
         )
+
+        result = await self.create_chat_completion(request, raw_request)
         
         if isinstance(result, AsyncGenerator):
             return stream_prepend_generator(result)
@@ -682,7 +636,7 @@ class VLLMDeploymentClass(RuntimeIntrospectionMixin, OpenAIServingChat):
     
     async def create_chat_completion_new(
         self,
-        request: ChatCompletionRequest,
+        request_dict: dict,
         raw_request: Optional[Request] = None,
     ) -> AsyncGenerator[str, None]:
         """
@@ -725,6 +679,12 @@ class VLLMDeploymentClass(RuntimeIntrospectionMixin, OpenAIServingChat):
                 yield x
         
         
+        request = (
+            request_dict
+            if isinstance(request_dict, ChatCompletionRequest)
+            else ChatCompletionRequest(**request_dict)
+        )
+
         try:
             error_check_ret = await self._check_model(request)
             if error_check_ret is not None:

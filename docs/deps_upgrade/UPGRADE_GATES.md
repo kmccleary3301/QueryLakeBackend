@@ -67,6 +67,11 @@
 
 **Objective:** make vLLM upgrades survivable by turning it into a provider boundary.
 
+- [x] Remove `vllm.entrypoints.openai.protocol` imports from the FastAPI routing layer:
+  - [x] `/v1/chat/completions` parses JSON directly and passes dicts to the Serve deployment
+  - [x] `/v1/embeddings` parses JSON directly and returns an OpenAI-shaped JSON response
+- [x] Move non-vLLM helpers out of `ray_vllm_class` so core modules don’t import vLLM by accident:
+  - [x] `format_chat_history` now lives in `QueryLake/misc_functions/chat_history.py`
 - [ ] Add an internal abstraction for “LLM provider” with a concrete HTTP implementation:
   - [ ] chat completions
   - [ ] embeddings (if used via vLLM)
@@ -112,4 +117,3 @@
 - [ ] Prune unused packages from the production env(s) to keep `pip check` clean.
 
 **Done when:** “stable” channel is reproducible and “edge” channel exists for experimentation.
-

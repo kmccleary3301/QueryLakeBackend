@@ -57,8 +57,6 @@ from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
 from QueryLake.routing.openai_completions import (
     openai_chat_completion, 
     openai_create_embedding,
-    ChatCompletionRequest, 
-    EmbeddingRequest
 )
 from QueryLake.routing.api_call_router import api_general_call
 from QueryLake.routing.llm_call import llm_call
@@ -384,18 +382,16 @@ class UmbrellaClass:
     @fastapi_app.post("/v1/chat/completions")
     async def openai_chat_completions_endpoint(
         self,
-        request: ChatCompletionRequest,
         raw_request : Request
     ):
-        return await openai_chat_completion(self, request, raw_request)
+        return await openai_chat_completion(self, raw_request)
     
     @fastapi_app.post("/v1/embeddings")
     async def openai_embedding_endpoint(
         self,
-        request: EmbeddingRequest, 
         raw_request: Request
     ):
-        return await openai_create_embedding(self, request, raw_request)
+        return await openai_create_embedding(self, raw_request)
     
     
     async def llm_call(self,

@@ -12,7 +12,7 @@ from ray.serve.handle import DeploymentHandle, DeploymentResponseGenerator
 
 
 from QueryLake.typing.config import AuthType
-from QueryLake.operation_classes.ray_vllm_class import format_chat_history
+from QueryLake.misc_functions.chat_history import format_chat_history
 from QueryLake.typing.function_calling import FunctionCallDefinition
 
 from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
