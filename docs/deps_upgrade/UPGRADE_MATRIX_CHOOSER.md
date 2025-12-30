@@ -51,6 +51,7 @@ If you want the lowest-risk driver step (still modern):
 ### Matrix A — Aggressive (recommended default for “bleeding edge”)
 
 - **Driver target:** `>= 575.57.08` (CUDA 12.9 Update 1 minimum; confirm before executing)
+- **Practical pick on this host:** `nvidia-driver-580` (this host’s `ubuntu-drivers devices` currently recommends 580; it satisfies the 12.9/13.0-era minimums and gives more headroom than 575).
 - **Torch:** `2.9.0` (CUDA 12.8/12.9/13.0 variant as required by your vLLM wheel selection)
 - **vLLM:** `0.13.0`
 - **Python:** 3.11 or 3.12 (separate env from QueryLake API)
@@ -108,13 +109,13 @@ ubuntu-drivers devices
 
 Then install one of:
 
-- Matrix A: `nvidia-driver-575` (or whatever 575-series metapackage Ubuntu recommends)
+- Matrix A: `nvidia-driver-580` (preferred if recommended), otherwise `nvidia-driver-575`
 - Matrix B: `nvidia-driver-570` (or whatever 570-series metapackage Ubuntu recommends)
 
 Example:
 
 ```bash
-sudo apt-get install -y nvidia-driver-575
+sudo apt-get install -y nvidia-driver-580
 sudo reboot
 ```
 
