@@ -11,3 +11,11 @@ config.yaml
 ray_gpu_strategy_working/
 .opencode/
 *.log
+
+docs_tmp/
+
+
+logs/
+
+
+.pytest_cache/
