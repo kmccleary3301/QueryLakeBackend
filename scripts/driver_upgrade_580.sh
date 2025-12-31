@@ -208,7 +208,16 @@ install_driver() {
   say "Dry-run install (simulation)"
   echo "Showing apt's planned actions for: ${TARGET_PACKAGE}"
   echo
-  as_root env DEBIAN_FRONTEND=noninteractive apt-get -s install -y "${TARGET_PACKAGE}" || true
+  if ! env DEBIAN_FRONTEND=noninteractive apt-get -s install -y "${TARGET_PACKAGE}"; then
+    echo
+    warn "Dry-run failed: apt cannot resolve dependencies for ${TARGET_PACKAGE}."
+    warn "Do NOT proceed until the dry-run succeeds."
+    echo
+    echo "Debug commands:"
+    echo "  apt-cache policy ${TARGET_PACKAGE} nvidia-utils-${TARGET_SERIES} nvidia-compute-utils-${TARGET_SERIES}"
+    echo "  apt-cache policy libnvidia-gl-${TARGET_SERIES} nvidia-dkms-${TARGET_SERIES} nvidia-kernel-common-${TARGET_SERIES}"
+    exit 1
+  fi
   echo
   if ! prompt_yes_no "Proceed with REAL installation of ${TARGET_PACKAGE}?" "N"; then
     die "Aborted by operator."
