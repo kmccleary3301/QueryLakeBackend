@@ -74,6 +74,20 @@ Use when:
 
 ## 3) Driver upgrade runbook (Ubuntu 22.04) — safe and rollbackable
 
+### 3.0 Preferred operator flow (scripted)
+
+QueryLake includes an interactive helper script that performs preflight, optional apt pinning, a dry-run install, and then installs `nvidia-driver-580`:
+
+```bash
+bash scripts/driver_upgrade_580.sh --install
+```
+
+After reboot:
+
+```bash
+bash scripts/driver_upgrade_580.sh --post-reboot
+```
+
 ### 3.1 Preconditions
 
 1. Ensure you have console access or a proven remote-access plan (driver upgrades can affect display/SSH in edge cases).
