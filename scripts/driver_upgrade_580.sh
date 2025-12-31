@@ -155,7 +155,7 @@ write_pin_prefer_ubuntu() {
 #
 # Remove this file if you later want third-party repos to take precedence again.
 
-Package: nvidia-driver-${TARGET_SERIES} nvidia-dkms-${TARGET_SERIES} nvidia-kernel-common-${TARGET_SERIES} nvidia-kernel-source-${TARGET_SERIES} xserver-xorg-video-nvidia-${TARGET_SERIES} libnvidia-*
+Package: nvidia-driver-${TARGET_SERIES} nvidia-dkms-${TARGET_SERIES} nvidia-kernel-common-${TARGET_SERIES} nvidia-kernel-source-${TARGET_SERIES} xserver-xorg-video-nvidia-${TARGET_SERIES} nvidia-utils-${TARGET_SERIES} nvidia-compute-utils-${TARGET_SERIES} libnvidia-*
 Pin: release o=Ubuntu
 Pin-Priority: 1002
 EOF
@@ -195,8 +195,12 @@ install_driver() {
 
   if prompt_yes_no "Install (or refresh) an apt pin to prefer Ubuntu-origin NVIDIA packages?" "Y"; then
     write_pin_prefer_ubuntu
-    say "APT candidate after pin (for ${TARGET_PACKAGE})"
-    apt-cache policy "${TARGET_PACKAGE}" 2>/dev/null || true
+    say "APT candidates after pin (for ${TARGET_PACKAGE} and dependencies)"
+    apt-cache policy \
+      "${TARGET_PACKAGE}" \
+      "nvidia-utils-${TARGET_SERIES}" \
+      "nvidia-compute-utils-${TARGET_SERIES}" \
+      2>/dev/null || true
   else
     warn "No apt pin created. If a third-party repo has higher priority, it may win selection."
   fi
