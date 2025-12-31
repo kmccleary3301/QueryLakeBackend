@@ -100,6 +100,8 @@ class Config(BaseModel):
     providers: Optional[List[str]] = []
     other_local_models: OtherLocalModelsField
     ray_cluster: RayClusterConfig
+    vllm_upstream_base_url: Optional[str] = None
+    vllm_upstream_model_map: Optional[Dict[str, str]] = None
     
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]

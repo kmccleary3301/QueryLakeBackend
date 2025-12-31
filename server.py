@@ -26,7 +26,6 @@ from QueryLake.database import database_admin_operations
 from QueryLake.database.create_db_session import initialize_database_engine
 from QueryLake.typing.config import Config, AuthType, Model
 from QueryLake.typing.toolchains import ToolChain, ToolChainV2
-from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
 from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
 from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
 from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
@@ -880,8 +879,19 @@ def build_and_run_application(
         )
 
     LOCAL_MODEL_BINDINGS: Dict[str, DeploymentHandle] = {}
-    ENGINE_CLASSES = {"vllm": VLLMDeploymentClass}
-    ENGINE_CLASS_NAMES = {"vllm": "vllm"}
+    ENGINE_CLASSES = {}
+    ENGINE_CLASS_NAMES = {}
+    if global_config.enabled_model_classes.llm:
+        if any(model.engine == "vllm" for model in global_config.models):
+            try:
+                from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
+            except Exception as exc:
+                raise RuntimeError(
+                    "VLLM engine requested but vLLM is not available in this environment. "
+                    "Install vllm or disable local vLLM deployments."
+                ) from exc
+            ENGINE_CLASSES["vllm"] = VLLMDeploymentClass
+            ENGINE_CLASS_NAMES["vllm"] = "vllm"
 
     embedding_models: Dict[str, DeploymentHandle] = {}
     if global_config.enabled_model_classes.embedding:

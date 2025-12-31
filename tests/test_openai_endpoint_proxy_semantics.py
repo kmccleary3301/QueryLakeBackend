@@ -55,6 +55,7 @@ class _DummyLLMHandle:
 class _DummyUmbrella:
     def __init__(self, llm_handle: _DummyLLMHandle):
         self.database = object()
+        self.config = type("Cfg", (), {"vllm_upstream_base_url": None, "vllm_upstream_model_map": None})()
         self.llm_handles = {"demo-model": llm_handle}
 
 
@@ -136,6 +137,7 @@ def test_openai_embedding_endpoint_shapes_response(monkeypatch):
     class _DummyEmbUmbrella:
         def __init__(self):
             self.database = object()
+            self.config = type("Cfg", (), {"vllm_upstream_base_url": None, "vllm_upstream_model_map": None})()
 
     raw_request = _DummyRawRequest(
         {"model": "demo-emb", "input": "hello"},

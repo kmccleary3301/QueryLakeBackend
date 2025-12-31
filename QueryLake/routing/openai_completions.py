@@ -6,6 +6,10 @@ import json
 from pydantic import BaseModel
 from typing import Any, List
 from .misc_models import embedding_call
+from QueryLake.runtime.vllm_http_client import (
+    proxy_vllm_chat_completion,
+    proxy_vllm_embeddings,
+)
 
 MESSAGE_PREPENDS = {
     "stream": ">>>>>>>>>>>STREAM",
@@ -46,7 +50,17 @@ async def openai_chat_completion(
         
         model_choice : str = request_body.get("model", None)
         assert not model_choice is None, "Model choice not specified"
-        
+
+        upstream_base = getattr(umbrella_class.config, "vllm_upstream_base_url", None)
+        if upstream_base:
+            model_map = getattr(umbrella_class.config, "vllm_upstream_model_map", None) or {}
+            request_body["model"] = model_map.get(model_choice, model_choice)
+            return await proxy_vllm_chat_completion(
+                base_url=upstream_base,
+                request_body=request_body,
+                raw_headers=dict(raw_request.headers),
+            )
+
         assert model_choice in umbrella_class.llm_handles, "Model choice not found"
         llm_handle : DeploymentHandle = umbrella_class.llm_handles[model_choice]
         
@@ -135,6 +149,16 @@ async def openai_create_embedding(
         model_choice = request_body.get("model")
         
         assert not model_choice is None, "Model choice not specified"
+
+        upstream_base = getattr(umbrella_class.config, "vllm_upstream_base_url", None)
+        if upstream_base:
+            model_map = getattr(umbrella_class.config, "vllm_upstream_model_map", None) or {}
+            request_body["model"] = model_map.get(model_choice, model_choice)
+            return await proxy_vllm_embeddings(
+                base_url=upstream_base,
+                request_body=request_body,
+                raw_headers=dict(raw_request.headers),
+            )
     
         all_strings: List[str] = []
         if "messages" in request_body:

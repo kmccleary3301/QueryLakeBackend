@@ -112,7 +112,9 @@
 
 ## Gate 7 — Post-upgrade cleanup (dependency hygiene)
 
-- [ ] Replace `requirements.txt`-only installs with a locked dependency set (uv lockfile or equivalent).
+- [x] Capture a locked dependency snapshot for the vLLM runtime env.
+  - [x] `docs/deps_upgrade/vllm_0_13_requirements.lock.txt`
+- [ ] Replace `requirements.txt`-only installs with a locked dependency set for the API env (uv lockfile or equivalent).
 - [ ] Split optional stacks into extras/groups (e.g., API vs OCR vs training experimentation).
 - [ ] Prune unused packages from the production env(s) to keep `pip check` clean.
 
