@@ -10,6 +10,9 @@ from QueryLake.runtime.vllm_http_client import (
     proxy_vllm_chat_completion,
     proxy_vllm_embeddings,
 )
+from QueryLake.runtime.policy import resolve_policy
+from QueryLake.runtime.rate_limiter import acquire_concurrency, release_concurrency
+from QueryLake.runtime.request_context import get_request_id
 
 MESSAGE_PREPENDS = {
     "stream": ">>>>>>>>>>>STREAM",
@@ -55,11 +58,36 @@ async def openai_chat_completion(
         if upstream_base:
             model_map = getattr(umbrella_class.config, "vllm_upstream_model_map", None) or {}
             request_body["model"] = model_map.get(model_choice, model_choice)
-            return await proxy_vllm_chat_completion(
-                base_url=upstream_base,
-                request_body=request_body,
-                raw_headers=dict(raw_request.headers),
-            )
+            policy = resolve_policy(route="/v1/chat/completions")
+            lease_key = None
+            token = get_request_id() or "unknown"
+            if policy.concurrency_limit:
+                lease_key = f"ql:rl:concurrency:{model_choice}"
+                result = acquire_concurrency(
+                    lease_key,
+                    limit=policy.concurrency_limit,
+                    ttl_seconds=policy.lease_ttl_seconds,
+                    token=token,
+                )
+                if not result.allowed:
+                    return JSONResponse(
+                        content={
+                            "object": "error",
+                            "type": "RateLimitError",
+                            "message": "Concurrency limit reached",
+                        },
+                        status_code=429,
+                        headers={"Retry-After": str(result.retry_after_seconds or 1)},
+                    )
+            try:
+                return await proxy_vllm_chat_completion(
+                    base_url=upstream_base,
+                    request_body=request_body,
+                    raw_headers=dict(raw_request.headers),
+                )
+            finally:
+                if lease_key:
+                    release_concurrency(lease_key, token)
 
         assert model_choice in umbrella_class.llm_handles, "Model choice not found"
         llm_handle : DeploymentHandle = umbrella_class.llm_handles[model_choice]
@@ -154,11 +182,36 @@ async def openai_create_embedding(
         if upstream_base:
             model_map = getattr(umbrella_class.config, "vllm_upstream_model_map", None) or {}
             request_body["model"] = model_map.get(model_choice, model_choice)
-            return await proxy_vllm_embeddings(
-                base_url=upstream_base,
-                request_body=request_body,
-                raw_headers=dict(raw_request.headers),
-            )
+            policy = resolve_policy(route="/v1/embeddings")
+            lease_key = None
+            token = get_request_id() or "unknown"
+            if policy.concurrency_limit:
+                lease_key = f"ql:rl:concurrency:{model_choice}"
+                result = acquire_concurrency(
+                    lease_key,
+                    limit=policy.concurrency_limit,
+                    ttl_seconds=policy.lease_ttl_seconds,
+                    token=token,
+                )
+                if not result.allowed:
+                    return JSONResponse(
+                        content={
+                            "object": "error",
+                            "type": "RateLimitError",
+                            "message": "Concurrency limit reached",
+                        },
+                        status_code=429,
+                        headers={"Retry-After": str(result.retry_after_seconds or 1)},
+                    )
+            try:
+                return await proxy_vllm_embeddings(
+                    base_url=upstream_base,
+                    request_body=request_body,
+                    raw_headers=dict(raw_request.headers),
+                )
+            finally:
+                if lease_key:
+                    release_concurrency(lease_key, token)
     
         all_strings: List[str] = []
         if "messages" in request_body:

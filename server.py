@@ -50,6 +50,7 @@ from QueryLake.api.single_user_auth import (
     OAUTH_SECRET_KEY,
 )
 from QueryLake.api.auth_utils import resolve_bearer_auth_header
+from QueryLake.runtime.request_context import RequestContext, set_request_context, set_request_id
 from QueryLake.misc_functions.external_providers import external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import find_function_calls
 from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
@@ -200,6 +201,21 @@ fastapi_app = FastAPI(
     # lifespan=lifespan
     middleware=middleware
 )
+
+
+@fastapi_app.middleware("http")
+async def attach_request_context(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or request.headers.get("X-Request-Id")
+    request_id = set_request_id(request_id)
+    set_request_context(
+        RequestContext(
+            request_id=request_id,
+            route=request.url.path,
+        )
+    )
+    response: Response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    return response
 
 API_FUNCTIONS = [str(pair[0]) for pair in inspect.getmembers(api, inspect.isfunction)]
 API_FUNCTIONS_ALLOWED = list(set(API_FUNCTIONS) - set(api.excluded_member_function_descriptions))
