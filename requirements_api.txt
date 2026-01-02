@@ -1,0 +1,42 @@
+# QueryLake API-only requirements (no local inference engines)
+
+# Web/API
+fastapi
+uvicorn
+sse_starlette
+python-multipart
+httpx
+httpx-sse
+
+# Auth / security
+python-jose
+passlib
+fastapi-login
+cryptography
+pycryptodome
+eciespy
+
+# DB / storage
+sqlalchemy==2.0.35
+sqlmodel==0.0.22
+psycopg2-binary==2.9.9
+pgvector
+
+# Utilities
+tiktoken
+openai
+jsonpatch
+jsonpath-ng
+
+# Document / web tooling
+pypdf
+pypdf2
+pypdfium2
+py7zr
+markdownify
+readability-lxml
+lxml_html_clean
+selenium
+
+# Web search provider
+google-search-results
