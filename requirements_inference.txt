@@ -1,0 +1,11 @@
+# Local inference engines / model runtime
+huggingface_hub[cli]
+safetensors
+sentencepiece>=0.1.99
+transformers
+sentence-transformers
+lm-format-enforcer
+vllm
+FlagEmbedding
+exllamav2
+peft

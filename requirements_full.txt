@@ -1,0 +1,18 @@
+# Full-stack QueryLake (API + inference + OCR)
+-r requirements_api.txt
+-r requirements_inference.txt
+-r requirements_ocr.txt
+
+# Misc extras used by CLI/setup
+tiktoken
+openai
+jsonpatch
+jsonpath-ng
+readability-lxml
+selenium
+lxml_html_clean
+markdownify
+pypdf
+pypdf2
+py7zr
+google-search-results

@@ -13,7 +13,6 @@ pypdf
 pycryptodome
 # flash-attn --no-build-isolation
 # exllamav2
-sqlmodel
 py7zr
 eciespy
 python-multipart
@@ -30,7 +29,6 @@ lm-format-enforcer
 vllm
 readability-lxml
 selenium
-psycopg2-binary
 fastapi-login
 FlagEmbedding
 pgvector

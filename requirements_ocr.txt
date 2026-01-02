@@ -1,0 +1,5 @@
+# Document OCR / parsing
+ocrmypdf
+marker-pdf==0.3.9
+surya-ocr==0.6.11
+pypdfium2

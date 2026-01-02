@@ -117,7 +117,10 @@
 - [x] Create an API-only requirements file and lockfile.
   - [x] `requirements_api.txt`
   - [x] `docs/deps_upgrade/querylake_api_requirements.lock.txt`
-- [ ] Split optional stacks into extras/groups (e.g., API vs OCR vs training experimentation).
-- [ ] Prune unused packages from the production env(s) to keep `pip check` clean.
+- [x] Split optional stacks into separate requirement groups.
+  - [x] `requirements_inference.txt`
+  - [x] `requirements_ocr.txt`
+  - [x] `requirements_full.txt`
+- [x] Prune obvious duplicates from `requirements.txt` (keep pinned versions).
 
 **Done when:** “stable” channel is reproducible and “edge” channel exists for experimentation.
