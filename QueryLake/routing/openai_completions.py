@@ -13,6 +13,7 @@ from QueryLake.runtime.vllm_http_client import (
 from QueryLake.runtime.policy import resolve_policy
 from QueryLake.runtime.rate_limiter import acquire_concurrency, release_concurrency
 from QueryLake.runtime.request_context import get_request_id
+from QueryLake.observability import metrics
 
 MESSAGE_PREPENDS = {
     "stream": ">>>>>>>>>>>STREAM",
@@ -70,6 +71,7 @@ async def openai_chat_completion(
                     token=token,
                 )
                 if not result.allowed:
+                    metrics.rate_limit_denied("/v1/chat/completions")
                     return JSONResponse(
                         content={
                             "object": "error",
@@ -194,6 +196,7 @@ async def openai_create_embedding(
                     token=token,
                 )
                 if not result.allowed:
+                    metrics.rate_limit_denied("/v1/embeddings")
                     return JSONResponse(
                         content={
                             "object": "error",

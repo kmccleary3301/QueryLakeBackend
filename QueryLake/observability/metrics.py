@@ -44,6 +44,12 @@ if _PROM:
         buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     )
 
+    RATE_LIMIT_DENIED_TOTAL = Counter(
+        "querylake_rate_limit_denied_total",
+        "Total number of rate limit denials",
+        labelnames=("route",),
+    )
+
     GPU_REPLICA_RESIDENCY = Gauge(
         "querylake_gpu_replica_resident",
         "Indicator gauge for GPU-backed replicas; value is always 1 while the replica is alive.",
@@ -83,6 +89,9 @@ if _PROM:
         CANCEL_SUCCESS_TOTAL.inc()
         CANCEL_LATENCY_SECONDS.observe(latency_seconds)
 
+    def rate_limit_denied(route: str) -> None:
+        RATE_LIMIT_DENIED_TOTAL.labels(route=route).inc()
+
     def record_gpu_runtime_metadata(
         role: str,
         model_id: str,
@@ -118,6 +127,7 @@ else:
         # summary-like values for cancel latency
         "querylake_cancel_latency_seconds_sum": {(): 0.0},
         "querylake_cancel_latency_seconds_count": {(): 0.0},
+        "querylake_rate_limit_denied_total": {},
     }
     _gauges: Dict[str, Dict[Tuple[Tuple[str, str], ...], float]] = {
         "querylake_sse_subscribers": {},
@@ -162,6 +172,9 @@ else:
         _inc("querylake_cancel_success_total")
         _inc("querylake_cancel_latency_seconds_sum", value=float(latency_seconds))
         _inc("querylake_cancel_latency_seconds_count")
+
+    def rate_limit_denied(route: str) -> None:
+        _inc("querylake_rate_limit_denied_total", {"route": route})
 
     def record_gpu_runtime_metadata(
         role: str,
