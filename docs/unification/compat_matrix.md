@@ -10,3 +10,6 @@
 - CI should verify pins exist and are fetchable
 - CI should run contract surface tests against pinned versions
 
+## How to set pins
+- Replace `<set>` with a commit hash for each repo.
+- Store the pins in `docs/unification/compat_matrix.md` only (single source of truth).

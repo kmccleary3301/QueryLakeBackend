@@ -17,3 +17,12 @@ Abstract auth providers to allow future OAuth/OIDC while preserving existing API
 - Add provider registry
 - Add tests for provider boundary
 
+## Registry Skeleton (planned)
+```python
+class AuthProvider:
+    def issue_token(self, principal, scopes): ...
+    def validate_token(self, token): ...
+    def refresh_token(self, token): ...
+
+AUTH_PROVIDERS = {"local": LocalAuthProvider()}
+```

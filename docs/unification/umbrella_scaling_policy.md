@@ -12,6 +12,20 @@
 - Use `min_replicas=1`, `max_replicas=N` based on concurrency metrics.
 - Cap replicas per node to avoid resource contention.
 
+## Serve Configuration (example)
+```python
+@serve.deployment(
+  autoscaling_config={
+    "min_replicas": 1,
+    "max_replicas": 4,
+    "target_num_ongoing_requests_per_replica": 32,
+    "upscale_delay_s": 5,
+    "downscale_delay_s": 30,
+  },
+  max_ongoing_requests=100,
+)
+```
+
 ## Load Balancing
 - Use Ray Serve built‑in request routing; target queue length per replica.
 - If latency spikes, scale up within limits.
@@ -23,4 +37,3 @@
 ## Failure Modes
 - Replica crash: auto restart by Serve.
 - Overload: 429 responses when queue depth is exceeded.
-
