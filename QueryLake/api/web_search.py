@@ -12,6 +12,9 @@ from io import BytesIO
 from hashlib import sha256
 from asyncio import gather
 from .user_auth import get_user_external_providers_dict
+from QueryLake.runtime.hermes_queue import try_enqueue_job
+import os
+import uuid
 
 def parse_urls(database : Session, 
                auth : AuthType,
@@ -116,6 +119,12 @@ async def web_search(database : Session,
     }
     response = requests.request("POST", url, headers=headers, data=payload)
     result = response.json().get("organic", [])
+    if os.getenv("QUERYLAKE_HERMES_QUEUE") == "1":
+        for entry in result:
+            try_enqueue_job(
+                job_id=f"hermes:{uuid.uuid4().hex}",
+                payload={"url": entry.get("link"), "query": query},
+            )
     await embed_urls(database, toolchain_function_caller, auth, [e["link"] for e in result], [e["title"] for e in result], web_timeout)
     
     return True
@@ -127,7 +136,6 @@ async def web_search(database : Session,
 
 
         
-
 
 
 

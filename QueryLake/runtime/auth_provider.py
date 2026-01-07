@@ -20,3 +20,6 @@ AUTH_PROVIDERS: Dict[str, AuthProvider] = {}
 def register_provider(name: str, provider: AuthProvider) -> None:
     AUTH_PROVIDERS[name] = provider
 
+
+def get_provider(name: str) -> AuthProvider:
+    return AUTH_PROVIDERS[name]

@@ -1,9 +1,10 @@
+from dataclasses import dataclass
 from sqlmodel import Session
 from ..typing.config import AuthType
 from ..api.single_user_auth import get_user
 from ..api.user_auth import get_user_external_providers_dict
 import openai
-from typing import AsyncIterator, AsyncGenerator, Dict, List, Any, Callable
+from typing import AsyncIterator, AsyncGenerator, Dict, List, Any, Callable, Optional, Protocol
 import tiktoken
 from openai import AzureOpenAI
 
@@ -165,6 +166,106 @@ provider_base_url_lookups = {
     "deepinfra": ["https://api.deepinfra.com/v1/openai", "DeepInfra"],
 }
 
+
+class ExternalProvider(Protocol):
+    def generate(
+        self,
+        request_dict: dict,
+        model: str,
+        credential: str,
+        set_input_token_count: Callable[[int], None],
+        additional_auth: Optional[dict],
+        base_url: Optional[str],
+    ) -> AsyncIterator[str]:
+        raise NotImplementedError
+
+    def count_tokens(self, text: str, model: str) -> int:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ExternalProviderSpec:
+    name: str
+    credential_key: str
+    generator: Callable[
+        [dict, str, str, Callable[[int], None], Optional[dict], Optional[str]],
+        AsyncIterator[str],
+    ]
+    count_tokens_fn: Callable[[str, str], int]
+    base_url: Optional[str] = None
+
+
+_EXTERNAL_PROVIDERS: Dict[str, ExternalProviderSpec] = {}
+
+
+def register_external_provider(spec: ExternalProviderSpec) -> None:
+    _EXTERNAL_PROVIDERS[spec.name] = spec
+
+
+def get_external_provider(name: str) -> Optional[ExternalProviderSpec]:
+    return _EXTERNAL_PROVIDERS.get(name)
+
+
+def _openai_provider_generator(
+    request_dict: dict,
+    model: str,
+    credential: str,
+    set_input_token_count: Callable[[int], None],
+    additional_auth: Optional[dict],
+    base_url: Optional[str],
+) -> AsyncIterator[str]:
+    return openai_llm_generator(
+        request_dict,
+        model,
+        credential,
+        base_url=base_url,
+        set_input_token_count=set_input_token_count,
+        **(additional_auth or {}),
+    )
+
+
+def _azure_provider_generator(
+    request_dict: dict,
+    model: str,
+    credential: str,
+    set_input_token_count: Callable[[int], None],
+    additional_auth: Optional[dict],
+    base_url: Optional[str],
+) -> AsyncIterator[str]:
+    # Expect `endpoint/model` per legacy format.
+    model_split = model.split("/")
+    assert len(model_split) >= 2, "Invalid model format for azure call. Must be in the format `endpoint/model`"
+    endpoint_sub, model_sub = model_split[0], "/".join(model_split[1:])
+    return azure_llm_generator(
+        request_dict,
+        model=model_sub,
+        endpoint=endpoint_sub,
+        external_api_key=credential,
+        **(additional_auth or {}),
+    )
+
+
+for name, (base_url, cred_key) in provider_base_url_lookups.items():
+    register_external_provider(
+        ExternalProviderSpec(
+            name=name,
+            credential_key=cred_key,
+            generator=_openai_provider_generator,
+            count_tokens_fn=count_tokens_openai,
+            base_url=base_url,
+        )
+    )
+
+register_external_provider(
+    ExternalProviderSpec(
+        name="azure",
+        credential_key="Azure",
+        generator=_azure_provider_generator,
+        count_tokens_fn=count_tokens_openai,
+        base_url=None,
+    )
+)
+
 def external_llm_generator(
     database : Session,
     auth : AuthType,
@@ -186,37 +287,24 @@ def external_llm_generator(
     
     # print("Ext LLM 2 external_providers:", external_providers)
     
-    if provider in ["openai", "deepinfra"]:
-        provider_specs = provider_base_url_lookups.get(provider)
-        return openai_llm_generator(
-            request_dict,
-            model,
-            external_providers_user_credentials[provider_specs[1]],
-            base_url=provider_specs[0],
-            set_input_token_count=set_input_token_count,
-            **(additional_auth or {}),
-        )
-    elif provider == "azure": 
-        # TODO: This currently doesn't work
-        # We need a clean way of specifying an endpoint and model
-        model_split = model.split("/")
-        assert len(model_split) >= 2, "Invalid model format for azure call. Must be in the format `endpoint/model`"
-        model_split = [model_split[0], "/".join(model_split[1:])]
-        endpoint_sub, model_sub = model_split[0], model_split[1]
-        return azure_llm_generator(
-            request_dict,
-            model=model_sub,
-            endpoint=endpoint_sub,
-            external_api_key=external_providers_user_credentials['Azure'],
-            **(additional_auth or {})
-        )
-    else:
+    spec = get_external_provider(provider)
+    if spec is None:
         raise ValueError("Invalid provider.")
+    credential = external_providers_user_credentials[spec.credential_key]
+    return spec.generator(
+        request_dict,
+        model,
+        credential,
+        set_input_token_count,
+        additional_auth,
+        spec.base_url,
+    )
     
 def external_llm_count_tokens(text: str, model: str):
     model_specified = model.split("/")
-    if model_specified[0] == "openai":
-        return count_tokens_openai(text, model_specified[1])
-    
-    else:
-        raise Exception(f"Invalid provider specified ({model_specified[0]}).")
+    provider_name = model_specified[0]
+    provider_model = "/".join(model_specified[1:])
+    spec = get_external_provider(provider_name)
+    if spec is None:
+        raise Exception(f"Invalid provider specified ({provider_name}).")
+    return spec.count_tokens_fn(text, provider_model)

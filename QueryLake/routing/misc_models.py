@@ -10,6 +10,8 @@ from typing import (
 )
 from asyncio import gather
 from ..api import api
+from QueryLake.runtime.request_context import get_request_id
+from QueryLake.runtime.usage_events import build_usage_event, log_usage_event
 
 async def embedding_call(
     self, # Umbrella class, can't type hint because of circular imports
@@ -37,6 +39,19 @@ async def embedding_call(
             self.config.default_models.embedding: {"tokens": total_tokens}
         }
     }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
+
+    log_usage_event(
+        build_usage_event(
+            kind="embedding",
+            request_id=get_request_id() or "unknown",
+            route="/v1/embeddings",
+            model=model,
+            principal_id=getattr(user_auth, "username", None),
+            provider="local",
+            usage={"tokens": total_tokens},
+            status="ok",
+        )
+    )
     
     return embedding if not return_tokens_usage else (embedding, total_tokens)
 
@@ -75,6 +90,19 @@ async def rerank_call(
             self.config.default_models.rerank: {"tokens": total_tokens}
         }
     }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
+
+    log_usage_event(
+        build_usage_event(
+            kind="rerank",
+            request_id=get_request_id() or "unknown",
+            route="/v1/rerank",
+            model=model,
+            principal_id=getattr(user_auth, "username", None),
+            provider="local",
+            usage={"tokens": total_tokens},
+            status="ok",
+        )
+    )
     
     return scores
 

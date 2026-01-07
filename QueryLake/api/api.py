@@ -123,6 +123,7 @@ exposed_api = [
     "hash_function",
     "hide_chat_session",
     "invite_user_to_organization",
+    "change_organization_member_role",
     "llm_call_chat_session",
     "llm_call_chat_session_direct",
     "llm_call_model_synchronous",
@@ -207,6 +208,7 @@ all_function_names = [
 	"hash_function",
 	"hide_chat_session",
 	"invite_user_to_organization",
+	"change_organization_member_role",
 	"is_",
 	"llm_call_chat_session",
 	"llm_call_chat_session_direct",
@@ -278,6 +280,7 @@ get_document_secure
 get_openai_api_key
 get_serp_key
 invite_user_to_organization
+change_organization_member_role
 login
 modify_document_collection
 query_vector_db

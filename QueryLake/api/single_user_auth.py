@@ -3,6 +3,7 @@ from sqlmodel import Session, select, and_
 from .hashing import *
 from ..typing.config import AuthType, getUserType, AuthType1, AuthType2, AuthType3, AuthType4, AuthInputType, user, getUserAuthType
 from ..database.encryption import aes_decrypt_string, ecc_generate_public_private_key
+from QueryLake.runtime.auth_provider import get_provider
 from typing import Union, Tuple, List
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
@@ -45,6 +46,16 @@ def get_user(database : Session,
     TODO: Add OAuth2 support.
     """
     
+    # Route through the default provider when possible.
+    try:
+        provider = get_provider("local")
+    except Exception:
+        provider = None
+    if provider is not None:
+        if return_auth_type:
+            return provider.validate_auth_with_type(auth)
+        return provider.validate_auth(auth)
+
     auth = process_input_as_auth_type(auth)
     
     # Username and password prehash case

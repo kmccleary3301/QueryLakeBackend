@@ -16,6 +16,17 @@ if _PROM:
         "Total number of toolchain runtime events emitted",
         labelnames=("kind",),
     )
+    REQUESTS_TOTAL = Counter(
+        "querylake_requests_total",
+        "Total HTTP requests",
+        labelnames=("route", "status"),
+    )
+    REQUEST_LATENCY_SECONDS = Histogram(
+        "querylake_request_latency_seconds",
+        "HTTP request latency in seconds",
+        labelnames=("route",),
+        buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+    )
     SESSIONS_CREATED_TOTAL = Counter("querylake_sessions_created_total", "Sessions created")
     SESSIONS_DELETED_TOTAL = Counter("querylake_sessions_deleted_total", "Sessions deleted")
 
@@ -66,6 +77,9 @@ if _PROM:
 
     def inc_event(kind: str) -> None:
         EVENTS_TOTAL.labels(kind=kind).inc()
+    def record_request(route: str, status: int, latency_seconds: float) -> None:
+        REQUESTS_TOTAL.labels(route=route, status=str(status)).inc()
+        REQUEST_LATENCY_SECONDS.labels(route=route).observe(latency_seconds)
 
     def session_created() -> None:
         SESSIONS_CREATED_TOTAL.inc()
@@ -118,6 +132,7 @@ else:
     # Lightweight fallback without prometheus_client
     _counters: Dict[str, Dict[Tuple[Tuple[str, str], ...], float]] = {
         "querylake_events_total": {},
+        "querylake_requests_total": {},
         "querylake_sessions_created_total": {(): 0.0},
         "querylake_sessions_deleted_total": {(): 0.0},
         "querylake_sse_drops_total": {},
@@ -127,6 +142,8 @@ else:
         # summary-like values for cancel latency
         "querylake_cancel_latency_seconds_sum": {(): 0.0},
         "querylake_cancel_latency_seconds_count": {(): 0.0},
+        "querylake_request_latency_seconds_sum": {(): 0.0},
+        "querylake_request_latency_seconds_count": {(): 0.0},
         "querylake_rate_limit_denied_total": {},
     }
     _gauges: Dict[str, Dict[Tuple[Tuple[str, str], ...], float]] = {
@@ -146,6 +163,10 @@ else:
 
     def inc_event(kind: str) -> None:
         _inc("querylake_events_total", {"kind": kind})
+    def record_request(route: str, status: int, latency_seconds: float) -> None:
+        _inc("querylake_requests_total", {"route": route, "status": str(status)})
+        _inc("querylake_request_latency_seconds_sum", value=float(latency_seconds))
+        _inc("querylake_request_latency_seconds_count")
 
     def session_created() -> None:
         _inc("querylake_sessions_created_total")

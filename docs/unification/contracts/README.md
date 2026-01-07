@@ -10,3 +10,5 @@ This directory contains the canonical contract surfaces used by QueryLake + Brea
 - Contract E: Sandbox (`contract_sandbox.md`)
 - Contract F: Events & Backfill (`contract_events.md`)
 
+## Done Bar
+- Unification milestone criteria: `docs/unification/unification_done_bar.md`

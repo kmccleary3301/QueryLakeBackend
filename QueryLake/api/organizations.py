@@ -146,6 +146,50 @@ def resolve_organization_invitation(database : Session,
     # return {"success": True}
     return True
 
+def change_organization_member_role(database : Session,
+                                    auth : AuthType,
+                                    organization_id : int,
+                                    username : str,
+                                    member_class : str):
+    """
+    Update an existing organization member's role.
+    """
+    assert member_class in membership_value_map, "Invalid member class"
+    user_retrieved : getUserType  = get_user(database, auth)
+    (user, user_auth) = user_retrieved
+
+    requester_membership = database.exec(select(sql_db_tables.organization_membership).where(
+        and_(sql_db_tables.organization_membership.organization_id == organization_id,
+        sql_db_tables.organization_membership.user_name == user_auth.username))).first()
+    assert requester_membership is not None, "Not a member of given organization"
+    assert requester_membership.invite_still_open == False, "Invite not accepted"
+
+    target_membership = database.exec(select(sql_db_tables.organization_membership).where(
+        and_(sql_db_tables.organization_membership.organization_id == organization_id,
+        sql_db_tables.organization_membership.user_name == username))).first()
+    assert target_membership is not None, "Target user not in organization"
+    assert target_membership.invite_still_open == False, "Target invite not accepted"
+    assert target_membership.user_name != user_auth.username, "Cannot change your own role"
+
+    if target_membership.role == "owner" or member_class == "owner":
+        assert requester_membership.role == "owner", "Only owners can change owner roles"
+    else:
+        assert requester_membership.role in ["owner", "admin"], "Insufficient permissions"
+        if requester_membership.role == "admin":
+            assert member_class in ["member", "viewer"], "Admins can only set member/viewer"
+
+    if target_membership.role == "owner" and member_class != "owner":
+        owners = database.exec(select(sql_db_tables.organization_membership).where(
+            and_(sql_db_tables.organization_membership.organization_id == organization_id,
+            sql_db_tables.organization_membership.role == "owner",
+            sql_db_tables.organization_membership.invite_still_open == False))).all()
+        assert len(owners) > 1, "At least one owner required"
+
+    target_membership.role = member_class
+    database.add(target_membership)
+    database.commit()
+    return True
+
 def fetch_memberships(database : Session, 
                       auth : AuthType, 
                       return_subset : str = "accepted"):

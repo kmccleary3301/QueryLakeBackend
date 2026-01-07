@@ -9,3 +9,8 @@
 - Maintain legacy routes for backward compatibility
 - Add explicit documentation for new prefixes
 
+## Mapping (initial)
+- Legacy `/api/*` → `/v2/kernel/*` where applicable
+- Legacy `/files/*` → `/v2/kernel/files/*`
+- Legacy `/sessions/*` → `/v2/kernel/sessions/*`
+- Legacy `/toolchains/*` → `/v2/plugins/toolchains/*`

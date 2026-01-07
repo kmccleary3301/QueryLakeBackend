@@ -1,0 +1,14 @@
+name: Unification Checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  verify-pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify compat pins
+        run: bash scripts/ci_unification_checks.sh

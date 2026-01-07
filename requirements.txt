@@ -39,6 +39,7 @@ exllamav2
 jsonpatch
 jsonpath-ng
 peft
+redis
 # pluggy
 # rich
 

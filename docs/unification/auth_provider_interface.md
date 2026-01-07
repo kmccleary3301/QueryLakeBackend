@@ -9,13 +9,17 @@ Abstract auth providers to allow future OAuth/OIDC while preserving existing API
 - `refresh_token(token) -> token`
 
 ## Current Implementation
-- API key flow in QueryLake
-- Username/password for user auth
+- API key flow in QueryLake (LocalAuthProvider adapter)
+- Username/password for user auth (LocalAuthProvider)
 
 ## Next Steps
-- Wrap current auth in adapter class
-- Add provider registry
-- Add tests for provider boundary
+- Add provider registry (complete)
+- Add tests for provider boundary (complete)
+- Stub external providers (next: OAuth/OIDC placeholder)
+
+## OAuth/OIDC Stub
+- OAuthAuthProvider added as a placeholder implementation
+- Not registered by default; enable with `QL_AUTH_OAUTH_ENABLED=1`
 
 ## Registry Skeleton (planned)
 ```python

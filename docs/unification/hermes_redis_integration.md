@@ -19,4 +19,10 @@
 ## Requirements
 - Redis required for Hermes integration
 - QueryLake should provide shared Redis
+- Redis-backed HermesQueue utility added for enqueue/dequeue/retry
+- HermesQueue supports `requeue_due` for retry drainage
 
+## Reliability Validation (next)
+- Inject worker failure mid-job → verify retry schedule
+- Force Redis disconnect → ensure job remains in pending/retry
+- Validate idempotent enqueue for duplicate job_id

@@ -51,6 +51,9 @@ from QueryLake.api.single_user_auth import (
 )
 from QueryLake.api.auth_utils import resolve_bearer_auth_header
 from QueryLake.runtime.request_context import RequestContext, set_request_context, set_request_id
+from QueryLake.runtime.auth_provider import register_provider
+from QueryLake.runtime.auth_provider_local import LocalAuthProvider
+from QueryLake.runtime.auth_provider_oauth import OAuthAuthProvider
 from QueryLake.misc_functions.external_providers import external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import find_function_calls
 from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
@@ -205,6 +208,7 @@ fastapi_app = FastAPI(
 
 @fastapi_app.middleware("http")
 async def attach_request_context(request: Request, call_next):
+    import time
     request_id = request.headers.get("x-request-id") or request.headers.get("X-Request-Id")
     request_id = set_request_id(request_id)
     set_request_context(
@@ -213,7 +217,10 @@ async def attach_request_context(request: Request, call_next):
             route=request.url.path,
         )
     )
+    start = time.time()
     response: Response = await call_next(request)
+    latency = time.time() - start
+    metrics.record_request(request.url.path, response.status_code, latency)
     response.headers["x-request-id"] = request_id
     return response
 
@@ -297,6 +304,11 @@ class UmbrellaClass:
         except Exception as exc:
             logger.exception("Failed to initialize database session: %s", exc)
             raise
+
+        # Register the default auth provider (local DB-backed).
+        register_provider("local", LocalAuthProvider(self.database))
+        if os.getenv("QL_AUTH_OAUTH_ENABLED") == "1":
+            register_provider("oauth", OAuthAuthProvider())
 
         self.toolchain_runtime = ToolchainRuntimeService(
             umbrella=self,
@@ -400,6 +412,10 @@ class UmbrellaClass:
         raw_request : Request
     ):
         return await openai_chat_completion(self, raw_request)
+
+    @fastapi_app.post("/v2/kernel/chat/completions")
+    async def openai_chat_completions_endpoint_v2(self, raw_request: Request):
+        return await self.openai_chat_completions_endpoint(raw_request)
     
     @fastapi_app.post("/v1/embeddings")
     async def openai_embedding_endpoint(
@@ -407,6 +423,45 @@ class UmbrellaClass:
         raw_request: Request
     ):
         return await openai_create_embedding(self, raw_request)
+
+    @fastapi_app.post("/v2/kernel/embeddings")
+    async def openai_embedding_endpoint_v2(self, raw_request: Request):
+        return await self.openai_embedding_endpoint(raw_request)
+
+    @fastapi_app.get("/v1/models")
+    async def list_models_endpoint(self):
+        local_models = [model.model_dump() for model in self.config.models]
+        external_models = []
+        for provider_name, models in (self.config.external_model_providers or {}).items():
+            for entry in models:
+                external_models.append(
+                    {
+                        "id": f"{provider_name}/{entry.id}",
+                        "name": entry.name,
+                        "context": entry.context,
+                        "modelcard": entry.modelcard,
+                        "provider": provider_name,
+                    }
+                )
+        return {"data": local_models + external_models}
+
+    @fastapi_app.get("/v1/models/{model_id}")
+    async def get_model_endpoint(self, model_id: str):
+        for model in self.config.models:
+            if model.id == model_id:
+                return model.model_dump()
+        if "/" in model_id:
+            provider_name, provider_model = model_id.split("/", 1)
+            for entry in (self.config.external_model_providers or {}).get(provider_name, []):
+                if entry.id == provider_model:
+                    return {
+                        "id": model_id,
+                        "name": entry.name,
+                        "context": entry.context,
+                        "modelcard": entry.modelcard,
+                        "provider": provider_name,
+                    }
+        raise HTTPException(status_code=404, detail="Model not found")
     
     
     async def llm_call(self,
@@ -446,11 +501,20 @@ class UmbrellaClass:
     @fastapi_app.post("/upload_document")
     async def upload_document(self, req : Request, file : UploadFile):
         return await handle_document(self, clean_function_arguments_for_api, req, file)
+
+    @fastapi_app.post("/v2/kernel/update_documents")
+    @fastapi_app.post("/v2/kernel/upload_document")
+    async def upload_document_v2(self, req: Request, file: UploadFile):
+        return await self.upload_document(req, file)
     
     @fastapi_app.get("/api/ping")
     async def ping_function(self, req: Request):
         logger.debug("Ping received from %s", req.client.host if req.client else "unknown")
         return {"success": True, "note": "Pong"}
+
+    @fastapi_app.get("/v2/kernel/ping")
+    async def ping_function_v2(self, req: Request):
+        return await self.ping_function(req)
 
     # -----------------
     # Files v1 endpoints
@@ -521,6 +585,30 @@ class UmbrellaClass:
                 await self.files_runtime.unsubscribe(file_id, subscriber)
 
         return EventSourceResponse(event_generator())
+
+    @fastapi_app.post("/v2/kernel/files")
+    async def upload_file_endpoint_v2(self, request: Request, file: UploadFile, logical_name: Optional[str] = None, collection_id: Optional[str] = None):
+        return await self.upload_file_endpoint(request, file, logical_name, collection_id)
+
+    @fastapi_app.get("/v2/kernel/files/{file_id}")
+    async def get_file_endpoint_v2(self, file_id: str, request: Request):
+        return await self.get_file_endpoint(file_id, request)
+
+    @fastapi_app.get("/v2/kernel/files/{file_id}/versions")
+    async def get_file_versions_endpoint_v2(self, file_id: str, request: Request):
+        return await self.get_file_versions_endpoint(file_id, request)
+
+    @fastapi_app.get("/v2/kernel/files/{file_id}/events")
+    async def get_file_events_endpoint_v2(self, file_id: str, request: Request, since: Optional[int] = None):
+        return await self.get_file_events_endpoint(file_id, request, since)
+
+    @fastapi_app.get("/v2/kernel/files/{file_id}/jobs")
+    async def get_file_jobs_endpoint_v2(self, file_id: str, request: Request):
+        return await self.get_file_jobs_endpoint(file_id, request)
+
+    @fastapi_app.get("/v2/kernel/files/{file_id}/stream")
+    async def files_stream_endpoint_v2(self, file_id: str, request: Request):
+        return await self.files_stream_endpoint(file_id, request)
 
     @fastapi_app.post("/files/{file_id}/versions/{version_id}/process")
     async def process_file_version_endpoint(self, file_id: str, version_id: str, request: Request):
@@ -717,6 +805,43 @@ class UmbrellaClass:
                 await self.toolchain_runtime.unsubscribe(session_id, subscriber)
 
         return EventSourceResponse(event_generator())
+
+    @fastapi_app.post("/v2/kernel/sessions")
+    async def create_session_endpoint_v2(self, request: Request):
+        return await self.create_session_endpoint(request)
+
+    @fastapi_app.get("/v2/kernel/sessions/{session_id}")
+    async def get_session_endpoint_v2(self, session_id: str, request: Request):
+        return await self.get_session_endpoint(session_id, request)
+
+    @fastapi_app.delete("/v2/kernel/sessions/{session_id}")
+    async def delete_session_endpoint_v2(self, session_id: str, request: Request):
+        return await self.delete_session_endpoint(session_id, request)
+
+    @fastapi_app.post("/v2/kernel/sessions/{session_id}/event")
+    async def post_session_event_v2(self, session_id: str, request: Request):
+        return await self.post_session_event(session_id, request)
+
+    @fastapi_app.get("/v2/kernel/sessions/{session_id}/events")
+    async def list_session_events_v2(self, session_id: str, request: Request, since: Optional[int] = None):
+        return await self.list_session_events(session_id, request, since)
+
+    @fastapi_app.get("/v2/kernel/sessions/{session_id}/jobs")
+    async def list_session_jobs_v2(self, session_id: str, request: Request):
+        return await self.list_session_jobs(session_id, request)
+
+    @fastapi_app.post("/v2/kernel/sessions/{session_id}/jobs/{job_id}/cancel")
+    async def cancel_session_job_v2(self, session_id: str, job_id: str, request: Request):
+        return await self.cancel_session_job(session_id, job_id, request)
+
+    @fastapi_app.get("/v2/kernel/sessions/{session_id}/stream")
+    async def stream_session_v2(self, session_id: str, request: Request):
+        return await self.stream_session(session_id, request)
+
+    @fastapi_app.post("/v2/kernel/api/{rest_of_path:path}")
+    @fastapi_app.get("/v2/kernel/api/{rest_of_path:path}")
+    async def api_general_call_v2(self, req: Request, rest_of_path: str, file: UploadFile = None):
+        return await self.api_general_call(req, rest_of_path, file)
 
 # This function is the new entrypoint for the application, called by start_querylake.py
 def _get_placement_bundle() -> Dict[str, Union[int, float]]:
@@ -1196,7 +1321,8 @@ def build_and_run_application(
 
     vram_budget.log_summary()
 
-    deployment = UmbrellaClass.bind(
+    umbrella_options = get_umbrella_deployment_options()
+    deployment = UmbrellaClass.options(**umbrella_options).bind(
         configuration=global_config,
         toolchains_v1=toolchains_v1,
         toolchains_v2=toolchains_v2,

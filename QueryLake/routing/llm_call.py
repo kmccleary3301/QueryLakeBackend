@@ -18,6 +18,8 @@ from QueryLake.typing.function_calling import FunctionCallDefinition
 from QueryLake.misc_functions.external_providers import external_llm_generator, external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import stream_results_tokens, find_function_calls, basic_stream_results
 from QueryLake.runtime.signals import JobSignal
+from QueryLake.runtime.request_context import get_request_id
+from QueryLake.runtime.usage_events import build_usage_event, log_usage_event
 from sqlmodel import select
 
 logger = logging.getLogger(__name__)
@@ -70,8 +72,10 @@ async def llm_call(
         nonlocal input_token_count
         input_token_count = input_token_value
     
+    provider_name = "local"
     if len(model_specified) > 1:
         # External LLM provider (OpenAI, Anthropic, etc)
+        provider_name = model_specified[0]
         
         new_chat_history = format_chat_history(
             chat_history,
@@ -186,6 +190,21 @@ async def llm_call(
                 }
             }
         }, **({"api_key_id": original_auth} if auth_type == 2 else {}))
+        log_usage_event(
+            build_usage_event(
+                kind="llm",
+                request_id=get_request_id() or "unknown",
+                route="/api/llm",
+                model=model_choice,
+                principal_id=getattr(user_auth, "username", None),
+                provider=provider_name,
+                usage={
+                    "input_tokens": input_token_count,
+                    "output_tokens": total_output_tokens,
+                },
+                status="ok",
+            )
+        )
     
     if return_stream_response:
         if len(model_specified) == 1:
