@@ -15,6 +15,7 @@ fastapi-login
 cryptography
 pycryptodome
 eciespy
+eth-keys
 
 # DB / storage
 sqlalchemy==2.0.35
@@ -41,3 +42,6 @@ selenium
 
 # Web search provider
 google-search-results
+
+# GPU inspection (provides `pynvml` module)
+nvidia-ml-py

@@ -15,6 +15,7 @@ pycryptodome
 # exllamav2
 py7zr
 eciespy
+eth-keys
 python-multipart
 ray[serve]
 transformers
@@ -44,6 +45,7 @@ redis
 # rich
 
 pypdfium2
+nvidia-ml-py
 
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.35

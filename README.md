@@ -1,19 +1,35 @@
 # QueryLake Backend
 
 This is a FastAPI and Ray backend for QueryLake.
-Run the following commands to set up a conda environment.
-You must have CUDA installed to run models.
-We recommend the [Lambda Stack](https://lambdalabs.com/lambda-stack-deep-learning-software)
+This repo now recommends using **`uv`** for Python environments + lockfiles.
+
+You must have CUDA installed (and an appropriate NVIDIA driver) to run local models.
+We recommend the [Lambda Stack](https://lambdalabs.com/lambda-stack-deep-learning-software).
+
+## Install (recommended: `uv`)
+
+Create a virtualenv and sync locked dependencies:
 
 ```
+uv venv --python 3.12
+uv sync
+```
+
+Optional extras:
+- `uv sync --extra cli` (enables `setup.py` CLI helpers)
+- `uv sync --extra inference-hf` (local HF/torch inference helpers)
+- `uv sync --extra ocr` (OCR stack: Marker/Surya + OCRmyPDF)
+- `uv sync --extra dev` (pytest tooling)
+
+> Note: We intentionally keep **vLLM** as a separate runtime in production (run it as an upstream service and let QueryLake talk to it over HTTP). Use the `vllm` extra only for experiments.
+
+## Install (legacy: conda + requirements.txt)
+
+This is no longer the recommended path, but is kept for compatibility:
+
+```bash
 conda create --name QueryLake python=3.10
 conda activate QueryLake
-```
-
-After this, install pytorch using the ***conda*** installation instructions on [this webpage](https://pytorch.org/).
-Then continue with the following command.
-
-```
 pip install -r requirements.txt
 ```
 

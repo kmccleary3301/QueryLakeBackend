@@ -14,7 +14,10 @@ from QueryLake.database import sql_db_tables as T
 from QueryLake.observability import metrics
 from QueryLake.runtime.sse import SessionStreamHub
 from QueryLake.api.single_user_auth import get_user
-from QueryLake.api.custom_model_functions.surya import process_pdf_with_surya_2
+try:
+    from QueryLake.api.custom_model_functions.surya import process_pdf_with_surya_2
+except Exception:  # pragma: no cover
+    process_pdf_with_surya_2 = None
 
 
 FILE_EVENT_KINDS = (
@@ -348,6 +351,8 @@ class FilesRuntimeService:
                 bio = BytesIO(data)
                 bio.name = (getattr(self.db.get(T.file, file_id), "logical_name", None) or "upload.pdf")
                 try:
+                    if process_pdf_with_surya_2 is None:
+                        raise RuntimeError("Surya OCR code is not available in this environment.")
                     full_text, images_dict, out_meta = await process_pdf_with_surya_2(
                         database=self.db,
                         auth=auth,

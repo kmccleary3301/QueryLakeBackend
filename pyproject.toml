@@ -1,0 +1,109 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "querylake-backend"
+version = "0.0.0"
+description = "QueryLake Backend (FastAPI + Ray Serve)"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+
+# NOTE:
+# - Base dependencies target an "API-only" environment (no local inference engines).
+# - Heavier stacks (HF/torch, OCR, vLLM) live in optional extras.
+dependencies = [
+  # Core API
+  "fastapi",
+  "uvicorn",
+  "sse-starlette",
+  "python-multipart",
+
+  # HTTP clients / streaming
+  "httpx",
+  "httpx-sse",
+
+  # Auth / crypto
+  "python-jose",
+  "passlib",
+  "fastapi-login",
+  "cryptography",
+  "pycryptodome",
+  "eciespy",
+  "eth-keys",
+
+  # DB / storage
+  "sqlalchemy==2.0.35",
+  "sqlmodel==0.0.22",
+  "psycopg2-binary==2.9.9",
+  "pgvector",
+  "redis",
+
+  # Utilities
+  "tiktoken",
+  "openai",
+  "jsonpatch",
+  "jsonpath-ng",
+
+  # Document + web tooling (non-ML)
+  "pypdf",
+  "pypdf2",
+  "pypdfium2",
+  "py7zr",
+  "markdownify",
+  "readability-lxml",
+  "lxml-html-clean",
+  "selenium",
+
+  # Web search provider
+  "google-search-results",
+
+  # Ray Serve (core runtime) — keep pinned to match the cluster Ray version.
+  "ray[serve]==2.49.0",
+
+  # GPU inspection (VRAM-aware scheduling, diagnostics)
+  "nvidia-ml-py",
+]
+
+[project.optional-dependencies]
+# CLI / setup helpers (interactive config + HF downloads).
+cli = [
+  "colorama",
+  "huggingface_hub[cli]",
+]
+
+# Local HF / torch inference (embeddings, rerank, etc).
+inference-hf = [
+  "torch",
+  "transformers",
+  "sentence-transformers",
+  "FlagEmbedding",
+  "huggingface_hub[cli]",
+  "safetensors",
+  "sentencepiece>=0.1.99",
+  "lm-format-enforcer",
+  "peft",
+]
+
+# OCR stack (Marker/Surya + optional OCRmyPDF).
+ocr = [
+  "torch",
+  "pillow",
+  "ocrmypdf",
+  "marker-pdf==0.3.9",
+  "surya-ocr==0.6.11",
+]
+
+# vLLM runtime is intentionally separate in production (run as upstream HTTP service),
+# but is provided here as an optional extra for experiments.
+vllm = [
+  "vllm",
+]
+
+dev = [
+  "pytest",
+  "pytest-asyncio",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["QueryLake"]

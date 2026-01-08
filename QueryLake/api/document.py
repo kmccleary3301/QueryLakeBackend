@@ -21,7 +21,6 @@ import time
 import json
 import py7zr, zipfile
 from fastapi.responses import StreamingResponse
-import ocrmypdf
 from ..typing.config import AuthType
 from ..typing.api_inputs import DocumentModifierArgs
 from ..misc_functions.function_run_clean import file_size_as_string
@@ -886,11 +885,13 @@ def ocr_pdf_file(database : Session,
     # with contextlib.redirect_stdout(io.StringIO()):
     
     sys.stdout = open(os.devnull, 'w')
-    ocrmypdf.ocr(
-        file_input, 
-        ocr_bytes_target, 
-        force_ocr=True
-    )
+    try:
+        import ocrmypdf  # type: ignore
+    except Exception as exc:
+        raise RuntimeError(
+            "OCRmyPDF is not installed. Install the `ocr` extra (or install `ocrmypdf`) to use ocr_pdf_file."
+        ) from exc
+    ocrmypdf.ocr(file_input, ocr_bytes_target, force_ocr=True)
     sys.stdout = sys.__stdout__
     
     text = parse_PDFs(ocr_bytes_target, return_all_text_as_string=True)

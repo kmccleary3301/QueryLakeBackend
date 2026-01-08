@@ -26,19 +26,19 @@ from QueryLake.database import database_admin_operations
 from QueryLake.database.create_db_session import initialize_database_engine
 from QueryLake.typing.config import Config, AuthType, Model
 from QueryLake.typing.toolchains import ToolChain, ToolChainV2
-from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
-from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
-from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
+try:
+    from QueryLake.operation_classes.ray_web_scraper import WebScraperDeployment
+except Exception as exc:
+    logging.getLogger(__name__).warning(
+        "WebScraperDeployment import failed (%s). Web scraping will be unavailable.",
+        exc,
+    )
+
+    @serve.deployment(name="web_scraper:stub")
+    class WebScraperDeployment:
+        async def run(self, *args, **kwargs):
+            return None
 from sse_starlette.sse import EventSourceResponse
-from QueryLake.operation_classes.ray_surya_class import (
-    MarkerDeployment,
-    SuryaDetectionDeployment,
-    SuryaLayoutDeployment,
-    SuryaOCRDeployment,
-    SuryaOrderDeployment,
-    SuryaTableDeployment,
-    SuryaTexifyDeployment
-)
 from QueryLake.misc_functions.function_run_clean import get_function_call_preview, get_function_specs
 from QueryLake.typing.function_calling import FunctionCallDefinition
 
@@ -1036,6 +1036,14 @@ def build_and_run_application(
 
     embedding_models: Dict[str, DeploymentHandle] = {}
     if global_config.enabled_model_classes.embedding:
+        try:
+            from QueryLake.operation_classes.ray_embedding_class import EmbeddingDeployment
+        except Exception as exc:
+            raise RuntimeError(
+                "Embedding models are enabled, but embedding dependencies are missing. "
+                "Install the `inference-hf` extra (torch/transformers/FlagEmbedding), or disable embeddings."
+            ) from exc
+
         preferred_embedding = getattr(global_config.default_models, "embedding", None)
         embedding_iterable = _prioritize_by_id(
             list(global_config.other_local_models.embedding_models),
@@ -1086,6 +1094,14 @@ def build_and_run_application(
 
     rerank_models: Dict[str, DeploymentHandle] = {}
     if global_config.enabled_model_classes.rerank:
+        try:
+            from QueryLake.operation_classes.ray_reranker_class import RerankerDeployment
+        except Exception as exc:
+            raise RuntimeError(
+                "Rerank models are enabled, but reranker dependencies are missing. "
+                "Install the `inference-hf` extra (torch/transformers), or disable rerank."
+            ) from exc
+
         preferred_rerank = getattr(global_config.default_models, "rerank", None)
         rerank_iterable = _prioritize_by_id(
             list(global_config.other_local_models.rerank_models),
@@ -1267,6 +1283,22 @@ def build_and_run_application(
 
     surya_handles: Dict[str, DeploymentHandle] = {}
     if global_config.enabled_model_classes.surya:
+        try:
+            from QueryLake.operation_classes.ray_surya_class import (
+                MarkerDeployment,
+                SuryaDetectionDeployment,
+                SuryaLayoutDeployment,
+                SuryaOCRDeployment,
+                SuryaOrderDeployment,
+                SuryaTableDeployment,
+                SuryaTexifyDeployment,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Surya OCR models are enabled, but OCR dependencies are missing. "
+                "Install the `ocr` extra (marker-pdf/surya-ocr/torch), or disable surya."
+            ) from exc
+
         surya_model_map = {
             "marker": MarkerDeployment,
             "surya_detection": SuryaDetectionDeployment,

@@ -21,3 +21,8 @@ logs/
 
 
 .pytest_cache/
+
+# Local virtual environments (uv/venv)
+.venv/
+.venv_*/
+.venv*/
