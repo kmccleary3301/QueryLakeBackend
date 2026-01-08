@@ -236,7 +236,11 @@ class ChandraDeployment:
         cleaned = "\n".join(lines).strip()
         cleaned = self._unescape_markdown(cleaned)
         cleaned = self._normalize_tables(cleaned)
-        if "<table" in cleaned or "<div" in cleaned or "<br" in cleaned or "<p" in cleaned:
+        if re.search(
+            r"</?(?:div|p|br|table|tr|td|th|math|sup|sub|img|ul|ol|li|h[1-6]|pre|code)\b",
+            cleaned,
+            flags=re.IGNORECASE,
+        ):
             try:
                 from markdownify import markdownify as _markdownify
             except Exception:
@@ -266,7 +270,7 @@ class ChandraDeployment:
             for idx, part in enumerate(parts):
                 if idx % 2 == 1:
                     continue
-                parts[idx] = re.sub(r"\\([\\`*_{}()#+.!|>:=/@?,-])", r"\1", part)
+                parts[idx] = re.sub(r"\\([\\`*_{}\[\]()#+.!|<>:=/@?,\\-])", r"\1", part)
             fixed = "`".join(parts)
             if fixed.rstrip().endswith("</"):
                 fixed = fixed.rstrip()[:-2].rstrip()
@@ -324,7 +328,7 @@ class ChandraDeployment:
             return text
         out: List[str] = []
         i = 0
-        separator_re = re.compile(r"^\s*\|?\s*(:?-+:?\s*\|)+\s*:?-*?\s*$")
+        separator_re = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
         while i < len(lines):
             line = lines[i]
             if "|" in line and i + 1 < len(lines) and separator_re.match(lines[i + 1]):
