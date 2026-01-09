@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Tuple
 
 from QueryLake.api.auth_utils import resolve_bearer_auth_header
-from QueryLake.api.single_user_auth import get_user, process_input_as_auth_type
+from QueryLake.api.single_user_auth import get_user, get_user_legacy, process_input_as_auth_type
 from QueryLake.typing.config import AuthInputType
 from QueryLake.runtime.auth_provider import AuthProvider
 
@@ -31,8 +31,8 @@ class LocalAuthProvider(AuthProvider):
 
     def validate_auth(self, auth: AuthInputType) -> Tuple[Any, Any]:
         auth = process_input_as_auth_type(auth)
-        return get_user(self._db, auth)
+        return get_user_legacy(self._db, auth)
 
     def validate_auth_with_type(self, auth: AuthInputType) -> Tuple[Any, Any, Any, int]:
         auth = process_input_as_auth_type(auth)
-        return get_user(self._db, auth, return_auth_type=True)
+        return get_user_legacy(self._db, auth, return_auth_type=True)

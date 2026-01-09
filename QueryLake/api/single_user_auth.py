@@ -56,6 +56,19 @@ def get_user(database : Session,
             return provider.validate_auth_with_type(auth)
         return provider.validate_auth(auth)
 
+    return get_user_legacy(database, auth, return_auth_type=return_auth_type)
+
+
+def get_user_legacy(
+    database: Session,
+    auth: AuthInputType,
+    return_auth_type: bool = False,
+) -> Tuple[user, getUserAuthType]:
+    """Legacy implementation for resolving `auth` into a user tuple.
+
+    This is intentionally separated from `get_user()` so the new auth provider
+    abstraction can delegate to the legacy logic without triggering recursion.
+    """
     auth = process_input_as_auth_type(auth)
     
     # Username and password prehash case

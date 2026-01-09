@@ -54,6 +54,7 @@ from QueryLake.runtime.request_context import RequestContext, set_request_contex
 from QueryLake.runtime.auth_provider import register_provider
 from QueryLake.runtime.auth_provider_local import LocalAuthProvider
 from QueryLake.runtime.auth_provider_oauth import OAuthAuthProvider
+from QueryLake.runtime.umbrella_scaling import get_umbrella_deployment_options
 from QueryLake.misc_functions.external_providers import external_llm_count_tokens
 from QueryLake.misc_functions.server_class_functions import find_function_calls
 from QueryLake.routing.ws_toolchain import toolchain_websocket_handler
