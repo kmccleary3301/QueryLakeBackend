@@ -151,6 +151,69 @@ def fetch_toolchain_config(database: Session,
     toolchain_db : sql_db_tables.toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).first()
     return json.loads(toolchain_db.content)
 
+def update_toolchain_config(
+    database: Session,
+    auth: AuthType,
+    toolchain_id: str,
+    toolchain: dict,
+    umbrella=None,
+):
+    """
+    Admin helper to upsert a toolchain config in the SQL database.
+
+    Notes:
+    - The stored JSON is treated as the source of truth for editor state (e.g. UI spec).
+    - If an Umbrella instance is provided, the in-memory toolchain registries are updated
+      so new sessions can immediately see the edits.
+    """
+    (user, _) = get_user(database, auth)
+    assert user.is_admin, "User not authorized"
+    assert isinstance(toolchain, dict), "toolchain must be an object"
+
+    if toolchain_id is None or toolchain_id == "":
+        toolchain_id = toolchain.get("id", "")
+    assert toolchain_id, "toolchain_id required"
+    if "id" in toolchain:
+        assert toolchain["id"] == toolchain_id, "toolchain_id mismatch"
+
+    # Validate minimum required legacy shape (extras are allowed and preserved).
+    tc_v1 = ToolChain(**toolchain)
+
+    existing = database.exec(
+        select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)
+    ).first()
+    payload = json.dumps(toolchain, indent=4)
+    if existing:
+        existing.title = tc_v1.name
+        existing.category = tc_v1.category
+        existing.content = payload
+    else:
+        database.add(
+            sql_db_tables.toolchain(
+                toolchain_id=toolchain_id,
+                title=tc_v1.name,
+                category=tc_v1.category,
+                content=payload,
+            )
+        )
+    database.commit()
+
+    if umbrella is not None:
+        try:
+            from QueryLake.typing.toolchains import ToolChainV2
+            from QueryLake.toolchains.legacy_converter import convert_toolchain_dict
+
+            umbrella.toolchain_configs[toolchain_id] = tc_v1
+            try:
+                umbrella.toolchain_configs_v2[toolchain_id] = ToolChainV2.model_validate(toolchain)
+            except Exception:
+                umbrella.toolchain_configs_v2[toolchain_id] = convert_toolchain_dict(toolchain)
+        except Exception:
+            # Cache refresh is best-effort; persistence already succeeded.
+            pass
+
+    return {"toolchain_id": toolchain_id}
+
 def create_toolchain_session(database : Session,
                              toolchain_function_caller : Callable[[], Callable],
                              auth : AuthType,

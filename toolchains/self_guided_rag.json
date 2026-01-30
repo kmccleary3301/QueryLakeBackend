@@ -82,6 +82,208 @@
             ]
         }
     },
+    "ui_spec_v2": {
+        "version": 2,
+        "root": "root",
+        "meta": {
+            "name": "self_guided_rag_basf_v2",
+            "updatedAt": 0
+        },
+        "nodes": {
+            "root": {
+                "id": "root",
+                "kind": "layout",
+                "type": "stack",
+                "direction": "vertical",
+                "children": [
+                    "container"
+                ],
+                "style": {
+                    "height": "full",
+                    "gap": "none",
+                    "className": "h-full w-full"
+                },
+                "label": "Root"
+            },
+            "container": {
+                "id": "container",
+                "kind": "layout",
+                "type": "box",
+                "children": [
+                    "contentScroll"
+                ],
+                "footer": "footer",
+                "style": {
+                    "height": "full",
+                    "padding": "none",
+                    "overflow": "hidden",
+                    "className": "mx-auto w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] pt-4 pb-8"
+                },
+                "label": "Centered Container"
+            },
+            "contentScroll": {
+                "id": "contentScroll",
+                "kind": "layout",
+                "type": "scroll",
+                "children": [
+                    "contentStack"
+                ],
+                "style": {
+                    "padding": "none",
+                    "className": "min-h-0 flex-1"
+                },
+                "label": "Content Scroll"
+            },
+            "contentStack": {
+                "id": "contentStack",
+                "kind": "layout",
+                "type": "stack",
+                "direction": "vertical",
+                "children": [
+                    "intro",
+                    "chat"
+                ],
+                "style": {
+                    "gap": "md",
+                    "padding": "none"
+                },
+                "label": "Content Stack"
+            },
+            "intro": {
+                "id": "intro",
+                "kind": "component",
+                "componentId": "basf-intro-screen",
+                "label": "BASF Intro",
+                "config": {},
+                "bindings": {
+                    "chatHistory": {
+                        "kind": "state",
+                        "path": "/chat_history",
+                        "fallback": []
+                    }
+                },
+                "hooks": [
+                    {
+                        "hook": "submit",
+                        "fires": [
+                            {
+                                "index": 1,
+                                "actions": [
+                                    {
+                                        "type": "emitEvent",
+                                        "nodeId": "user_question_event",
+                                        "inputs": {
+                                            "question": {
+                                                "kind": "payload",
+                                                "path": "/text"
+                                            },
+                                            "collection_ids": {
+                                                "kind": "ui",
+                                                "path": "/collections/selectedIds",
+                                                "fallback": []
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "chat": {
+                "id": "chat",
+                "kind": "component",
+                "componentId": "chat",
+                "label": "Chat Transcript",
+                "config": {},
+                "bindings": {
+                    "messages": {
+                        "kind": "state",
+                        "path": "/chat_history",
+                        "fallback": []
+                    }
+                }
+            },
+            "footer": {
+                "id": "footer",
+                "kind": "layout",
+                "type": "box",
+                "children": [
+                    "chatInput"
+                ],
+                "style": {
+                    "padding": "none",
+                    "className": "pb-2"
+                },
+                "label": "Footer"
+            },
+            "chatInput": {
+                "id": "chatInput",
+                "kind": "component",
+                "componentId": "chat-input",
+                "label": "Chat Input",
+                "config": {
+                    "showCollections": true,
+                    "showModelPicker": true
+                },
+                "hooks": [
+                    {
+                        "hook": "submit",
+                        "fires": [
+                            {
+                                "index": 1,
+                                "actions": [
+                                    {
+                                        "type": "emitEvent",
+                                        "nodeId": "user_question_event",
+                                        "inputs": {
+                                            "question": {
+                                                "kind": "payload",
+                                                "path": "/text"
+                                            },
+                                            "collection_ids": {
+                                                "kind": "ui",
+                                                "path": "/collections/selectedIds",
+                                                "fallback": []
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "hook": "openCollections",
+                        "fires": [
+                            {
+                                "index": 1,
+                                "actions": [
+                                    {
+                                        "type": "openModal",
+                                        "modalId": "collectionPicker"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "hook": "openModel",
+                        "fires": [
+                            {
+                                "index": 1,
+                                "actions": [
+                                    {
+                                        "type": "openModal",
+                                        "modalId": "modelPicker"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    },
     "initial_state": {
         "title": "New Chat",
         "chat_history": []

@@ -206,6 +206,13 @@ fastapi_app = FastAPI(
     middleware=middleware
 )
 
+@fastapi_app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    # Avoid noisy 404s when users open backend URLs (e.g. /healthz) in a browser.
+    # We intentionally return 204 rather than serving an asset so the backend can
+    # remain stateless and avoid bundling frontend files.
+    return Response(status_code=204)
+
 
 @fastapi_app.middleware("http")
 async def attach_request_context(request: Request, call_next):
@@ -1005,6 +1012,20 @@ def build_and_run_application(
     This function is called by the new CLI orchestrator.
     """
     global_config = global_config.model_copy(deep=True)
+    api_only = os.environ.get("QUERYLAKE_API_ONLY", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if api_only:
+        logger.warning(
+            "QUERYLAKE_API_ONLY=1: skipping local model deployments (llm/rerank/embedding/surya)."
+        )
+        global_config.enabled_model_classes.llm = False
+        global_config.enabled_model_classes.rerank = False
+        global_config.enabled_model_classes.embedding = False
+        global_config.enabled_model_classes.surya = False
 
     cluster_capacity = _get_cluster_vram_capacity()
     per_node_capacity = _get_max_vram_per_node()
@@ -1028,12 +1049,27 @@ def build_and_run_application(
             try:
                 from QueryLake.operation_classes.ray_vllm_class import VLLMDeploymentClass
             except Exception as exc:
-                raise RuntimeError(
-                    "VLLM engine requested but vLLM is not available in this environment. "
-                    "Install vllm or disable local vLLM deployments."
-                ) from exc
-            ENGINE_CLASSES["vllm"] = VLLMDeploymentClass
-            ENGINE_CLASS_NAMES["vllm"] = "vllm"
+                skip_vllm = os.environ.get("QUERYLAKE_SKIP_VLLM", "").strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                )
+                if skip_vllm:
+                    logger.warning(
+                        "vLLM engine requested but vLLM is not available; skipping vLLM deployments "
+                        "(QUERYLAKE_SKIP_VLLM=1)."
+                    )
+                    VLLMDeploymentClass = None  # type: ignore[assignment]
+                else:
+                    raise RuntimeError(
+                        "VLLM engine requested but vLLM is not available in this environment. "
+                        "Install vllm, set QUERYLAKE_SKIP_VLLM=1 for API-only startup, "
+                        "or disable local vLLM deployments."
+                    ) from exc
+            if VLLMDeploymentClass is not None:
+                ENGINE_CLASSES["vllm"] = VLLMDeploymentClass
+                ENGINE_CLASS_NAMES["vllm"] = "vllm"
 
     embedding_models: Dict[str, DeploymentHandle] = {}
     if global_config.enabled_model_classes.embedding:

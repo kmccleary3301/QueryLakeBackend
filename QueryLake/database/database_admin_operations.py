@@ -7,6 +7,7 @@ from typing import Dict, List
 from ..typing.config import Model
 from ..typing.toolchains import ToolChain
 from sqlmodel import Session
+import os
 
 # from sqlmodel import Session, select, and_
 
@@ -75,10 +76,13 @@ def add_models_to_database(database : Session, models : List[Model]) -> None:
     
 def add_toolchains_to_database(database : Session,
                                toolchains : Dict[str, ToolChain]) -> None:
+    seed_only = os.getenv("QL_TOOLCHAINS_SEED_ONLY", "0") == "1"
     for toolchain_id, toolchain_content in toolchains.items():
         
         find_existing_toolchain = database.exec(select(sql_db_tables.toolchain).where(sql_db_tables.toolchain.toolchain_id == toolchain_id)).all()
         if len(find_existing_toolchain) > 0:
+            if seed_only:
+                continue
             find_existing_toolchain[0].title = toolchain_content.name
             find_existing_toolchain[0].category = toolchain_content.category
             find_existing_toolchain[0].content = json.dumps(toolchain_content.model_dump(exclude_unset=True), indent=4)

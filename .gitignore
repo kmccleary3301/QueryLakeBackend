@@ -26,3 +26,7 @@ logs/
 .venv/
 .venv_*/
 .venv*/
+
+# Local env files (often contain secrets)
+.env
+.env.*

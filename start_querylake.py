@@ -318,6 +318,7 @@ class RayGPUCluster:
                 "--node-ip-address=127.0.0.1",
                 f"--dashboard-port={cluster_config.dashboard_port}",
                 f"--port={cluster_config.head_port}",
+                "--block",
                 "--disable-usage-stats"
             ]
             if head_min_port is not None and head_max_port is not None:
@@ -392,6 +393,7 @@ class RayGPUCluster:
                     f"--resources={resources}",
                     f"--min-worker-port={min_port}",
                     f"--max-worker-port={max_port}",
+                    "--block",
                     "--disable-usage-stats"
                 ]
                 ray_tmpdir = os.environ.get("RAY_TMPDIR")
@@ -464,6 +466,18 @@ class RayGPUCluster:
             logger.info(f"  - Total VRAM in cluster: {total_vram}MB")
             
             expected_gpu_nodes = len(self.available_gpus)
+            api_only = os.environ.get("QUERYLAKE_API_ONLY", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if api_only and expected_gpu_nodes and len(gpu_nodes) == 0:
+                logger.info(
+                    "QUERYLAKE_API_ONLY=1: proceeding without GPU worker nodes (expected %s).",
+                    expected_gpu_nodes,
+                )
+                return True
             if len(gpu_nodes) == expected_gpu_nodes and total_gpus == expected_gpu_nodes:
                 logger.info("  🎉 SUCCESS: All GPU workers registered correctly!")
                 return True
@@ -564,6 +578,19 @@ Examples:
                         help="Run in worker-only mode. Optionally specify the number of GPUs to use.")
     parser.add_argument("--head-node", type=str,
                         help="The address of the Ray head node to connect to (e.g., 127.0.0.1:6379). Required for --workers mode.")
+    parser.add_argument(
+        "--allow-ray-stop",
+        action="store_true",
+        help=(
+            "Allow `ray stop --force` to run before startup. "
+            "WARNING: this can stop unrelated Ray workloads on the machine."
+        ),
+    )
+    parser.add_argument(
+        "--with-gpu-workers",
+        action="store_true",
+        help="Start GPU worker processes even when QUERYLAKE_API_ONLY=1.",
+    )
     parser.add_argument("--no-monitor", action="store_true",
                         help="Exit immediately after startup, for scripting.")
 
@@ -591,15 +618,31 @@ Examples:
             ports_to_clean = [cluster_config.head_port, cluster_config.dashboard_port]
             # Add worker ports to cleanup list later if needed
             
-            cluster.force_stop_existing_cluster()
+            if args.allow_ray_stop:
+                cluster.force_stop_existing_cluster()
+            else:
+                logger.info(
+                    "Skipping `ray stop --force` (use --allow-ray-stop to enable)."
+                )
             cluster.cleanup_ports(ports_to_clean)
             
             if not cluster.start_head_node():
                 raise RuntimeError("Failed to start the head node.")
             
             head_address = f"127.0.0.1:{cluster_config.head_port}"
-            if not cluster.start_workers(head_address):
-                 raise RuntimeError("Failed to start worker nodes.")
+            api_only = os.environ.get("QUERYLAKE_API_ONLY", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if api_only and not args.with_gpu_workers:
+                logger.info(
+                    "QUERYLAKE_API_ONLY=1: skipping GPU worker nodes (pass --with-gpu-workers to override)."
+                )
+            else:
+                if not cluster.start_workers(head_address):
+                    raise RuntimeError("Failed to start worker nodes.")
 
             if not cluster.connect_to_cluster(head_address):
                 raise RuntimeError("Failed to connect client to the cluster.")

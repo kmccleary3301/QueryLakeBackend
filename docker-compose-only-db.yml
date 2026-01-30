@@ -4,17 +4,19 @@ services:
     restart: always
     container_name: querylake_db
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydatabase
+      POSTGRES_USER: querylake_access
+      POSTGRES_PASSWORD: querylake_access_password
+      POSTGRES_DB: querylake_database
       # PARADEDB_TELEMETRY: true # Set to 'false' (or remove) to disable anonymous telemetry
     ports:
-      - "5432:5432"
+      - "5444:5432"
     volumes:
-      - paradedb_data:/var/lib/postgresql/data/
+      # Postgres 18+ images expect a single mount at /var/lib/postgresql so data can live in
+      # major-version-specific subdirectories (enables pg_upgrade without mount boundary issues).
+      - querylake_db_data:/var/lib/postgresql/
 
 volumes:
-  paradedb_data:
+  querylake_db_data:
 
 
 # The following works with the URL `postgresql://myuser:mypassword@localhost:5432/mydatabase`

@@ -405,6 +405,7 @@ class ToolChain(BaseModel):
     first_event_follow_up: Optional[str] = None
     display_configuration: Optional[DisplaySection] = None
     suggestions: Optional[List[startScreenSuggestion]] = []
+    ui_spec_v2: Optional[Dict[str, Any]] = None
     
     initial_state: Dict[str, Any]
     

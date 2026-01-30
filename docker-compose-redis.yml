@@ -1,0 +1,24 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    container_name: querylake_redis
+    # Bind only to localhost on the host to avoid exposing Redis on the network.
+    ports:
+      - "127.0.0.1:${QUERYLAKE_REDIS_HOST_PORT:-6393}:6379"
+    volumes:
+      - querylake_redis_data:/data
+    command:
+      - redis-server
+      - --bind
+      - 0.0.0.0
+      - --protected-mode
+      - "yes"
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${QUERYLAKE_REDIS_PASSWORD:?set QUERYLAKE_REDIS_PASSWORD}
+
+volumes:
+  querylake_redis_data:
+

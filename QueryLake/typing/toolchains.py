@@ -112,6 +112,7 @@ class ToolChainV2(BaseModel):
     display_configuration: Optional[DisplaySection] = None
     suggestions: List[StartScreenSuggestion] = Field(default_factory=list)
     first_event_follow_up: Optional[str] = None
+    ui_spec_v2: Optional[Dict[str, Any]] = None
 
 
 class ToolChainSessionFile(BaseModel):
