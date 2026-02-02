@@ -59,7 +59,7 @@ dependencies = [
   "google-search-results",
 
   # Ray Serve (core runtime) — keep pinned to match the cluster Ray version.
-  "ray[serve]==2.49.0",
+  "ray[serve]==2.53.0",
 
   # GPU inspection (VRAM-aware scheduling, diagnostics)
   "nvidia-ml-py",
