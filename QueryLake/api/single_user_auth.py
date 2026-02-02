@@ -8,10 +8,20 @@ from typing import Union, Tuple, List
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from time import time
+import logging
+import os
 
+
+logger = logging.getLogger(__name__)
 
 global_public_key, global_private_key = ecc_generate_public_private_key()
-OAUTH_SECRET_KEY = random_hash()
+OAUTH_SECRET_KEY = os.getenv("QUERYLAKE_OAUTH_SECRET_KEY")
+if not OAUTH_SECRET_KEY:
+    OAUTH_SECRET_KEY = random_hash()
+    logger.warning(
+        "QUERYLAKE_OAUTH_SECRET_KEY not set; generated ephemeral key. "
+        "OAuth2 tokens will be invalid after restart."
+    )
 
 def process_input_as_auth_type(auth: AuthInputType) -> AuthType:
     conversion_success = False

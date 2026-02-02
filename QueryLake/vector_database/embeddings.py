@@ -243,7 +243,12 @@ async def create_text_chunks(database : Session,
     embedding_start_time = time()
     
     if create_embeddings:
-        embeddings_all = await embedding_call(auth, flattened_splits)
+        try:
+            embeddings_all = await embedding_call(auth, flattened_splits)
+        except Exception:
+            logger.exception("Embedding call failed; continuing without embeddings.")
+            create_embeddings = False
+            embeddings_all = None
     
     time_dict["embedding"] = time() - embedding_start_time
     

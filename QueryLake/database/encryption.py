@@ -108,7 +108,9 @@ def aes_encrypt_zip_file(key : str,
     new_bytes = BytesIO()
     
     with py7zr.SevenZipFile(new_bytes, 'w', password=key, header_encryption=True) as z:
-        z.writed({"file": file_data})
+        if hasattr(file_data, "seek"):
+            file_data.seek(0)
+        z.writef(file_data, "file")
     
     return new_bytes.getvalue()
     
@@ -123,7 +125,12 @@ def aes_encrypt_zip_file_dict(key : str,
     new_bytes = BytesIO()
     
     with py7zr.SevenZipFile(new_bytes, 'w', password=key, header_encryption=True) as z:
-        z.writed(file_data)
+        for name, data in file_data.items():
+            if hasattr(data, "seek"):
+                data.seek(0)
+                z.writef(data, name)
+            else:
+                z.writestr(data, name)
     
     return new_bytes.getvalue()
 
@@ -206,7 +213,8 @@ def aes_recrypt_zip_file(
     new_archive = BytesIO()
     with py7zr.SevenZipFile(input_archive, mode='r', password=original_key) as z:
         with py7zr.SevenZipFile(new_archive, 'w', password=new_key, header_encryption=True) as z_new:
-            z_new.writed(z.readall())
+            for name, data in z.readall().items():
+                z_new.writestr(data, name)
     return new_archive
     
    
