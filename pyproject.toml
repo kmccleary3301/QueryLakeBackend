@@ -97,7 +97,7 @@ ocr = [
 # vLLM runtime is intentionally separate in production (run as upstream HTTP service),
 # but is provided here as an optional extra for experiments.
 vllm = [
-  "vllm",
+  "vllm>=0.14.1",
 ]
 
 dev = [
