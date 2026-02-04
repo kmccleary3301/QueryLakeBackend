@@ -1,5 +1,5 @@
 aiohappyeyeballs==2.6.1
-aiohttp==3.13.2
+aiohttp==3.13.3
 aiosignal==1.4.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
@@ -102,7 +102,7 @@ pillow==12.0.0
 prometheus-client==0.23.1
 prometheus-fastapi-instrumentator==7.1.0
 propcache==0.4.1
-protobuf==6.33.2
+protobuf==6.33.5
 psutil==7.2.1
 py-cpuinfo==9.0.0
 pybase64==1.4.3
@@ -116,7 +116,7 @@ pygments==2.19.2
 pyjwt==2.10.1
 python-dotenv==1.2.1
 python-json-logger==4.0.0
-python-multipart==0.0.21
+python-multipart==0.0.22
 pyyaml==6.0.3
 pyzmq==27.1.0
 ray==2.53.0
@@ -152,7 +152,7 @@ triton==3.5.0
 typer==0.21.0
 typing-extensions==4.15.0
 typing-inspection==0.4.2
-urllib3==2.6.2
+urllib3==2.6.3
 uvicorn==0.40.0
 uvloop==0.22.1
 vllm==0.14.1

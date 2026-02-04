@@ -6,7 +6,7 @@ from ..database.encryption import aes_decrypt_string, ecc_generate_public_privat
 from QueryLake.runtime.auth_provider import get_provider
 from typing import Union, Tuple, List
 from datetime import datetime, timedelta, timezone
-from jose import JWTError, jwt
+import jwt
 from time import time
 import logging
 import os

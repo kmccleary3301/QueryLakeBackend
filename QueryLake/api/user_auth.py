@@ -14,7 +14,7 @@ from typing import Tuple, Callable, Awaitable, Any, Union, List
 from .single_user_auth import get_user, OAUTH_SECRET_KEY, process_input_as_auth_type
 from ..database.encryption import aes_decrypt_string, aes_encrypt_string
 from fastapi_login import LoginManager
-from jose import JWTError, jwt
+import jwt
 from fastapi import FastAPI, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2PasswordRequestFormStrict

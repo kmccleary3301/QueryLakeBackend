@@ -17,14 +17,14 @@ dependencies = [
   "fastapi",
   "uvicorn",
   "sse-starlette",
-  "python-multipart",
+  "python-multipart>=0.0.22",
 
   # HTTP clients / streaming
   "httpx",
   "httpx-sse",
 
   # Auth / crypto
-  "python-jose",
+  "PyJWT>=2.10.1",
   "passlib",
   "fastapi-login",
   "cryptography",

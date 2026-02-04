@@ -16,7 +16,7 @@ pycryptodome
 py7zr
 eciespy
 eth-keys
-python-multipart
+python-multipart>=0.0.22
 ray[serve]
 transformers
 markdownify
@@ -33,7 +33,7 @@ selenium
 fastapi-login
 FlagEmbedding
 pgvector
-python-jose
+pyjwt>=2.10.1
 passlib
 lxml_html_clean
 exllamav2
@@ -49,7 +49,6 @@ nvidia-ml-py
 
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.35
-sqlitedict==2.1.0
 sqlmodel==0.0.22
 
 
