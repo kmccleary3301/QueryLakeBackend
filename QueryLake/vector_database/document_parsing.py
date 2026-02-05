@@ -4,7 +4,7 @@ from typing import List, Tuple, Union
 # from langchain.document_loaders import PyPDFium2Loader
 # from langchain.document_loaders.blob_loaders import Blob
 # import PyPDF2
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from io import BytesIO
 from urllib import request
 from markdownify import markdownify as md

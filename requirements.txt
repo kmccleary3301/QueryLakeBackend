@@ -20,7 +20,6 @@ python-multipart>=0.0.22
 ray[serve]
 transformers
 markdownify
-pypdf2
 openai
 tiktoken
 ocrmypdf

@@ -47,7 +47,6 @@ dependencies = [
 
   # Document + web tooling (non-ML)
   "pypdf",
-  "pypdf2",
   "pypdfium2",
   "py7zr",
   "markdownify",
