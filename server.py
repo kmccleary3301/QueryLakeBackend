@@ -284,6 +284,7 @@ class UmbrellaClass:
         embedding_handles: Dict[str, DeploymentHandle] = None,
         rerank_handles: Dict[str, DeploymentHandle] = None,
         surya_handles: Dict[str, DeploymentHandle] = None,
+        chandra_handles: Dict[str, DeploymentHandle] = None,
     ):
         logger.info("Initializing UmbrellaClass deployment")
         self.config : Config = configuration
@@ -301,6 +302,7 @@ class UmbrellaClass:
         self.rerank_handles = rerank_handles
         self.web_scraper_handle = web_scraper_handle
         self.surya_handles = surya_handles if surya_handles else {}
+        self.chandra_handles = chandra_handles if chandra_handles else {}
         
         logger.info("Connecting to database and synchronizing metadata")
         try:
@@ -333,6 +335,7 @@ class UmbrellaClass:
             "server_rerank_handles": self.rerank_handles,
             "server_web_scraper_handle": self.web_scraper_handle,
             "server_surya_handles": self.surya_handles,
+            "server_chandra_handles": self.chandra_handles,
             
             "database": self.database,
             "toolchains_available": self.toolchain_configs,
@@ -619,9 +622,20 @@ class UmbrellaClass:
         return await self.files_stream_endpoint(file_id, request)
 
     @fastapi_app.post("/files/{file_id}/versions/{version_id}/process")
-    async def process_file_version_endpoint(self, file_id: str, version_id: str, request: Request):
+    async def process_file_version_endpoint(
+        self,
+        file_id: str,
+        version_id: str,
+        request: Request,
+        ocr_profile: Optional[str] = None,
+    ):
         auth = await self._resolve_auth(request, None)
-        result = await self.files_runtime.process_version(file_id, version_id, auth=auth)
+        result = await self.files_runtime.process_version(
+            file_id,
+            version_id,
+            auth=auth,
+            ocr_profile=ocr_profile,
+        )
         return {"success": True, **result}
 
     @fastapi_app.get("/files/cas/{sha256}")
@@ -908,6 +922,50 @@ def _get_placement_group_config(
         replica_resources,
     )
     return pg_config
+
+
+def _normalize_chandra_deployment_resources(
+    *,
+    runtime_backend: str,
+    deployment_config: Dict[str, Any],
+    default_vram_required: int = 8192,
+) -> Tuple[Dict[str, Any], Dict[str, Union[int, float]], int]:
+    """Normalize Ray resources for a Chandra deployment based on runtime backend.
+
+    Important: In `runtime_backend="vllm_server"` mode, Chandra is a CPU-only proxy
+    to an external vLLM OpenAI server. We must not reserve Ray GPU/VRAM_MB resources
+    for the deployment, otherwise scheduling becomes misleading.
+    """
+
+    runtime_backend = str(runtime_backend or "hf").strip().lower()
+
+    declared_vram_required = deployment_config.pop("vram_required", default_vram_required)
+    if runtime_backend == "vllm_server":
+        required_vram = 0
+    else:
+        required_vram = int(declared_vram_required or default_vram_required)
+
+    ray_actor_options = deployment_config.get("ray_actor_options", {}) or {}
+    ray_actor_options["resources"] = ray_actor_options.get("resources", {}) or {}
+
+    if runtime_backend == "vllm_server":
+        ray_actor_options["num_gpus"] = 0
+        ray_actor_options["resources"].pop("VRAM_MB", None)
+        replica_resources: Dict[str, Union[int, float]] = {
+            "CPU": ray_actor_options.get("num_cpus", 2),
+        }
+    else:
+        ray_actor_options["num_gpus"] = max(ray_actor_options.get("num_gpus", 0.1), 0.1)
+        ray_actor_options["resources"]["VRAM_MB"] = required_vram
+        replica_resources = {
+            "GPU": ray_actor_options["num_gpus"],
+            "CPU": ray_actor_options.get("num_cpus", 2),
+            "VRAM_MB": ray_actor_options["resources"]["VRAM_MB"],
+        }
+
+    deployment_config["ray_actor_options"] = ray_actor_options
+    return deployment_config, replica_resources, required_vram
+
 
 def _get_cluster_vram_capacity() -> Optional[int]:
     """Return the total VRAM budget registered with the Ray cluster."""
@@ -1388,6 +1446,205 @@ def build_and_run_application(
                 model_card=surya_model
             )
 
+    chandra_handles: Dict[str, DeploymentHandle] = {}
+    if getattr(global_config.enabled_model_classes, "chandra", False):
+        try:
+            from QueryLake.operation_classes.ray_chandra_class import ChandraDeployment
+        except Exception as exc:
+            raise RuntimeError(
+                "Chandra OCR is enabled, but Chandra dependencies are missing. "
+                "Install the `ocr` extras needed by Chandra, or disable chandra."
+            ) from exc
+
+        chandra_models = list(getattr(global_config.other_local_models, "chandra_models", []) or [])
+        if not chandra_models:
+            logger.warning("Chandra is enabled but no chandra_models are configured.")
+
+        def _env_bool(name: str, default: bool) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+        def _env_int(name: str, default: int) -> int:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                return int(raw)
+            except Exception:
+                return default
+
+        def _env_float(name: str, default: float) -> float:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                return float(raw)
+            except Exception:
+                return default
+
+        def _normalize_url_list(raw: Any) -> list[str]:
+            if raw is None:
+                return []
+            if isinstance(raw, str):
+                candidates = [item.strip() for item in raw.split(",")]
+            elif isinstance(raw, (list, tuple)):
+                candidates = [str(item).strip() for item in raw]
+            else:
+                candidates = [str(raw).strip()]
+            return [item for item in candidates if item]
+
+        for chandra_model in chandra_models:
+            deployment_config = (chandra_model.deployment_config or {}).copy()
+            runtime_args = deployment_config.pop("runtime_args", {}) or {}
+            model_path = chandra_model.system_path or chandra_model.source
+            configured_backend = str(runtime_args.get("runtime_backend", "")).strip().lower()
+            default_backend = os.getenv("QUERYLAKE_CHANDRA_RUNTIME_BACKEND", "hf").strip().lower()
+            runtime_backend = configured_backend or default_backend or "hf"
+            if runtime_backend not in {"hf", "vllm", "vllm_server"}:
+                logger.warning(
+                    "Invalid Chandra runtime_backend='%s' for model %s; defaulting to hf.",
+                    runtime_backend,
+                    chandra_model.id,
+                )
+                runtime_backend = "hf"
+            runtime_args["runtime_backend"] = runtime_backend
+            if runtime_backend == "vllm_server":
+                config_server_base_url = str(
+                    getattr(global_config, "chandra_vllm_server_base_url", "") or ""
+                ).strip()
+                config_server_base_urls = _normalize_url_list(
+                    getattr(global_config, "chandra_vllm_server_base_urls", None)
+                )
+                config_server_model = str(
+                    getattr(global_config, "chandra_vllm_server_model", "") or ""
+                ).strip()
+                runtime_args["vllm_server_base_url"] = str(
+                    runtime_args.get("vllm_server_base_url")
+                    or config_server_base_url
+                    or os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URL", "http://127.0.0.1:8022/v1")
+                ).strip()
+                runtime_args["vllm_server_base_urls"] = _normalize_url_list(
+                    runtime_args.get("vllm_server_base_urls")
+                    or config_server_base_urls
+                    or os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URLS", "")
+                )
+                if not runtime_args["vllm_server_base_urls"]:
+                    runtime_args["vllm_server_base_urls"] = [runtime_args["vllm_server_base_url"]]
+                topology = str(
+                    runtime_args.get("vllm_server_topology")
+                    or getattr(global_config, "chandra_vllm_server_topology", None)
+                    or os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_TOPOLOGY", "")
+                ).strip().lower()
+                if topology in {"single", "striped"}:
+                    if topology == "single":
+                        runtime_args["vllm_server_base_urls"] = runtime_args["vllm_server_base_urls"][:1]
+                    elif topology == "striped" and len(runtime_args["vllm_server_base_urls"]) == 1:
+                        from urllib.parse import urlsplit, urlunsplit
+
+                        def _bump_port(url: str, delta: int) -> str:
+                            try:
+                                parts = urlsplit(url)
+                                host = parts.hostname or "127.0.0.1"
+                                port = parts.port or (443 if parts.scheme == "https" else 80)
+                                new_port = port + int(delta)
+                                netloc = f"{host}:{new_port}"
+                                return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+                            except Exception:
+                                return url
+
+                        primary = runtime_args["vllm_server_base_urls"][0]
+                        candidate = _bump_port(primary, 1)
+                        if candidate != primary:
+                            runtime_args["vllm_server_base_urls"] = [primary, candidate]
+                runtime_args["vllm_server_model"] = str(
+                    runtime_args.get("vllm_server_model")
+                    or config_server_model
+                    or os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_MODEL", str(model_path))
+                ).strip()
+                runtime_args["vllm_server_api_key"] = str(
+                    runtime_args.get("vllm_server_api_key")
+                    or os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_API_KEY", "")
+                ).strip()
+                runtime_args["vllm_server_timeout_seconds"] = float(
+                    runtime_args.get(
+                        "vllm_server_timeout_seconds",
+                        _env_float("QUERYLAKE_CHANDRA_VLLM_SERVER_TIMEOUT_SECONDS", 120.0),
+                    )
+                )
+                runtime_args["vllm_server_max_retries"] = int(
+                    runtime_args.get(
+                        "vllm_server_max_retries",
+                        _env_int("QUERYLAKE_CHANDRA_VLLM_SERVER_MAX_RETRIES", 2),
+                    )
+                )
+                runtime_args["vllm_server_retry_backoff_seconds"] = float(
+                    runtime_args.get(
+                        "vllm_server_retry_backoff_seconds",
+                        _env_float("QUERYLAKE_CHANDRA_VLLM_SERVER_RETRY_BACKOFF_SECONDS", 0.5),
+                    )
+                )
+                runtime_args["vllm_server_parallel_requests"] = int(
+                    runtime_args.get(
+                        "vllm_server_parallel_requests",
+                        _env_int("QUERYLAKE_CHANDRA_VLLM_SERVER_PARALLEL_REQUESTS", 24),
+                    )
+                )
+                runtime_args["vllm_server_probe_on_init"] = bool(
+                    runtime_args.get(
+                        "vllm_server_probe_on_init",
+                        _env_bool("QUERYLAKE_CHANDRA_VLLM_SERVER_PROBE_ON_INIT", True),
+                    )
+                )
+                runtime_args["vllm_server_fallback_to_hf_on_error"] = bool(
+                    runtime_args.get(
+                        "vllm_server_fallback_to_hf_on_error",
+                        # In vLLM-server mode, Chandra runs as a CPU-only proxy by default.
+                        # Falling back to HF inside that actor is risky (it can silently use GPUs
+                        # outside Ray scheduling), so the safe default is off.
+                        _env_bool("QUERYLAKE_CHANDRA_VLLM_SERVER_FALLBACK_TO_HF", False),
+                    )
+                )
+                runtime_args["vllm_server_circuit_breaker_threshold"] = int(
+                    runtime_args.get(
+                        "vllm_server_circuit_breaker_threshold",
+                        _env_int("QUERYLAKE_CHANDRA_VLLM_SERVER_CIRCUIT_BREAKER_THRESHOLD", 3),
+                    )
+                )
+            deployment_config, replica_resources, required_vram = _normalize_chandra_deployment_resources(
+                runtime_backend=runtime_backend,
+                deployment_config=deployment_config,
+            )
+
+            if required_vram > 0:
+                if per_node_capacity is not None and required_vram > per_node_capacity:
+                    logger.warning(
+                        "Chandra model %s declares %s MB VRAM requirement, but largest GPU only advertises %s MB.",
+                        chandra_model.id,
+                        required_vram,
+                        per_node_capacity,
+                    )
+                vram_budget.track(required_vram, f"chandra:{chandra_model.id}")
+
+            replica_count = deployment_config.get(
+                "num_replicas", deployment_config.get("min_replicas", 1)
+            )
+            pg_config = _get_placement_group_config(strategy, replica_count, replica_resources)
+            deployment_kwargs = {**pg_config, **deployment_config}
+
+            deployment_class = serve.deployment(
+                _func_or_class=ChandraDeployment,
+                name=f"chandra:{chandra_model.id}",
+                **deployment_kwargs,
+            )
+            handle = deployment_class.bind(
+                model_path=model_path,
+                **runtime_args,
+            )
+            chandra_handles[chandra_model.id] = handle
+            chandra_handles[chandra_model.name] = handle
+
     vram_budget.log_summary()
 
     umbrella_options = get_umbrella_deployment_options()
@@ -1400,6 +1657,7 @@ def build_and_run_application(
         embedding_handles=embedding_models,
         rerank_handles=rerank_models,
         surya_handles=surya_handles,
+        chandra_handles=chandra_handles,
     )
 
     serve.run(deployment)

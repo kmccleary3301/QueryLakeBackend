@@ -13,6 +13,7 @@ from .custom_model_functions.self_guided_search import self_guided_search
 from .search import *
 from .usage_tracking import *
 from ..misc_functions.chat_history import format_chat_history
+from typing import Optional
 # from .patho_report_stager import *
 
 server_dir = "/".join(os.path.dirname(os.path.realpath(__file__)).split("/")[:-2])
@@ -338,10 +339,16 @@ async def files_process_version(
     umbrella,
     file_id: str,
     version_id: str,
+    ocr_profile: Optional[str] = None,
 ):
     """Process a specific file version through the Files runtime (Phase 2).
 
     Returns {"job_id": ..., "status": ...}.
     """
     _ = database  # present for parity; not required here
-    return await umbrella.files_runtime.process_version(file_id, version_id, auth=auth)
+    return await umbrella.files_runtime.process_version(
+        file_id,
+        version_id,
+        auth=auth,
+        ocr_profile=ocr_profile,
+    )

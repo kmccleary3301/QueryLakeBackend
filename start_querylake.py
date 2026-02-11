@@ -184,11 +184,82 @@ class RayGPUCluster:
         self.head_process = None
         self.worker_processes = []
         self.available_gpus = []
+        # Tracks the GPUs we actually started Ray worker nodes for (may be a subset when
+        # reserving GPUs for external services like Chandra vLLM servers).
+        self._started_worker_gpus: Optional[List[Dict[str, Any]]] = None
         self.cluster_ready = False
+        self._managed_chandra_vllm_servers: List[Dict[str, Any]] = []
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _get_chandra_autostart_gpu_indices(self, *, allow_autostart: bool = True) -> List[int]:
+        """Return which physical GPU indices would be used for Chandra vLLM autostart.
+
+        Used to reserve GPUs from Ray scheduling when QueryLake is starting its own
+        local cluster. Returns an empty list when autostart is disabled or not allowed.
+        """
+
+        if not getattr(self.config.enabled_model_classes, "chandra", False):
+            return []
+
+        def _env_bool(name: str, default: bool) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+        autostart = bool(getattr(self.config, "chandra_vllm_server_autostart", False)) or _env_bool(
+            "QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART", False
+        )
+        if not autostart or not allow_autostart:
+            return []
+
+        gpus = self.get_gpu_info()
+        if not gpus:
+            return []
+
+        configured_topology = (
+            os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART_TOPOLOGY")
+            or getattr(self.config, "chandra_vllm_server_autostart_topology", "single")
+            or "single"
+        )
+        topology = str(configured_topology).strip().lower()
+        if topology not in {"single", "striped", "auto"}:
+            topology = "single"
+        if topology == "auto":
+            topology = "striped" if len(gpus) >= 2 else "single"
+
+        if topology == "striped" and len(gpus) >= 2:
+            return [int(gpus[0]["index"]), int(gpus[1]["index"])]
+        return [int(gpus[0]["index"])]
+
+    def _get_worker_gpu_exclude_indices(self, *, allow_autostart: bool = True) -> set[int]:
+        """Return the set of physical GPU indices that should be excluded from Ray workers."""
+
+        exclude: set[int] = set()
+        try:
+            configured = getattr(self.config.ray_cluster, "worker_gpu_exclude_indices", None)
+            if configured:
+                exclude |= {int(item) for item in configured}
+        except Exception:
+            pass
+
+        env_raw = (os.getenv("QUERYLAKE_RAY_WORKER_GPU_EXCLUDE") or "").strip()
+        if env_raw:
+            for token in env_raw.split(","):
+                token = token.strip()
+                if not token:
+                    continue
+                try:
+                    exclude.add(int(token))
+                except Exception:
+                    logger.warning("Ignoring invalid QUERYLAKE_RAY_WORKER_GPU_EXCLUDE entry: %r", token)
+
+        if allow_autostart:
+            exclude |= set(self._get_chandra_autostart_gpu_indices(allow_autostart=True))
+        return exclude
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
@@ -247,6 +318,136 @@ class RayGPUCluster:
         except Exception as e:
             logger.error(f"Failed to detect VRAM per GPU: {e}")
             return None
+
+    def maybe_start_chandra_vllm_servers(self, *, allow_autostart: bool = True) -> None:
+        """Optionally start the external Chandra vLLM server(s) for local deployments.
+
+        This is a best-effort convenience layer. In multi-node deployments, prefer
+        supervising vLLM servers via systemd/docker and only configure QueryLake
+        to point at their endpoints.
+        """
+
+        if not getattr(self.config.enabled_model_classes, "chandra", False):
+            return
+
+        def _env_bool(name: str, default: bool) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+        autostart = bool(getattr(self.config, "chandra_vllm_server_autostart", False)) or _env_bool(
+            "QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART", False
+        )
+        if not autostart:
+            return
+
+        if not allow_autostart:
+            logger.warning(
+                "Chandra vLLM autostart requested but not permitted in this mode. "
+                "Start vLLM servers externally and configure QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URLS."
+            )
+            return
+
+        gpus = self.get_gpu_info()
+        if not gpus:
+            logger.warning("Chandra vLLM autostart requested but no GPUs were detected.")
+            return
+
+        configured_topology = (
+            os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART_TOPOLOGY")
+            or getattr(self.config, "chandra_vllm_server_autostart_topology", "single")
+            or "single"
+        )
+        topology = str(configured_topology).strip().lower()
+        if topology not in {"single", "striped", "auto"}:
+            topology = "single"
+        if topology == "auto":
+            topology = "striped" if len(gpus) >= 2 else "single"
+
+        # "striped" means 2 endpoints by default (one per GPU for the first two GPUs).
+        if topology == "striped":
+            gpu_indices = [int(gpus[0]["index"]), int(gpus[1]["index"])]
+        else:
+            gpu_indices = [int(gpus[0]["index"])]
+
+        port_base = int(
+            os.getenv(
+                "QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART_PORT_BASE",
+                str(getattr(self.config, "chandra_vllm_server_autostart_port_base", 8022)),
+            )
+            or 8022
+        )
+        gpu_mem_util = float(
+            os.getenv(
+                "QUERYLAKE_CHANDRA_VLLM_SERVER_AUTOSTART_GPU_MEMORY_UTILIZATION",
+                str(getattr(self.config, "chandra_vllm_server_autostart_gpu_memory_utilization", 0.90)),
+            )
+            or 0.90
+        )
+
+        api_key = (
+            os.getenv("QUERYLAKE_CHANDRA_VLLM_SERVER_API_KEY")
+            or getattr(self.config, "chandra_vllm_server_autostart_api_key", None)
+            or "chandra-local-key"
+        )
+
+        host = os.getenv("CHANDRA_VLLM_HOST", "127.0.0.1").strip() or "127.0.0.1"
+        base_urls: List[str] = []
+        script_path = str(Path(__file__).resolve().parent / "scripts" / "chandra_vllm_server.sh")
+
+        for idx, gpu_index in enumerate(gpu_indices):
+            port = port_base + idx
+            runtime_dir = f"/tmp/querylake_chandra_vllm_server_gpu{idx}"
+            base_urls.append(f"http://{host}:{port}/v1")
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CHANDRA_VLLM_RUNTIME_DIR": runtime_dir,
+                    "CHANDRA_VLLM_PORT": str(port),
+                    "CHANDRA_VLLM_CUDA_VISIBLE_DEVICES": str(gpu_index),
+                    "CHANDRA_VLLM_GPU_MEMORY_UTILIZATION": str(gpu_mem_util),
+                    "CHANDRA_VLLM_API_KEY": str(api_key),
+                }
+            )
+            logger.info(
+                "Starting Chandra vLLM server (topology=%s gpu=%s port=%s util=%s dir=%s)",
+                topology,
+                gpu_index,
+                port,
+                gpu_mem_util,
+                runtime_dir,
+            )
+            subprocess.run([script_path, "start"], env=env, check=True)
+            self._managed_chandra_vllm_servers.append(
+                {"runtime_dir": runtime_dir, "port": port, "gpu": gpu_index, "script": script_path}
+            )
+
+        # Export defaults so server.py will wire the ChandraDeployment to the started servers.
+        os.environ.setdefault("QUERYLAKE_CHANDRA_RUNTIME_BACKEND", "vllm_server")
+        os.environ.setdefault("QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URLS", ",".join(base_urls))
+        os.environ.setdefault("QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URL", base_urls[0])
+        os.environ.setdefault("QUERYLAKE_CHANDRA_VLLM_SERVER_API_KEY", str(api_key))
+        os.environ.setdefault("QUERYLAKE_CHANDRA_VLLM_SERVER_TOPOLOGY", topology)
+
+    def maybe_stop_chandra_vllm_servers(self) -> None:
+        if not self._managed_chandra_vllm_servers:
+            return
+        logger.info("Stopping managed Chandra vLLM servers (%s)...", len(self._managed_chandra_vllm_servers))
+        for srv in reversed(self._managed_chandra_vllm_servers):
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CHANDRA_VLLM_RUNTIME_DIR": str(srv["runtime_dir"]),
+                    "CHANDRA_VLLM_PORT": str(srv["port"]),
+                }
+            )
+            try:
+                subprocess.run([str(srv["script"]), "stop"], env=env, check=False)
+            except Exception as exc:  # pragma: no cover - best effort shutdown
+                logger.warning("Failed stopping Chandra vLLM server at %s: %s", srv.get("runtime_dir"), exc)
+        self._managed_chandra_vllm_servers.clear()
     
     def cleanup_ports(self, ports: List[int]):
         """Clean up any processes using target ports before startup."""
@@ -355,8 +556,10 @@ class RayGPUCluster:
             logger.error(f"❌ Failed to start head node: {e}")
             return False
     
-    def start_workers(self, head_address: str) -> bool:
-        """Start one worker node per detected GPU."""
+    def start_workers(
+        self, head_address: str, *, exclude_gpu_indices: Optional[set[int]] = None
+    ) -> bool:
+        """Start one worker node per detected GPU (optionally excluding some GPUs)."""
         cluster_config = self.config.ray_cluster
         try:
             if not self.available_gpus:
@@ -364,15 +567,33 @@ class RayGPUCluster:
             if not self.available_gpus:
                 logger.error("❌ No GPUs found. Cannot start GPU workers.")
                 return False
-            
-            logger.info(f"🖥️ Found {len(self.available_gpus)} GPUs. Starting one worker per GPU.")
+
+            exclude_set: set[int] = set(exclude_gpu_indices or set())
+            candidate_gpus = [
+                gpu for gpu in self.available_gpus if int(gpu.get("index", -1)) not in exclude_set
+            ]
+            self._started_worker_gpus = list(candidate_gpus)
+
+            logger.info(f"🖥️ Found {len(self.available_gpus)} GPUs.")
             for gpu in self.available_gpus:
                 logger.info(f"   - GPU {gpu['index']}: {gpu['total_vram_mb']}MB VRAM")
-            
-            logger.info(f"🔧 Starting {len(self.available_gpus)} worker nodes, connecting to {head_address}...")
-            
-            for i, gpu in enumerate(self.available_gpus):
-                logger.info(f"  📦 Starting worker {i+1}/{len(self.available_gpus)} for GPU {gpu['index']}...")
+
+            if exclude_set:
+                logger.info(
+                    "Reserving GPUs from Ray worker nodes (excluded=%s).",
+                    ",".join(str(i) for i in sorted(exclude_set)),
+                )
+
+            if not candidate_gpus:
+                logger.info(
+                    "No GPU workers to start (all GPUs reserved/excluded). Continuing without Ray GPU workers."
+                )
+                return True
+
+            logger.info(f"🔧 Starting {len(candidate_gpus)} worker nodes, connecting to {head_address}...")
+
+            for i, gpu in enumerate(candidate_gpus):
+                logger.info(f"  📦 Starting worker {i+1}/{len(candidate_gpus)} for GPU {gpu['index']}...")
                 
                 # Isolate the worker to a single GPU
                 env = os.environ.copy()
@@ -407,7 +628,7 @@ class RayGPUCluster:
                 logger.info(f"  ✅ Launched worker for GPU {gpu['index']} (PID: {proc.pid}, Ports: {min_port}-{max_port})")
                 
                 # Stagger worker startups slightly to avoid GCS registration storms
-                if i < len(self.available_gpus) - 1:
+                if i < len(candidate_gpus) - 1:
                     logger.info(f"     -> Waiting 3s before starting next worker...")
                     time.sleep(3)
             
@@ -465,7 +686,11 @@ class RayGPUCluster:
             logger.info(f"  - Total GPUs in cluster: {total_gpus}")
             logger.info(f"  - Total VRAM in cluster: {total_vram}MB")
             
-            expected_gpu_nodes = len(self.available_gpus)
+            expected_gpu_nodes = (
+                len(self._started_worker_gpus)
+                if self._started_worker_gpus is not None
+                else len(self.available_gpus)
+            )
             api_only = os.environ.get("QUERYLAKE_API_ONLY", "").strip().lower() in (
                 "1",
                 "true",
@@ -542,6 +767,8 @@ class RayGPUCluster:
             if self.head_process:
                 try: self.head_process.wait(timeout=5)
                 except subprocess.TimeoutExpired: self.head_process.kill()
+
+            self.maybe_stop_chandra_vllm_servers()
 
             logger.info("  - All managed processes terminated.")
             
@@ -641,7 +868,8 @@ Examples:
                     "QUERYLAKE_API_ONLY=1: skipping GPU worker nodes (pass --with-gpu-workers to override)."
                 )
             else:
-                if not cluster.start_workers(head_address):
+                exclude_gpu_indices = cluster._get_worker_gpu_exclude_indices(allow_autostart=True)
+                if not cluster.start_workers(head_address, exclude_gpu_indices=exclude_gpu_indices):
                     raise RuntimeError("Failed to start worker nodes.")
 
             if not cluster.connect_to_cluster(head_address):
@@ -652,7 +880,8 @@ Examples:
             logger.info("🚀 Starting in Worker-Only mode.")
             head_address = args.head_node
             # Logic to limit GPUs will be added to start_workers
-            if not cluster.start_workers(head_address):
+            exclude_gpu_indices = cluster._get_worker_gpu_exclude_indices(allow_autostart=False)
+            if not cluster.start_workers(head_address, exclude_gpu_indices=exclude_gpu_indices):
                 raise RuntimeError("Failed to start and connect worker nodes.")
             
             if not cluster.connect_to_cluster(head_address):
@@ -661,6 +890,8 @@ Examples:
         # --- Common Cluster Verification and Deployment ---
         if not cluster.verify_cluster_status():
             raise RuntimeError("Cluster verification failed.")
+
+        cluster.maybe_start_chandra_vllm_servers(allow_autostart=args.workers is None)
 
         if not cluster.deploy_querylake_application(strategy):
             raise RuntimeError("Failed to deploy the QueryLake application.")

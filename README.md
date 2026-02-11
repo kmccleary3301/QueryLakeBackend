@@ -211,11 +211,15 @@ Model entries typically include:
 
 - `QUERYLAKE_API_ONLY=1` → skip local model deployments
 - `QUERYLAKE_SKIP_VLLM=1` → skip vLLM deployments if requested by config
+- `QUERYLAKE_CHANDRA_RUNTIME_BACKEND=hf|vllm|vllm_server` → default Chandra OCR runtime backend
+- `QUERYLAKE_CHANDRA_VLLM_SERVER_BASE_URLS=...` → external Chandra vLLM server endpoints (CSV)
+- `QUERYLAKE_CHANDRA_VLLM_SERVER_MODEL=chandra` → served model name for the external server
 - `QL_TOOLCHAINS_SEED_ONLY=1` → seed toolchains only if missing (no overwrite)
 - `QUERYLAKE_DB_CONNECT_TIMEOUT=5` → Postgres connect timeout
 - `QUERYLAKE_OAUTH_SECRET_KEY=...` → stable OAuth token signing
 - `QUERYLAKE_REDIS_URL=...` → enable Redis integration
 - `QUERYLAKE_RAY_TMPDIR=/tmp/querylake_ray` → Ray temp/log dir override
+- `QUERYLAKE_RAY_WORKER_GPU_EXCLUDE=0,1` → reserve physical GPU indices from Ray worker nodes
 
 ---
 
@@ -229,6 +233,63 @@ QueryLake uses Ray Serve to deploy inference runtimes:
 - **Autoscaling** per model (`min_replicas`, `max_replicas`, `target_ongoing_requests`, etc.)
 
 This enables mixed workloads (e.g., vLLM + embeddings + rerank) without starving large VRAM models.
+
+### Chandra OCR runtime backend (HF vs vLLM vs external vLLM server)
+
+Chandra supports multiple runtime backends in the same deployment class:
+- `runtime_backend="hf"` (default): HuggingFace path
+- `runtime_backend="vllm"`: in-process vLLM path (prototype / speedup track)
+- `runtime_backend="vllm_server"`: **recommended** external vLLM OpenAI server mode (CPU-only proxy in Ray)
+
+You can set backend per model with `deployment_config.runtime_args` in `config.json`,
+or globally via `QUERYLAKE_CHANDRA_RUNTIME_BACKEND`.
+
+Example model snippet:
+
+```json
+{
+  "enabled_model_classes": { "chandra": true },
+  "other_local_models": {
+    "chandra_models": [
+      {
+        "name": "Chandra OCR",
+        "id": "chandra",
+        "source": "models/chandra",
+        "deployment_config": {
+          "runtime_args": {
+            "runtime_backend": "vllm_server"
+          }
+        }
+      }
+    ]
+  },
+  "chandra_vllm_server_base_urls": ["http://127.0.0.1:8022/v1"],
+  "chandra_vllm_server_model": "chandra",
+  "chandra_vllm_server_topology": "single"
+}
+```
+
+Recommended read:
+- `docs/chandra/CHANDRA_OCR_VLLM_SERVER.md` (single vs striped topology, autostart, Ray GPU reservation)
+
+Notes:
+- In-process `runtime_backend="vllm"` currently rejects `vllm_data_parallel_size > 1`.
+- For multi-GPU OCR throughput, use `runtime_backend="vllm_server"` with a **striped** 2-endpoint setup.
+
+Optional local dev convenience (autostart a single-GPU server by default):
+
+```json
+{
+  "chandra_vllm_server_autostart": true,
+  "chandra_vllm_server_autostart_topology": "single"
+}
+```
+
+If you run the external vLLM servers outside QueryLake (systemd/docker/k8s), reserve those GPUs from Ray:
+
+```bash
+export QUERYLAKE_RAY_WORKER_GPU_EXCLUDE=0,1
+```
 
 ---
 

@@ -363,7 +363,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o"
+                    "value": "qwen2.5-vl-3b-instruct"
                 }
             ],
             "feed_mappings": [
@@ -470,7 +470,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o"
+                    "value": "qwen2.5-vl-3b-instruct"
                 },
                 {
                     "key": "model_parameters",
@@ -532,7 +532,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o"
+                    "value": "qwen2.5-vl-3b-instruct"
                 }
             ],
             "feed_mappings": [
@@ -610,7 +610,7 @@
                 },
                 {
                     "key": "model",
-                    "value": "openai/gpt-4o"
+                    "value": "qwen2.5-vl-3b-instruct"
                 }
             ],
             "feed_mappings": [

@@ -72,6 +72,7 @@ class OtherLocalModelsField(BaseModel):
     rerank_models: Optional[List[LocalModel]] = []
     embedding_models: Optional[List[LocalModel]] = []
     surya_models: Optional[List[LocalModel]] = []
+    chandra_models: Optional[List[LocalModel]] = []
 
 class ConfigDefaultModels(BaseModel):
     llm: str
@@ -83,6 +84,7 @@ class ConfigEnabledModelClasses(BaseModel):
     rerank: bool
     embedding: bool
     surya: bool
+    chandra: bool = False
 
 class RayClusterConfig(BaseModel):
     head_port: int
@@ -90,6 +92,10 @@ class RayClusterConfig(BaseModel):
     worker_port_base: int
     worker_port_step: int
     default_gpu_strategy: str
+    # Optional physical GPU indices (as reported by nvidia-smi / pynvml) to exclude
+    # from Ray worker node startup. This is useful when some GPUs are reserved for
+    # external services (e.g., Chandra external vLLM servers) or other workloads.
+    worker_gpu_exclude_indices: Optional[List[int]] = None
 
 class Config(BaseModel):
     default_toolchain: str
@@ -102,6 +108,20 @@ class Config(BaseModel):
     ray_cluster: RayClusterConfig
     vllm_upstream_base_url: Optional[str] = None
     vllm_upstream_model_map: Optional[Dict[str, str]] = None
+    chandra_vllm_server_base_url: Optional[str] = None
+    chandra_vllm_server_base_urls: Optional[List[str]] = None
+    chandra_vllm_server_model: Optional[str] = None
+    # Optional convenience + lifecycle knobs for Chandra external vLLM server mode.
+    # These are intentionally coarse; advanced tuning lives in env vars and
+    # scripts/chandra_vllm_server.sh.
+    chandra_vllm_server_topology: Optional[Literal["single", "striped"]] = None
+    chandra_vllm_server_autostart: bool = False
+    # Default to a single-GPU Chandra server to keep one GPU available for other local models.
+    # Use "striped" explicitly when you want to dedicate 2 GPUs to OCR throughput.
+    chandra_vllm_server_autostart_topology: Literal["single", "striped", "auto"] = "single"
+    chandra_vllm_server_autostart_port_base: int = 8022
+    chandra_vllm_server_autostart_gpu_memory_utilization: float = 0.90
+    chandra_vllm_server_autostart_api_key: Optional[str] = None
     
 class ChatHistoryEntry(BaseModel):
     role: Literal["user", "assistant", "system"]
