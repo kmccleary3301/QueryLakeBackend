@@ -1,0 +1,26 @@
+[
+  {
+    "query": "single-hop control room pressure limits",
+    "expected_ids": ["chunk_pressure_policy"],
+    "retrieved_ids": ["chunk_pressure_policy", "chunk_intro", "chunk_ops"],
+    "scenario": "depth_1_single"
+  },
+  {
+    "query": "single-hop flue-gas guidance",
+    "expected_ids": ["chunk_flue_guide"],
+    "retrieved_ids": ["chunk_flue_guide", "chunk_safety"],
+    "scenario": "depth_1_single"
+  },
+  {
+    "query": "multi-hop vapor recovery and mineral oil procedure",
+    "expected_ids": ["chunk_vapor_recovery", "chunk_mineral_oil"],
+    "retrieved_ids": ["chunk_vapor_recovery", "chunk_intro", "chunk_mineral_oil"],
+    "scenario": "depth_2_multi"
+  },
+  {
+    "query": "multi-hop identify cause, mitigation, and compliance section",
+    "expected_ids": ["chunk_cause", "chunk_mitigation", "chunk_compliance"],
+    "retrieved_ids": ["chunk_cause", "chunk_mitigation", "chunk_appendix", "chunk_compliance"],
+    "scenario": "depth_3_multi"
+  }
+]

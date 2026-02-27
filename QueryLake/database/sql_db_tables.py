@@ -3,12 +3,12 @@ from sqlmodel import Field, SQLModel, ARRAY, String, Integer, Float, JSON, Large
 
 from sqlalchemy.sql.schema import Column
 from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
-from sqlalchemy import event, text
+from sqlalchemy import UniqueConstraint, event, text
 
 from sqlalchemy.sql import func
 
 from sqlmodel import Session, create_engine, UUID
-from pgvector.sqlalchemy import Vector, HALFVEC
+from pgvector.sqlalchemy import Vector, HALFVEC, SPARSEVEC
 from sqlalchemy import Column
 from ..api.hashing import random_hash
 from sqlalchemy import Column, DDL, event, text
@@ -35,22 +35,48 @@ id_factories = {
     "document_chunk": generator_1,
     "collections": generator_1,
     "document_raw": generator_1,
+    "document_version": generator_1,
+    "document_artifact": generator_1,
+    "document_segment": generator_1,
+    "segmentation_run": generator_1,
+    "embedding_record": generator_1,
+    "segment_edge": generator_1,
     # Files v2
     "file": generator_1,
     "file_version": generator_1,
     "file_page": generator_1,
     "file_chunk": generator_1,
+    # Retrieval observability
+    "retrieval_run": generator_1,
+    "retrieval_pipeline_config": generator_1,
+    "retrieval_experiment": generator_1,
+    "retrieval_pipeline_binding": generator_1,
+    # Generic pipeline queue
+    "pipeline_work_item": generator_1,
 }
 
 id_types = {
     "document_chunk": id_type_1,
     "collections": id_type_1,
     "document_raw": id_type_1,
+    "document_version": id_type_1,
+    "document_artifact": id_type_1,
+    "document_segment": id_type_1,
+    "segmentation_run": id_type_1,
+    "embedding_record": id_type_1,
+    "segment_edge": id_type_1,
     # Files v2
     "file": id_type_1,
     "file_version": id_type_1,
     "file_page": id_type_1,
     "file_chunk": id_type_1,
+    # Retrieval observability
+    "retrieval_run": id_type_1,
+    "retrieval_pipeline_config": id_type_1,
+    "retrieval_experiment": id_type_1,
+    "retrieval_pipeline_binding": id_type_1,
+    # Generic pipeline queue
+    "pipeline_work_item": id_type_1,
 }
 
 # COLLECTION_TYPES = Literal["user", "organization", "global", "toolchain", "website"]
@@ -234,6 +260,154 @@ class file_dead_letter(SQLModel, table=True):
     event: dict = Field(sa_column=Column(JSONB))
     error: Optional[str] = None
 
+
+# ---------------------------------
+# Generic pipeline work queue
+# ---------------------------------
+
+class PipelineWorkItem(SQLModel, table=True):
+    __tablename__ = "pipeline_work_item"
+
+    id: Optional[str] = Field(default_factory=id_factories["pipeline_work_item"], primary_key=True, index=True, unique=True)
+    pipeline_key: str = Field(index=True)  # e.g. "documentchunk_embedding_backfill"
+    stage: str = Field(index=True)  # e.g. "embed_missing"
+    entity_table: str = Field(index=True)  # e.g. "documentchunk"
+    entity_id: str = Field(index=True)
+    collection_id: Optional[str] = Field(default=None, index=True)
+    priority: int = Field(default=100, index=True)
+
+    status: str = Field(default="pending", index=True)  # pending | leased | done | failed
+    attempts: int = Field(default=0, index=True)
+    lease_owner: Optional[str] = Field(default=None, index=True)
+    lease_expires_at: Optional[float] = Field(default=None, index=True)
+    available_at: float = Field(default_factory=time, index=True)
+
+    payload: dict = Field(sa_column=Column(JSONB), default={})
+    last_error: Optional[str] = Field(default=None)
+    created_at: float = Field(default_factory=time, index=True)
+    updated_at: float = Field(default_factory=time, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "pipeline_key",
+            "stage",
+            "entity_table",
+            "entity_id",
+            name="uq_pipeline_work_item_scope_entity",
+        ),
+    )
+
+
+# ---------------------------------
+# Retrieval observability (Phase 0)
+# ---------------------------------
+
+class retrieval_run(SQLModel, table=True):
+    run_id: Optional[str] = Field(default_factory=id_factories["retrieval_run"], primary_key=True, index=True, unique=True)
+    created_at: float = Field(default_factory=time, index=True)
+    completed_at: Optional[float] = Field(default=None, index=True)
+    status: str = Field(default="ok", index=True)  # "ok" | "error"
+
+    route: str = Field(index=True)  # e.g. search_hybrid, search_bm25
+    actor_user: Optional[str] = Field(default=None, index=True)
+    tenant_scope: Optional[str] = Field(default=None, index=True)
+
+    pipeline_id: Optional[str] = Field(default=None, index=True)
+    pipeline_version: Optional[str] = Field(default=None, index=True)
+
+    query_text: str = Field(default="")
+    query_hash: Optional[str] = Field(default=None, index=True)
+
+    filters: dict = Field(sa_column=Column(JSONB), default={})
+    budgets: dict = Field(sa_column=Column(JSONB), default={})
+    timings: dict = Field(sa_column=Column(JSONB), default={})
+    counters: dict = Field(sa_column=Column(JSONB), default={})
+    costs: dict = Field(sa_column=Column(JSONB), default={})
+    index_snapshots_used: dict = Field(sa_column=Column(JSONB), default={})
+    result_ids: list = Field(sa_column=Column(JSONB), default=[])
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+    error: Optional[str] = Field(default=None)
+
+
+class retrieval_candidate(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: str = Field(foreign_key=f"{retrieval_run.__tablename__}.run_id", index=True)
+    content_id: str = Field(index=True)
+    final_selected: bool = Field(default=True, index=True)
+
+    stage_scores: dict = Field(sa_column=Column(JSONB), default={})
+    stage_ranks: dict = Field(sa_column=Column(JSONB), default={})
+    provenance: list = Field(sa_column=Column(JSONB), default=[])
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+
+class retrieval_pipeline_config(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["retrieval_pipeline_config"], primary_key=True, index=True, unique=True)
+    pipeline_id: str = Field(index=True)
+    version: str = Field(index=True)
+    immutable_hash: str = Field(index=True)
+    spec_json: dict = Field(sa_column=Column(JSONB), default={})
+    created_at: float = Field(default_factory=time, index=True)
+    created_by: Optional[str] = Field(default=None, index=True)
+    status: str = Field(default="active", index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+    __table_args__ = (
+        UniqueConstraint("pipeline_id", "version", name="uq_retrieval_pipeline_config_pipeline_version"),
+    )
+
+
+class retrieval_experiment(SQLModel, table=True):
+    experiment_id: Optional[str] = Field(default_factory=id_factories["retrieval_experiment"], primary_key=True, index=True, unique=True)
+    title: str = Field(index=True)
+    owner: Optional[str] = Field(default=None, index=True)
+    status: str = Field(default="draft", index=True)  # draft | running | paused | completed | archived
+
+    baseline_pipeline_id: str = Field(index=True)
+    baseline_pipeline_version: str = Field(index=True)
+    candidate_pipeline_id: str = Field(index=True)
+    candidate_pipeline_version: str = Field(index=True)
+
+    created_at: float = Field(default_factory=time, index=True)
+    updated_at: float = Field(default_factory=time, index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+
+class retrieval_experiment_run(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    experiment_id: str = Field(foreign_key=f"{retrieval_experiment.__tablename__}.experiment_id", index=True)
+    query_hash: Optional[str] = Field(default=None, index=True)
+    query_text: str = Field(default="")
+
+    baseline_run_id: Optional[str] = Field(default=None, foreign_key=f"{retrieval_run.__tablename__}.run_id", index=True)
+    candidate_run_id: Optional[str] = Field(default=None, foreign_key=f"{retrieval_run.__tablename__}.run_id", index=True)
+
+    baseline_metrics: dict = Field(sa_column=Column(JSONB), default={})
+    candidate_metrics: dict = Field(sa_column=Column(JSONB), default={})
+    delta_metrics: dict = Field(sa_column=Column(JSONB), default={})
+    publish_mode: str = Field(default="baseline", index=True)
+    published_pipeline_id: Optional[str] = Field(default=None, index=True)
+    published_pipeline_version: Optional[str] = Field(default=None, index=True)
+    created_at: float = Field(default_factory=time, index=True)
+
+
+class retrieval_pipeline_binding(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["retrieval_pipeline_binding"], primary_key=True, index=True, unique=True)
+    route: str = Field(index=True)
+    tenant_scope: Optional[str] = Field(default=None, index=True)
+    active_pipeline_id: str = Field(index=True)
+    active_pipeline_version: str = Field(index=True)
+    previous_pipeline_id: Optional[str] = Field(default=None, index=True)
+    previous_pipeline_version: Optional[str] = Field(default=None, index=True)
+    updated_by: Optional[str] = Field(default=None, index=True)
+    updated_at: float = Field(default_factory=time, index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+    __table_args__ = (
+        UniqueConstraint("route", "tenant_scope", name="uq_retrieval_pipeline_binding_route_tenant"),
+    )
+
 class document_access_token(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=random_hash_32, primary_key=True, index=True, unique=True)
     hash_id: str = Field(index=True, unique=True)
@@ -391,6 +565,98 @@ class document_raw(SQLModel, table=True):
     md: Optional[dict] = Field(sa_column=Column(JSONB), default={})
 
 
+class document_version(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["document_version"], primary_key=True, index=True, unique=True)
+    document_id: str = Field(foreign_key=f"{document_raw.__tablename__}.id", index=True)
+    version_no: int = Field(index=True)
+    content_hash: Optional[str] = Field(default=None, index=True)
+    status: str = Field(default="ready", index=True)
+    created_at: float = Field(default_factory=time, index=True)
+    created_by: Optional[str] = Field(default=None, index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "version_no", name="uq_document_version_doc_version_no"),
+    )
+
+
+class document_artifact(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["document_artifact"], primary_key=True, index=True, unique=True)
+    document_version_id: str = Field(foreign_key=f"{document_version.__tablename__}.id", index=True)
+    artifact_type: str = Field(index=True)  # raw_text | markdown | ocr_layout | normalized_text
+    storage_ref: Optional[str] = Field(default=None, index=True)
+    text: Optional[str] = Field(default=None)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+    created_at: float = Field(default_factory=time, index=True)
+
+
+class document_segment(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["document_segment"], primary_key=True, index=True, unique=True)
+    document_version_id: str = Field(foreign_key=f"{document_version.__tablename__}.id", index=True)
+    artifact_id: Optional[str] = Field(default=None, foreign_key=f"{document_artifact.__tablename__}.id", index=True)
+    segment_type: str = Field(default="chunk", index=True)  # chunk | sentence | section | table | figure
+    segment_index: int = Field(default=0, index=True)
+    parent_segment_id: Optional[str] = Field(default=None, foreign_key=f"{'document_segment'}.id", index=True)
+    text: str = Field(default="")
+    md: dict = Field(sa_column=Column(JSONB), default={})
+    embedding: Optional[List[float]] = Field(sa_column=Column(HALFVEC(1024)), default=None)
+    embedding_sparse: Optional[dict] = Field(sa_column=Column(SPARSEVEC()), default=None)
+    created_at: float = Field(default_factory=time, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("document_version_id", "segment_type", "segment_index", name="uq_document_segment_version_type_index"),
+    )
+
+
+class segmentation_run(SQLModel, table=True):
+    run_id: Optional[str] = Field(default_factory=id_factories["segmentation_run"], primary_key=True, index=True, unique=True)
+    document_version_id: str = Field(foreign_key=f"{document_version.__tablename__}.id", index=True)
+    segment_type: str = Field(default="chunk", index=True)
+    status: str = Field(default="ok", index=True)
+    config: dict = Field(sa_column=Column(JSONB), default={})
+    stats: dict = Field(sa_column=Column(JSONB), default={})
+    created_at: float = Field(default_factory=time, index=True)
+    completed_at: Optional[float] = Field(default=None, index=True)
+
+
+class embedding_record(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["embedding_record"], primary_key=True, index=True, unique=True)
+    segment_id: str = Field(foreign_key=f"{document_segment.__tablename__}.id", index=True)
+    model_id: str = Field(index=True)
+    input_hash: str = Field(index=True)
+    embedding: Optional[List[float]] = Field(sa_column=Column(HALFVEC(1024)), default=None)
+    embedding_sparse: Optional[dict] = Field(sa_column=Column(SPARSEVEC()), default=None)
+    created_at: float = Field(default_factory=time, index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+
+    __table_args__ = (
+        UniqueConstraint("segment_id", "model_id", "input_hash", name="uq_embedding_record_segment_model_input_hash"),
+    )
+
+
+class segment_edge(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=id_factories["segment_edge"], primary_key=True, index=True, unique=True)
+    from_segment_id: str = Field(foreign_key=f"{document_segment.__tablename__}.id", index=True)
+    to_segment_id: str = Field(foreign_key=f"{document_segment.__tablename__}.id", index=True)
+    edge_type: str = Field(default="adjacent", index=True)  # adjacent | parent_child | citation | reference
+    weight: float = Field(default=1.0, index=True)
+    md: dict = Field(sa_column=Column(JSONB), default={})
+    created_at: float = Field(default_factory=time, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("from_segment_id", "to_segment_id", "edge_type", name="uq_segment_edge_from_to_type"),
+    )
+
+SEGMENT_INDEXED_COLUMNS = [
+    "id",
+    "segment_type",
+    "segment_index",
+    "text",
+    "md",
+    "created_at",
+]
+
+
 class DocumentChunk(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=id_factories["document_chunk"], primary_key=True, index=True, unique=True)
     creation_timestamp: Optional[float] = Field(default_factory=time)
@@ -403,6 +669,7 @@ class DocumentChunk(SQLModel, table=True):
     website_url : Optional[str] = Field(default=None, index=True)
     # embedding: Optional[List[float]] = Field(sa_column=Column(Vector(1024)), default=None) # Full 32-bit Precision
     embedding: Optional[List[float]] = Field(sa_column=Column(HALFVEC(1024)), default=None) # Half Precision (16 bit)
+    embedding_sparse: Optional[dict] = Field(sa_column=Column(SPARSEVEC()), default=None)
     private: bool = Field(default=False)
     
     document_md: dict = Field(sa_column=Column(JSONB), default={})

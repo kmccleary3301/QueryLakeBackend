@@ -60,6 +60,28 @@ if _PROM:
         "Total number of rate limit denials",
         labelnames=("route",),
     )
+    RETRIEVAL_RUNS_TOTAL = Counter(
+        "querylake_retrieval_runs_total",
+        "Total retrieval requests by route/status",
+        labelnames=("route", "status"),
+    )
+    RETRIEVAL_LATENCY_SECONDS = Histogram(
+        "querylake_retrieval_latency_seconds",
+        "Retrieval latency in seconds",
+        labelnames=("route",),
+        buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0),
+    )
+    RETRIEVAL_RESULTS_COUNT = Histogram(
+        "querylake_retrieval_results_count",
+        "Returned result count per retrieval request",
+        labelnames=("route", "status"),
+        buckets=(0, 1, 2, 5, 10, 20, 50, 100, 200, 500),
+    )
+    RETRIEVAL_CACHE_EVENTS_TOTAL = Counter(
+        "querylake_retrieval_cache_events_total",
+        "Retrieval cache events by stage/type",
+        labelnames=("stage", "event"),
+    )
 
     GPU_REPLICA_RESIDENCY = Gauge(
         "querylake_gpu_replica_resident",
@@ -105,6 +127,12 @@ if _PROM:
 
     def rate_limit_denied(route: str) -> None:
         RATE_LIMIT_DENIED_TOTAL.labels(route=route).inc()
+    def record_retrieval(route: str, status: str, latency_seconds: float, results_count: int) -> None:
+        RETRIEVAL_RUNS_TOTAL.labels(route=route, status=status).inc()
+        RETRIEVAL_LATENCY_SECONDS.labels(route=route).observe(max(0.0, float(latency_seconds)))
+        RETRIEVAL_RESULTS_COUNT.labels(route=route, status=status).observe(max(0, int(results_count)))
+    def record_retrieval_cache(stage: str, event: str) -> None:
+        RETRIEVAL_CACHE_EVENTS_TOTAL.labels(stage=stage, event=event).inc()
 
     def record_gpu_runtime_metadata(
         role: str,
@@ -145,6 +173,12 @@ else:
         "querylake_request_latency_seconds_sum": {(): 0.0},
         "querylake_request_latency_seconds_count": {(): 0.0},
         "querylake_rate_limit_denied_total": {},
+        "querylake_retrieval_runs_total": {},
+        "querylake_retrieval_latency_seconds_sum": {},
+        "querylake_retrieval_latency_seconds_count": {},
+        "querylake_retrieval_results_count_sum": {},
+        "querylake_retrieval_results_count_count": {},
+        "querylake_retrieval_cache_events_total": {},
     }
     _gauges: Dict[str, Dict[Tuple[Tuple[str, str], ...], float]] = {
         "querylake_sse_subscribers": {},
@@ -196,6 +230,15 @@ else:
 
     def rate_limit_denied(route: str) -> None:
         _inc("querylake_rate_limit_denied_total", {"route": route})
+    def record_retrieval(route: str, status: str, latency_seconds: float, results_count: int) -> None:
+        labels = {"route": route, "status": status}
+        _inc("querylake_retrieval_runs_total", labels)
+        _inc("querylake_retrieval_latency_seconds_sum", {"route": route}, float(latency_seconds))
+        _inc("querylake_retrieval_latency_seconds_count", {"route": route})
+        _inc("querylake_retrieval_results_count_sum", labels, float(results_count))
+        _inc("querylake_retrieval_results_count_count", labels)
+    def record_retrieval_cache(stage: str, event: str) -> None:
+        _inc("querylake_retrieval_cache_events_total", {"stage": stage, "event": event})
 
     def record_gpu_runtime_metadata(
         role: str,

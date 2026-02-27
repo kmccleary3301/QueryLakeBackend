@@ -1,0 +1,122 @@
+name: Retrieval Eval
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Execution profile"
+        required: true
+        default: "smoke"
+        type: choice
+        options:
+          - smoke
+          - nightly
+          - heavy
+
+jobs:
+  pr_fast:
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile == 'smoke')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Configure output directory
+        run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/pr_fast_${{ github.run_attempt }}" >> "$GITHUB_ENV"
+      - name: Retrieval preflight (smoke)
+        run: bash scripts/ci_retrieval_preflight.sh smoke
+      - name: Retrieval eval (smoke)
+        run: bash scripts/ci_retrieval_eval.sh smoke
+      - name: Retrieval parity (smoke)
+        run: bash scripts/ci_retrieval_parity.sh smoke
+      - name: BCAS strict script tests
+        run: pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+      - name: Build summary
+        run: |
+          python scripts/ci_retrieval_summary.py \
+            --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
+            --mode smoke \
+            --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
+          cat "${CI_RETRIEVAL_OUT_DIR}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts (smoke)
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-ci-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs_tmp/RAG/ci/${{ github.run_id }}/pr_fast_${{ github.run_attempt }}
+          retention-days: 14
+
+  nightly_medium:
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile == 'nightly')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Configure output directory
+        run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/nightly_medium_${{ github.run_attempt }}" >> "$GITHUB_ENV"
+      - name: Retrieval preflight (nightly)
+        run: bash scripts/ci_retrieval_preflight.sh nightly
+      - name: Retrieval eval (nightly)
+        run: bash scripts/ci_retrieval_eval.sh nightly
+      - name: Retrieval parity (nightly)
+        run: bash scripts/ci_retrieval_parity.sh nightly
+      - name: BCAS strict script tests
+        run: pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+      - name: Build summary
+        run: |
+          python scripts/ci_retrieval_summary.py \
+            --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
+            --mode nightly \
+            --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
+          cat "${CI_RETRIEVAL_OUT_DIR}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts (nightly)
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-ci-nightly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs_tmp/RAG/ci/${{ github.run_id }}/nightly_medium_${{ github.run_attempt }}
+          retention-days: 30
+
+  heavy_self_hosted:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'heavy'
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Configure output directory
+        run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/heavy_self_hosted_${{ github.run_attempt }}" >> "$GITHUB_ENV"
+      - name: Retrieval preflight (heavy)
+        run: bash scripts/ci_retrieval_preflight.sh heavy
+      - name: Retrieval eval (heavy)
+        run: bash scripts/ci_retrieval_eval.sh heavy
+      - name: Retrieval parity (heavy)
+        run: bash scripts/ci_retrieval_parity.sh heavy
+      - name: Build summary
+        run: |
+          python scripts/ci_retrieval_summary.py \
+            --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
+            --mode heavy \
+            --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
+          cat "${CI_RETRIEVAL_OUT_DIR}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload artifacts (heavy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-ci-heavy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs_tmp/RAG/ci/${{ github.run_id }}/heavy_self_hosted_${{ github.run_attempt }}
+          retention-days: 60

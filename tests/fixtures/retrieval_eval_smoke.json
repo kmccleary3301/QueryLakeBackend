@@ -1,0 +1,17 @@
+[
+  {
+    "query": "boiler pressure limits",
+    "expected_ids": ["doc_a_chunk_2", "doc_a_chunk_3"],
+    "retrieved_ids": ["doc_a_chunk_2", "doc_x_chunk_1", "doc_a_chunk_3", "doc_b_chunk_1"]
+  },
+  {
+    "query": "mineral oil procedures",
+    "expected_ids": ["doc_b_chunk_7"],
+    "retrieved_ids": ["doc_b_chunk_7", "doc_c_chunk_4", "doc_d_chunk_3"]
+  },
+  {
+    "query": "flue-gas analysis guides",
+    "expected_ids": ["doc_c_chunk_1", "doc_c_chunk_2"],
+    "retrieved_ids": ["doc_z_chunk_9", "doc_c_chunk_2", "doc_c_chunk_1", "doc_y_chunk_2"]
+  }
+]

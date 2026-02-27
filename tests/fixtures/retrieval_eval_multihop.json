@@ -1,0 +1,12 @@
+[
+  {
+    "query": "Which procedure links mineral oil cleanup to flue-gas checks?",
+    "expected_ids": ["mh_doc_03_chunk_02", "mh_doc_11_chunk_05"],
+    "retrieved_ids": ["mh_doc_03_chunk_02", "mh_doc_07_chunk_01", "mh_doc_11_chunk_05", "mh_doc_12_chunk_09"]
+  },
+  {
+    "query": "Find docs that connect steam limits and compressor failure modes",
+    "expected_ids": ["mh_doc_09_chunk_01", "mh_doc_14_chunk_03"],
+    "retrieved_ids": ["mh_doc_14_chunk_03", "mh_doc_02_chunk_02", "mh_doc_09_chunk_01"]
+  }
+]

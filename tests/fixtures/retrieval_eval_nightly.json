@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    {
+      "name": "enterprise_docs",
+      "file": "retrieval_eval_enterprise_docs.json"
+    },
+    {
+      "name": "multihop",
+      "file": "retrieval_eval_multihop.json"
+    },
+    {
+      "name": "code_search",
+      "file": "retrieval_eval_code_search.json"
+    }
+  ]
+}

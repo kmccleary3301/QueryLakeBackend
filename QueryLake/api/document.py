@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from ..typing.config import AuthType
 from ..typing.api_inputs import DocumentModifierArgs
 from ..misc_functions.function_run_clean import file_size_as_string
+from ..runtime.ingestion_lineage import create_upload_lineage_rows
 import asyncio
 import bisect
 import concurrent.futures
@@ -42,6 +43,10 @@ async def upload_document(database : Session,
                           return_file_hash : bool = False,
                           scan_text : bool = True,
                           create_embeddings : bool = True,
+                          create_sparse_embeddings: bool = False,
+                          sparse_embedding_function: str = "embedding_sparse",
+                          sparse_embedding_dimensions: int = 1024,
+                          enforce_sparse_dimension_match: bool = True,
                           await_embedding : bool = False,
                           document_metadata : dict = None) -> dict:
     """
@@ -171,6 +176,17 @@ async def upload_document(database : Session,
     collection.document_count += 1
     database.add(new_db_file)
     database.commit()
+    create_upload_lineage_rows(
+        database,
+        document_id=new_db_file.id,
+        created_by=user_auth.username,
+        content_hash=file_integrity,
+        storage_ref=f"{new_file_blob.id}:{new_db_file.blob_dir}",
+        metadata={
+            "file_name": file_name,
+            "collection_id": collection.id,
+        },
+    )
     
     if await_embedding and scan_text:
         time_dict_chunking = await chunk_documents(
@@ -180,7 +196,11 @@ async def upload_document(database : Session,
             [new_db_file.id], 
             [file_name],
             document_bytes_list=[file_data_bytes], 
-            create_embeddings=create_embeddings
+            create_embeddings=create_embeddings,
+            create_sparse_embeddings=create_sparse_embeddings,
+            sparse_embedding_function=sparse_embedding_function,
+            sparse_embedding_dimensions=sparse_embedding_dimensions,
+            enforce_sparse_dimension_match=enforce_sparse_dimension_match,
         )
         time_dict.update(time_dict_chunking)
         if "total" in time_dict:
@@ -192,7 +212,11 @@ async def upload_document(database : Session,
                                             [new_db_file.id], 
                                             [file_name],
                                             document_bytes_list=[file_data_bytes], 
-                                            create_embeddings=create_embeddings))
+                                            create_embeddings=create_embeddings,
+                                            create_sparse_embeddings=create_sparse_embeddings,
+                                            sparse_embedding_function=sparse_embedding_function,
+                                            sparse_embedding_dimensions=sparse_embedding_dimensions,
+                                            enforce_sparse_dimension_match=enforce_sparse_dimension_match))
     
     time_taken = time.time() - time_start
 
@@ -220,6 +244,10 @@ async def upload_archive(database : Session,
                          collection_type : str = "user",
                          scan_text : bool = True,
                          create_embeddings : bool = True,
+                         create_sparse_embeddings: bool = False,
+                         sparse_embedding_function: str = "embedding_sparse",
+                         sparse_embedding_dimensions: int = 1024,
+                         enforce_sparse_dimension_match: bool = True,
                          await_embedding : bool = False):
     """
     The batch version of upload_document.
@@ -404,6 +432,19 @@ async def upload_archive(database : Session,
     
     for doc in new_doc_db_entries:
         database.refresh(doc)
+
+    for i, doc in enumerate(new_doc_db_entries):
+        create_upload_lineage_rows(
+            database,
+            document_id=doc.id,
+            created_by=user_auth.username,
+            content_hash=sha256(files_retrieved_bytes[i]).hexdigest(),
+            storage_ref=f"{new_file_blob.id}:{doc.blob_dir}",
+            metadata={
+                "file_name": files_retrieved_names[i],
+                "collection_id": collection.id,
+            },
+        )
     
     time_dict["database_add"] = time.time() - db_add_start_time
     
@@ -415,7 +456,11 @@ async def upload_archive(database : Session,
             new_doc_db_entries, 
             files_retrieved_names,
             document_bytes_list=files_retrieved_bytes, 
-            create_embeddings=create_embeddings
+            create_embeddings=create_embeddings,
+            create_sparse_embeddings=create_sparse_embeddings,
+            sparse_embedding_function=sparse_embedding_function,
+            sparse_embedding_dimensions=sparse_embedding_dimensions,
+            enforce_sparse_dimension_match=enforce_sparse_dimension_match,
         )
         time_dict.update(time_dict_chunking)
         if "total" in time_dict:
@@ -427,7 +472,11 @@ async def upload_archive(database : Session,
                                             new_doc_db_entries, 
                                             files_retrieved_names,
                                             document_bytes_list=files_retrieved_bytes, 
-                                            create_embeddings=create_embeddings))
+                                            create_embeddings=create_embeddings,
+                                            create_sparse_embeddings=create_sparse_embeddings,
+                                            sparse_embedding_function=sparse_embedding_function,
+                                            sparse_embedding_dimensions=sparse_embedding_dimensions,
+                                            enforce_sparse_dimension_match=enforce_sparse_dimension_match))
     refresh_start_time = time.time()
     results = []
     for i, new_db_file in enumerate(new_doc_db_entries):
@@ -453,6 +502,10 @@ async def update_documents(database : Session,
                            data : List[dict] = None,
                            file: Union[List[str], UploadFile] = None,
                            create_embeddings : bool = True,
+                           create_sparse_embeddings: bool = False,
+                           sparse_embedding_function: str = "embedding_sparse",
+                           sparse_embedding_dimensions: int = 1024,
+                           enforce_sparse_dimension_match: bool = True,
                            await_embedding : bool = False):
     """
     Set the text for a given document in the database,
@@ -589,7 +642,11 @@ async def update_documents(database : Session,
                               chunking_names,
                               document_texts=chunking_texts,
                               document_metadata=chunking_metadata,
-                              create_embeddings=create_embeddings)
+                              create_embeddings=create_embeddings,
+                              create_sparse_embeddings=create_sparse_embeddings,
+                              sparse_embedding_function=sparse_embedding_function,
+                              sparse_embedding_dimensions=sparse_embedding_dimensions,
+                              enforce_sparse_dimension_match=enforce_sparse_dimension_match)
     elif len(chunking_docs) > 0:
         asyncio.create_task(chunk_documents(toolchain_function_caller,
                                             database,
@@ -598,7 +655,11 @@ async def update_documents(database : Session,
                                             chunking_names,
                                             document_texts=chunking_texts,
                                             document_metadata=chunking_metadata,
-                                            create_embeddings=create_embeddings))
+                                            create_embeddings=create_embeddings,
+                                            create_sparse_embeddings=create_sparse_embeddings,
+                                            sparse_embedding_function=sparse_embedding_function,
+                                            sparse_embedding_dimensions=sparse_embedding_dimensions,
+                                            enforce_sparse_dimension_match=enforce_sparse_dimension_match))
     
     database.commit()
     return True

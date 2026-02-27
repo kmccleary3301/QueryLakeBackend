@@ -1,0 +1,12 @@
+[
+  {
+    "query": "BASF boiler startup checklist",
+    "expected_ids": ["ent_doc_01_chunk_03"],
+    "retrieved_ids": ["ent_doc_01_chunk_03", "ent_doc_04_chunk_01", "ent_doc_07_chunk_02"]
+  },
+  {
+    "query": "vapor recovery hazard controls",
+    "expected_ids": ["ent_doc_02_chunk_08", "ent_doc_02_chunk_09"],
+    "retrieved_ids": ["ent_doc_02_chunk_08", "ent_doc_10_chunk_04", "ent_doc_02_chunk_09"]
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "query": "boiler pressure limits",
+    "expected_ids": ["chunk_a1"]
+  },
+  {
+    "query": "mineral oil treatment",
+    "expected_ids": ["chunk_b2"]
+  },
+  {
+    "query": "flue gas analysis",
+    "expected_ids": ["chunk_c3"]
+  }
+]

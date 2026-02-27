@@ -35,12 +35,48 @@ SELECT EXISTS (
 );
 """
 
+CHECK_SPARSE_INDEX_EXISTS_SQL = f"""
+SELECT EXISTS (
+    SELECT 1
+    FROM   pg_class c
+    JOIN   pg_namespace n ON n.oid = c.relnamespace
+    WHERE  c.relname = '{DocumentChunk.__tablename__}_sparse_vector_cos_idx'
+    AND    n.nspname = 'public'
+);
+"""
+
 CREATE_VECTOR_INDEX_SQL = f"""
 DO $$
 BEGIN
 	EXECUTE 'CREATE INDEX {DocumentChunk.__tablename__}_vector_cos_idx ON {DocumentChunk.__tablename__}
 				USING hnsw (embedding halfvec_cosine_ops)
 				WITH (m = 16, ef_construction = 64);';
+END
+$$;
+"""
+
+def _sparse_index_dimensions_default() -> int:
+    try:
+        value = int(os.environ.get("QUERYLAKE_SPARSE_INDEX_DIMENSIONS", "1024"))
+        if value <= 0:
+            return 1024
+        return value
+    except Exception:
+        return 1024
+
+
+def configured_sparse_index_dimensions() -> int:
+    return _sparse_index_dimensions_default()
+
+
+def create_sparse_vector_index_sql(dimensions: int) -> str:
+    dim = int(dimensions)
+    return f"""
+DO $$
+BEGIN
+    EXECUTE 'CREATE INDEX {DocumentChunk.__tablename__}_sparse_vector_cos_idx ON {DocumentChunk.__tablename__}
+                USING hnsw ((embedding_sparse::sparsevec({dim})) sparsevec_cosine_ops)
+                WITH (m = 16, ef_construction = 64);';
 END
 $$;
 """
@@ -58,6 +94,10 @@ $$;
 
 DELETE_VECTOR_INDEX_SQL = f"""
 DROP INDEX {DocumentChunk.__tablename__}_vector_cos_idx;
+"""
+
+DELETE_SPARSE_VECTOR_INDEX_SQL = f"""
+DROP INDEX IF EXISTS {DocumentChunk.__tablename__}_sparse_vector_cos_idx;
 """
 
 # CREATE_BM25_CHUNK_INDEX_SQL = """
@@ -97,6 +137,15 @@ DELETE_BM25_DOC_INDEX_SQL = f"""
 DROP INDEX search_{document_raw.__tablename__}_idx;
 """
 
+ADD_SPARSE_COLUMNS_SQL = f"""
+ALTER TABLE {DocumentChunk.__tablename__}
+    ADD COLUMN IF NOT EXISTS embedding_sparse sparsevec;
+ALTER TABLE {document_segment.__tablename__}
+    ADD COLUMN IF NOT EXISTS embedding_sparse sparsevec;
+ALTER TABLE {embedding_record.__tablename__}
+    ADD COLUMN IF NOT EXISTS embedding_sparse sparsevec;
+"""
+
 def check_index_created(database: Session):
     result = database.exec(text(CHECK_INDEX_EXISTS_SQL))
     index_exists = list(result)[0][0]
@@ -104,6 +153,11 @@ def check_index_created(database: Session):
 
 def check_file_index_created(database: Session):
     result = database.exec(text(CHECK_FILE_INDEX_EXISTS_SQL))
+    index_exists = list(result)[0][0]
+    return index_exists
+
+def check_sparse_index_created(database: Session):
+    result = database.exec(text(CHECK_SPARSE_INDEX_EXISTS_SQL))
     index_exists = list(result)[0][0]
     return index_exists
 
@@ -116,6 +170,8 @@ def initialize_database_engine() -> Session:
         connect_args={"connect_timeout": connect_timeout},
     )
     logger.info("Connecting to ParadeDB/Postgres at %s (timeout=%ss)", url, connect_timeout)
+    sparse_index_dimensions = _sparse_index_dimensions_default()
+    sparse_index_sql = create_sparse_vector_index_sql(sparse_index_dimensions)
     
     REBUILD_INDEX = False
     
@@ -134,10 +190,18 @@ def initialize_database_engine() -> Session:
     except OperationalError as exc:
         logger.error("Database session validation failed: %s", exc)
         raise
+
+    try:
+        database.exec(text(ADD_SPARSE_COLUMNS_SQL))
+        database.commit()
+    except Exception as exc:
+        logger.warning("Failed to ensure sparse columns exist; sparse lane may be unavailable: %s", exc)
+        database.rollback()
     
     if REBUILD_INDEX:
         logger.info("Dropping existing vector and BM25 indices per configuration")
         database.exec(text(DELETE_VECTOR_INDEX_SQL))
+        database.exec(text(DELETE_SPARSE_VECTOR_INDEX_SQL))
         database.exec(text(DELETE_BM25_CHUNK_INDEX_SQL))
         database.exec(text(DELETE_BM25_DOC_INDEX_SQL))
         database.commit()
@@ -154,6 +218,7 @@ def initialize_database_engine() -> Session:
         try:
             logger.info("Creating vector and BM25 indices for DocumentChunk/document_raw")
             database.exec(text(CREATE_VECTOR_INDEX_SQL))
+            database.exec(text(sparse_index_sql))
             database.exec(text(CREATE_BM25_CHUNK_INDEX_SQL))
             database.exec(text(CREATE_BM25_DOC_INDEX_SQL))
             database.commit()
@@ -185,6 +250,18 @@ def initialize_database_engine() -> Session:
 
         # Ensure new Files indices are present as well
         try:
+            sparse_idx_exists = check_sparse_index_created(database_2)
+            logger.debug("Sparse vector index present: %s", sparse_idx_exists)
+            if not sparse_idx_exists:
+                logger.info("Creating sparse vector index for document chunks (dims=%s)", sparse_index_dimensions)
+                database_2.exec(text(sparse_index_sql))
+                database_2.commit()
+                logger.info("Sparse vector index created successfully")
+        except Exception as e:
+            logger.warning("Failed to create sparse vector index: %s", e)
+            database_2.rollback()
+
+        try:
             file_idx_exists = check_file_index_created(database_2)
             logger.debug("File chunk indices present: %s", file_idx_exists)
             if not file_idx_exists:
@@ -195,11 +272,24 @@ def initialize_database_engine() -> Session:
                 logger.info("File chunk indices created successfully")
         except Exception as e:
             logger.warning("Failed to create file chunk indices: %s", e)
+            database_2.rollback()
 
         # Return the *fresh* sessions to prevent the aforementioned bug
         return database_2, engine_2
         
     # Ensure Files indices are present
+    try:
+        sparse_idx_exists = check_sparse_index_created(database)
+        logger.debug("Sparse vector index present: %s", sparse_idx_exists)
+        if not sparse_idx_exists:
+            logger.info("Creating sparse vector index for document chunks (dims=%s)", sparse_index_dimensions)
+            database.exec(text(sparse_index_sql))
+            database.commit()
+            logger.info("Sparse vector index created successfully")
+    except Exception as e:
+        logger.warning("Failed to create sparse vector index: %s", e)
+        database.rollback()
+
     try:
         file_idx_exists = check_file_index_created(database)
         logger.debug("File chunk indices present: %s", file_idx_exists)
@@ -211,5 +301,6 @@ def initialize_database_engine() -> Session:
             logger.info("File chunk indices created successfully")
     except Exception as e:
         logger.warning("Failed to create file chunk indices: %s", e)
+        database.rollback()
 
     return database, engine

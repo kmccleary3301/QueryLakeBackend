@@ -1,0 +1,12 @@
+[
+  {
+    "query": "where is weighted fusion implemented",
+    "expected_ids": ["code_retrieval_primitives_legacy_weighted_fusion"],
+    "retrieved_ids": ["code_retrieval_primitives_legacy_weighted_fusion", "code_search_hybrid_sql_weighted", "code_rrf_fusion_test"]
+  },
+  {
+    "query": "replay retrieval run api function",
+    "expected_ids": ["code_search_replay_retrieval_run"],
+    "retrieved_ids": ["code_search_replay_retrieval_run", "code_list_retrieval_runs", "code_retrieval_pipeline_registry"]
+  }
+]

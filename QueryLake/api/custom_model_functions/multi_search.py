@@ -171,15 +171,20 @@ async def llm_multistep_search(database : Session,
         if search_web:
             await web_search(database, toolchain_function_caller, auth, query, 10, web_timeout=web_timeout)
         
-        search_results = await search_hybrid(database,
-                                              auth,
-                                              toolchain_function_caller,
-                                              query,
-                                              collection_ids=collection_ids,
-                                              use_lexical=True,
-                                              use_embeddings=True,
-                                              use_web=search_web,
-                                              k=5)
+        search_results_payload = await search_hybrid(
+            database=database,
+            toolchain_function_caller=toolchain_function_caller,
+            auth=auth,
+            query=query,
+            collection_ids=collection_ids,
+            limit_bm25=5,
+            limit_similarity=5,
+            bm25_weight=0.5,
+            similarity_weight=0.5,
+            web_search=search_web,
+            group_chunks=True,
+        )
+        search_results = search_results_payload.get("rows", [])
         
         logs.append({"action": "search", "content": question})
         new_sources = [source for source in search_results if source["id"] not in source_ids]
