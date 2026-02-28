@@ -50,6 +50,7 @@ make health
 make sdk-install-dev
 make sdk-test
 make sdk-smoke
+make sdk-release-check
 ```
 
 ## Common workflows

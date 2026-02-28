@@ -15,6 +15,7 @@ From repo root:
 ```bash
 make sdk-test
 make sdk-build
+make sdk-release-check
 ```
 
 Expected artifacts:
@@ -49,6 +50,25 @@ For TestPyPI:
 ```bash
 python -m twine upload --repository testpypi dist/*
 ```
+
+Or use the helper script from repo root:
+
+```bash
+# Check-only
+./scripts/dev/release_sdk.sh check
+
+# Upload to TestPyPI
+./scripts/dev/release_sdk.sh testpypi
+
+# Upload to PyPI
+./scripts/dev/release_sdk.sh pypi
+```
+
+Or use GitHub Actions:
+
+- Workflow: `.github/workflows/sdk_publish.yml`
+- Trigger: manual (`workflow_dispatch`)
+- Input `target`: `testpypi` or `pypi`
 
 ## Post-release verification
 

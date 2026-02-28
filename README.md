@@ -134,6 +134,15 @@ This repository now has two packaging tracks:
 
 Use the standalone SDK package for application developers and researchers. Keep backend runtime dependencies isolated to backend deployments.
 
+Release helpers:
+
+```bash
+make sdk-release-check
+# optional publish helpers
+make sdk-release-testpypi
+make sdk-release-pypi
+```
+
 ## Runtime notes
 
 ### API-only mode
