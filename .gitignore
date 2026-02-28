@@ -31,3 +31,11 @@ logs/
 # Local env files (often contain secrets)
 .env
 .env.*
+
+# Packaging artifacts
+dist/
+build/
+*.egg-info/
+sdk/python/dist/
+sdk/python/build/
+sdk/python/uv.lock

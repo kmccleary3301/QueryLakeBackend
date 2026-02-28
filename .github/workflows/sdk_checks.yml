@@ -1,0 +1,39 @@
+name: SDK Checks
+
+on:
+  pull_request:
+    paths:
+      - "sdk/python/**"
+      - "docs/sdk/**"
+      - "docs/setup/**"
+      - "README.md"
+      - "Makefile"
+  push:
+    branches: ["main"]
+    paths:
+      - "sdk/python/**"
+      - "docs/sdk/**"
+      - "docs/setup/**"
+      - "README.md"
+      - "Makefile"
+
+jobs:
+  sdk-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Run SDK tests
+        run: uv run --project sdk/python pytest sdk/python/tests -q
+
+      - name: Build SDK package
+        run: uv run --project sdk/python --with build python -m build sdk/python
