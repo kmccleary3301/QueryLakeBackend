@@ -49,6 +49,7 @@ make health
 ```bash
 make sdk-install-dev
 make sdk-test
+make sdk-smoke
 ```
 
 ## Common workflows

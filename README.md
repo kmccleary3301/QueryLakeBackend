@@ -55,6 +55,7 @@ make run-api-only
 
 ```bash
 make health
+make sdk-smoke
 ```
 
 ## SDK-first workflow (recommended)

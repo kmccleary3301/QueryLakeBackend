@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test sdk-install-dev sdk-test sdk-build
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test sdk-install-dev sdk-test sdk-build sdk-smoke
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -45,3 +45,6 @@ sdk-test:
 
 sdk-build:
 	uv run --project sdk/python --with build python -m build sdk/python
+
+sdk-smoke:
+	./scripts/dev/smoke_sdk_local.sh
