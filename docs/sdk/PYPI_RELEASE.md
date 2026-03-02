@@ -13,6 +13,7 @@ This runbook publishes the standalone Python SDK located at `sdk/python`.
 From repo root:
 
 ```bash
+make sdk-precommit-run
 make sdk-ci
 make sdk-release-check
 ```

@@ -5,6 +5,8 @@ This guide is the fastest way to go from zero to a working QueryLake RAG workflo
 For contributors validating packaging quality locally, run:
 
 ```bash
+make sdk-precommit-install
+make sdk-precommit-run
 make sdk-lint
 make sdk-type
 make sdk-ci

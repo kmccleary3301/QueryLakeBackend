@@ -93,6 +93,8 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 From repo root:
 
 ```bash
+make sdk-precommit-install
+make sdk-precommit-run
 make sdk-lint
 make sdk-type
 make sdk-ci

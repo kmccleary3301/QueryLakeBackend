@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: sdk-ruff
+        name: SDK Ruff
+        entry: uv run --project sdk/python --extra dev ruff check sdk/python/src sdk/python/tests
+        language: system
+        pass_filenames: false
+        files: ^sdk/python/
+        stages: [pre-commit, manual]
+
+      - id: sdk-mypy
+        name: SDK MyPy
+        entry: uv run --project sdk/python --extra dev mypy sdk/python/src/querylake_sdk
+        language: system
+        pass_filenames: false
+        files: ^sdk/python/src/querylake_sdk/
+        stages: [pre-push, manual]
+
+      - id: sdk-tests
+        name: SDK Tests
+        entry: uv run --project sdk/python --extra dev pytest sdk/python/tests -q
+        language: system
+        pass_filenames: false
+        files: ^sdk/python/
+        stages: [pre-push, manual]

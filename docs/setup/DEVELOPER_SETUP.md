@@ -48,6 +48,7 @@ make health
 
 ```bash
 make sdk-install-dev
+make sdk-precommit-install
 make sdk-lint
 make sdk-type
 make sdk-test

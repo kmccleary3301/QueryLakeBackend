@@ -137,6 +137,8 @@ Use the standalone SDK package for application developers and researchers. Keep 
 Release helpers:
 
 ```bash
+make sdk-precommit-install
+make sdk-precommit-run
 make sdk-lint
 make sdk-type
 make sdk-ci
