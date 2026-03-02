@@ -83,7 +83,7 @@ querylake --profile local rag list-documents --collection-id <id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <id>
 querylake --profile local rag random-chunks --collection-ids <id> --limit 5
 querylake --profile local rag search --collection-id <id> --query "main contribution" --preset tri-lane --with-metrics
-querylake --profile local rag search-batch --collection-id <id> --queries-file ./queries.txt --preset tri-lane --with-metrics
+querylake --profile local rag search-batch --collection-id <id> --queries-file ./queries.txt --preset tri-lane --with-metrics --output-file ./artifacts/query_batch.json
 # destructive: requires explicit confirmation
 querylake --profile local rag delete-document --document-id <doc_hash_id> --yes
 ```

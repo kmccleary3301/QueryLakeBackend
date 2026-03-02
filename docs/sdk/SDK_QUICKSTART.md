@@ -87,7 +87,8 @@ querylake rag search-batch \
   --collection-id <collection_id> \
   --queries-file ./queries.txt \
   --preset tri-lane \
-  --with-metrics
+  --with-metrics \
+  --output-file ./artifacts/batch_results.json
 ```
 
 ## 6) Profile management (optional)

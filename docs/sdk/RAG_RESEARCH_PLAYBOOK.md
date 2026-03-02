@@ -108,7 +108,8 @@ querylake --profile local rag search-batch \
   --collection-id <collection_id> \
   --queries-file ./queries.txt \
   --preset tri-lane \
-  --with-metrics
+  --with-metrics \
+  --output-file ./artifacts/query_batch.json
 ```
 
 ## 4) Python experiment harness

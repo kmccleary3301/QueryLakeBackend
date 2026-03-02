@@ -101,7 +101,7 @@ querylake --profile local rag search --collection-id <id> --query "hybrid retrie
 # lexical-only control path (direct BM25)
 querylake --profile local rag search --mode bm25 --collection-id <id> --query "hybrid retrieval design"
 # batch evaluation from newline-delimited query file
-querylake --profile local rag search-batch --collection-id <id> --queries-file ./queries.txt --preset tri-lane --with-metrics
+querylake --profile local rag search-batch --collection-id <id> --queries-file ./queries.txt --preset tri-lane --with-metrics --output-file ./artifacts/query_batch.json
 # destructive cleanup for one uploaded item
 querylake --profile local rag delete-document --document-id <doc_hash_id> --yes
 ```

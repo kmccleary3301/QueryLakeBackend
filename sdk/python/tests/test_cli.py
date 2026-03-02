@@ -646,6 +646,7 @@ def test_cli_rag_search_batch(monkeypatch, tmp_path, capsys):
 
     queries_file = tmp_path / "queries.txt"
     queries_file.write_text("# comment\nfirst query\n\nsecond query\nthird query\n", encoding="utf-8")
+    output_file = tmp_path / "out" / "batch_results.json"
 
     code = cli.main(
         [
@@ -660,13 +661,20 @@ def test_cli_rag_search_batch(monkeypatch, tmp_path, capsys):
             "--with-metrics",
             "--max-queries",
             "2",
+            "--output-file",
+            str(output_file),
         ]
     )
     assert code == 0
     out = capsys.readouterr().out
     assert "\"query_count\": 2" in out
+    assert "\"avg_result_count\": 2.0" in out
+    assert "\"avg_duration_ms\": 12.34" in out
     assert "\"first query\"" in out
     assert "\"second query\"" in out
     assert "\"third query\"" not in out
     assert _FakeClient.last_search_hybrid_with_metrics_kwargs is not None
     assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_sparse"] == 12
+    assert output_file.exists()
+    payload = json.loads(output_file.read_text(encoding="utf-8"))
+    assert payload["query_count"] == 2

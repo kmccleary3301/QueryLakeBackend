@@ -87,6 +87,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - add `--preset` for common retrieval profiles (`balanced`, `tri-lane`, `lexical-heavy`, `semantic-heavy`, `sparse-heavy`)
 - `querylake rag search-batch`
   - run newline-delimited query files with same mode/preset/metrics options as `rag search`
+  - supports `--output-file` to persist full batch JSON report
 
 ## Error model
 

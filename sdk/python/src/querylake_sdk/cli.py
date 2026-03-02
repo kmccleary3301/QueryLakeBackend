@@ -584,6 +584,16 @@ def _load_queries(path: str, *, max_queries: Optional[int]) -> List[str]:
     return queries
 
 
+def _extract_duration_ms(payload: Dict[str, Any]) -> Optional[float]:
+    duration = payload.get("duration")
+    if not isinstance(duration, dict):
+        return None
+    candidate = duration.get("total_ms", duration.get("total"))
+    if isinstance(candidate, (int, float)):
+        return float(candidate)
+    return None
+
+
 def cmd_rag_search(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     try:
@@ -609,8 +619,29 @@ def cmd_rag_search_batch(args: argparse.Namespace) -> int:
         "query_count": len(outputs),
         "mode": args.mode,
         "preset": args.preset,
+        "summary": {
+            "avg_result_count": (
+                (sum(item.get("total", 0) for item in outputs) / len(outputs)) if outputs else 0.0
+            ),
+            "avg_duration_ms": (
+                (
+                    sum(v for v in [_extract_duration_ms(item) for item in outputs] if v is not None)
+                    / max(
+                        1,
+                        sum(1 for v in [_extract_duration_ms(item) for item in outputs] if v is not None),
+                    )
+                )
+                if outputs
+                else None
+            ),
+        },
         "results": outputs,
     }
+    if args.output_file:
+        output_path = Path(args.output_file).expanduser().resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        payload["output_file"] = str(output_path)
     _print_output(payload, as_json=True)
     return 0
 
@@ -842,6 +873,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional cap on number of non-empty queries to run.",
+    )
+    p_rag_search_batch.add_argument(
+        "--output-file",
+        default=None,
+        help="Optional path to write full JSON payload.",
     )
     p_rag_search_batch.set_defaults(func=cmd_rag_search_batch)
 
