@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 import querylake_sdk.cli as cli
 
 
 class _FakeClient:
     last_base_url = None
+    last_search_hybrid_kwargs = None
+    last_search_hybrid_with_metrics_kwargs = None
 
     def __init__(self, *args, **kwargs):
         self.base_url = kwargs.get("base_url", "http://localhost")
@@ -62,11 +66,11 @@ class _FakeClient:
         }
 
     def search_hybrid(self, **kwargs):
-        _ = kwargs
+        _FakeClient.last_search_hybrid_kwargs = dict(kwargs)
         return [{"id": "r1", "text": "alpha"}, {"id": "r2", "text": "beta"}]
 
     def search_hybrid_with_metrics(self, **kwargs):
-        _ = kwargs
+        _FakeClient.last_search_hybrid_with_metrics_kwargs = dict(kwargs)
         return {
             "rows": [{"id": "r1", "text": "alpha"}, {"id": "r2", "text": "beta"}],
             "duration": {"total_ms": 12.34},
@@ -78,6 +82,9 @@ class _FakeClient:
         if function_name == "search_bm25":
             return [{"id": "bm25_1", "text": payload.get("query", "")}]
         return {"ok": True}
+
+    def delete_document(self, *, document_hash_id):
+        return {"ok": True, "document_hash_id": str(document_hash_id)}
 
     def upload_document(
         self,
@@ -409,3 +416,83 @@ def test_cli_rag_search_with_metrics(monkeypatch, tmp_path, capsys):
     assert "\"duration\"" in out
     assert "\"total_ms\": 12.34" in out
     assert "\"constraint_hits\": 1" in out
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs is not None
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_bm25"] == 12
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_similarity"] == 12
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_sparse"] == 0
+
+
+def test_cli_rag_search_preset_tri_lane_and_override(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home9"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "search",
+            "--collection-id",
+            "col_1",
+            "--query",
+            "multihop query",
+            "--preset",
+            "tri-lane",
+            "--limit-sparse",
+            "30",
+        ]
+    )
+    assert code == 0
+    _ = capsys.readouterr().out
+    assert _FakeClient.last_search_hybrid_kwargs is not None
+    assert _FakeClient.last_search_hybrid_kwargs["limit_bm25"] == 12
+    assert _FakeClient.last_search_hybrid_kwargs["limit_similarity"] == 12
+    assert _FakeClient.last_search_hybrid_kwargs["limit_sparse"] == 30
+    assert _FakeClient.last_search_hybrid_kwargs["sparse_weight"] == 0.2
+
+
+def test_cli_rag_delete_document_requires_confirmation(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home10"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    with pytest.raises(SystemExit):
+        cli.main(["rag", "delete-document", "--document-id", "doc_42"])
+
+    code = cli.main(["rag", "delete-document", "--document-id", "doc_42", "--yes"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"deleted_document_id\": \"doc_42\"" in out

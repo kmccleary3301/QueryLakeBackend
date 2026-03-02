@@ -53,6 +53,9 @@ querylake rag upload-dir \
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
 querylake rag count-chunks --collection-ids <collection_id>
+
+# Destructive cleanup for one document (requires explicit confirmation)
+querylake rag delete-document --document-id <document_hash_id> --yes
 ```
 
 ## 5) Hybrid search
@@ -61,6 +64,7 @@ querylake rag count-chunks --collection-ids <collection_id>
 querylake rag search \
   --collection-id <collection_id> \
   --query "What is the main claim?" \
+  --preset tri-lane \
   --limit-bm25 12 \
   --limit-similarity 12 \
   --limit-sparse 12 \

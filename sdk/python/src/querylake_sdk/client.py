@@ -235,6 +235,9 @@ class QueryLakeClient:
             },
         )
 
+    def delete_document(self, *, document_hash_id: Union[str, int]) -> Any:
+        return self.api("delete_document", {"hash_id": str(document_hash_id)})
+
     def upload_document(
         self,
         *,

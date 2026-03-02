@@ -94,9 +94,11 @@ querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --a
 querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
 querylake --profile local rag list-documents --collection-id <id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <id>
-querylake --profile local rag search --collection-id <id> --query "hybrid retrieval design" --with-metrics
+querylake --profile local rag search --collection-id <id> --query "hybrid retrieval design" --preset tri-lane --with-metrics
 # lexical-only control path (direct BM25)
 querylake --profile local rag search --mode bm25 --collection-id <id> --query "hybrid retrieval design"
+# destructive cleanup for one uploaded item
+querylake --profile local rag delete-document --document-id <doc_hash_id> --yes
 ```
 
 Profiles are stored at `~/.querylake/sdk_profiles.json`.

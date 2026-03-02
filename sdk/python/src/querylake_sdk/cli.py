@@ -293,6 +293,18 @@ def cmd_rag_count_chunks(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rag_delete_document(args: argparse.Namespace) -> int:
+    if not args.yes:
+        raise SystemExit("Refusing delete without --yes. This operation is destructive.")
+    client = _build_client(args, require_auth=True)
+    try:
+        result = client.delete_document(document_hash_id=args.document_id)
+    finally:
+        client.close()
+    _print_output({"deleted_document_id": args.document_id, "result": result}, as_json=True)
+    return 0
+
+
 def cmd_rag_upload(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     try:
@@ -381,7 +393,75 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
     return 0 if failed == 0 else 1
 
 
+def _hybrid_search_defaults_for_preset(preset: str) -> Dict[str, float]:
+    profiles: Dict[str, Dict[str, float]] = {
+        "balanced": {
+            "limit_bm25": 12,
+            "limit_similarity": 12,
+            "limit_sparse": 0,
+            "bm25_weight": 0.55,
+            "similarity_weight": 0.45,
+            "sparse_weight": 0.0,
+        },
+        "tri-lane": {
+            "limit_bm25": 12,
+            "limit_similarity": 12,
+            "limit_sparse": 12,
+            "bm25_weight": 0.40,
+            "similarity_weight": 0.40,
+            "sparse_weight": 0.20,
+        },
+        "lexical-heavy": {
+            "limit_bm25": 16,
+            "limit_similarity": 8,
+            "limit_sparse": 0,
+            "bm25_weight": 0.75,
+            "similarity_weight": 0.25,
+            "sparse_weight": 0.0,
+        },
+        "semantic-heavy": {
+            "limit_bm25": 8,
+            "limit_similarity": 16,
+            "limit_sparse": 0,
+            "bm25_weight": 0.25,
+            "similarity_weight": 0.75,
+            "sparse_weight": 0.0,
+        },
+        "sparse-heavy": {
+            "limit_bm25": 8,
+            "limit_similarity": 8,
+            "limit_sparse": 24,
+            "bm25_weight": 0.30,
+            "similarity_weight": 0.30,
+            "sparse_weight": 0.40,
+        },
+    }
+    return dict(profiles[preset])
+
+
 def cmd_rag_search(args: argparse.Namespace) -> int:
+    preset = _hybrid_search_defaults_for_preset(args.preset)
+    limit_bm25 = int(args.limit_bm25) if args.limit_bm25 is not None else int(preset["limit_bm25"])
+    limit_similarity = (
+        int(args.limit_similarity)
+        if args.limit_similarity is not None
+        else int(preset["limit_similarity"])
+    )
+    limit_sparse = (
+        int(args.limit_sparse) if args.limit_sparse is not None else int(preset["limit_sparse"])
+    )
+    bm25_weight = (
+        float(args.bm25_weight) if args.bm25_weight is not None else float(preset["bm25_weight"])
+    )
+    similarity_weight = (
+        float(args.similarity_weight)
+        if args.similarity_weight is not None
+        else float(preset["similarity_weight"])
+    )
+    sparse_weight = (
+        float(args.sparse_weight) if args.sparse_weight is not None else float(preset["sparse_weight"])
+    )
+
     client = _build_client(args, require_auth=True)
     try:
         if args.mode == "bm25":
@@ -390,7 +470,7 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
                 {
                     "query": args.query,
                     "collection_ids": [args.collection_id],
-                    "limit": max(args.top_k, args.limit_bm25),
+                    "limit": max(args.top_k, limit_bm25),
                     "group_chunks": True,
                     "table": "document_chunk",
                 },
@@ -403,12 +483,12 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
                 metrics_payload = client.search_hybrid_with_metrics(
                     query=args.query,
                     collection_ids=[args.collection_id],
-                    limit_bm25=args.limit_bm25,
-                    limit_similarity=args.limit_similarity,
-                    limit_sparse=args.limit_sparse,
-                    bm25_weight=args.bm25_weight,
-                    similarity_weight=args.similarity_weight,
-                    sparse_weight=args.sparse_weight,
+                    limit_bm25=limit_bm25,
+                    limit_similarity=limit_similarity,
+                    limit_sparse=limit_sparse,
+                    bm25_weight=bm25_weight,
+                    similarity_weight=similarity_weight,
+                    sparse_weight=sparse_weight,
                     group_chunks=True,
                     rerank=False,
                 )
@@ -427,12 +507,12 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
                 rows = client.search_hybrid(
                     query=args.query,
                     collection_ids=[args.collection_id],
-                    limit_bm25=args.limit_bm25,
-                    limit_similarity=args.limit_similarity,
-                    limit_sparse=args.limit_sparse,
-                    bm25_weight=args.bm25_weight,
-                    similarity_weight=args.similarity_weight,
-                    sparse_weight=args.sparse_weight,
+                    limit_bm25=limit_bm25,
+                    limit_similarity=limit_similarity,
+                    limit_sparse=limit_sparse,
+                    bm25_weight=bm25_weight,
+                    similarity_weight=similarity_weight,
+                    sparse_weight=sparse_weight,
                     group_chunks=True,
                     rerank=False,
                 )
@@ -532,6 +612,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_rag_count_chunks.set_defaults(func=cmd_rag_count_chunks)
 
+    p_rag_delete_document = rag_sub.add_parser(
+        "delete-document",
+        help="Delete one document by hash ID.",
+    )
+    p_rag_delete_document.add_argument("--document-id", required=True)
+    p_rag_delete_document.add_argument(
+        "--yes",
+        action="store_true",
+        help="Required confirmation flag for destructive delete.",
+    )
+    p_rag_delete_document.set_defaults(func=cmd_rag_delete_document)
+
     p_rag_upload = rag_sub.add_parser("upload", help="Upload a document to a collection.")
     p_rag_upload.add_argument("--collection-id", required=True)
     p_rag_upload.add_argument("--file", required=True)
@@ -580,13 +672,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_search.add_argument("--collection-id", required=True)
     p_rag_search.add_argument("--query", required=True)
     p_rag_search.add_argument("--mode", choices=["hybrid", "bm25"], default="hybrid")
+    p_rag_search.add_argument(
+        "--preset",
+        choices=["balanced", "tri-lane", "lexical-heavy", "semantic-heavy", "sparse-heavy"],
+        default="balanced",
+        help="Default lane limits/weights profile (can be overridden by explicit --limit/--weight args).",
+    )
     p_rag_search.add_argument("--top-k", type=int, default=5)
-    p_rag_search.add_argument("--limit-bm25", type=int, default=12)
-    p_rag_search.add_argument("--limit-similarity", type=int, default=12)
-    p_rag_search.add_argument("--limit-sparse", type=int, default=0)
-    p_rag_search.add_argument("--bm25-weight", type=float, default=0.55)
-    p_rag_search.add_argument("--similarity-weight", type=float, default=0.45)
-    p_rag_search.add_argument("--sparse-weight", type=float, default=0.0)
+    p_rag_search.add_argument("--limit-bm25", type=int, default=None)
+    p_rag_search.add_argument("--limit-similarity", type=int, default=None)
+    p_rag_search.add_argument("--limit-sparse", type=int, default=None)
+    p_rag_search.add_argument("--bm25-weight", type=float, default=None)
+    p_rag_search.add_argument("--similarity-weight", type=float, default=None)
+    p_rag_search.add_argument("--sparse-weight", type=float, default=None)
     p_rag_search.add_argument(
         "--with-metrics",
         action="store_true",

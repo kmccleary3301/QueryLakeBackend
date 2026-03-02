@@ -62,6 +62,7 @@ querylake --profile local rag upload-dir \
 querylake --profile local rag search \
   --collection-id <collection_id> \
   --query "main contribution" \
+  --preset balanced \
   --limit-bm25 12 \
   --limit-similarity 12 \
   --limit-sparse 0 \
@@ -72,6 +73,8 @@ querylake --profile local rag search \
 # Inspect indexed state for debugging
 querylake --profile local rag list-documents --collection-id <collection_id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <collection_id>
+# Cleanup one noisy document (destructive)
+querylake --profile local rag delete-document --document-id <document_hash_id> --yes
 ```
 
 ### Three-lane hybrid (BM25 + dense + sparse)
@@ -80,6 +83,7 @@ querylake --profile local rag count-chunks --collection-ids <collection_id>
 querylake --profile local rag search \
   --collection-id <collection_id> \
   --query "main contribution" \
+  --preset tri-lane \
   --limit-bm25 12 \
   --limit-similarity 12 \
   --limit-sparse 12 \

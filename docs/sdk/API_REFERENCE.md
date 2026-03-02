@@ -42,6 +42,7 @@ Typical bootstrap:
 - `list_collections(organization_id=None, global_collections=False) -> dict`
 - `fetch_collection(collection_hash_id) -> dict`
 - `list_collection_documents(collection_hash_id, limit=100, offset=0) -> list[dict]`
+- `delete_document(document_hash_id) -> Any`
 - `upload_document(file_path, collection_hash_id, ...) -> dict`
 
 ### Retrieval
@@ -74,10 +75,12 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag list-collections`
 - `querylake rag list-documents`
 - `querylake rag count-chunks`
+- `querylake rag delete-document`
 - `querylake rag upload`
 - `querylake rag upload-dir`
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields
+  - add `--preset` for common retrieval profiles (`balanced`, `tri-lane`, `lexical-heavy`, `semantic-heavy`, `sparse-heavy`)
 
 ## Error model
 

@@ -101,3 +101,20 @@ def test_search_hybrid_accepts_orchestrated_dict_payload():
         assert payload.get("duration", {}).get("total") == 0.01
     finally:
         client.close()
+
+
+def test_delete_document_uses_hash_id_payload():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/delete_document"
+        payload = json.loads(request.content.decode("utf-8"))
+        assert payload["hash_id"] == "doc_123"
+        return httpx.Response(200, json={"success": True, "result": True})
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    client._client.close()
+    client._client = _mock_client(handler)
+    try:
+        result = client.delete_document(document_hash_id="doc_123")
+        assert result is True
+    finally:
+        client.close()
