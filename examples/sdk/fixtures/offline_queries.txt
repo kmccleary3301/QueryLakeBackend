@@ -1,0 +1,4 @@
+# Offline benchmark example queries
+boiler pressure limits
+mineral oil procedure
+flue gas diagnostics

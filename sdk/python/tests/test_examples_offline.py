@@ -45,3 +45,41 @@ def test_bulk_ingest_example_offline_demo(tmp_path):
     assert payload["upload"]["uploaded"] == 1
     assert payload["_meta"]["offline_demo"] is True
     assert len(payload["results"]) >= 1
+
+
+def test_search_batch_benchmark_offline_demo(tmp_path):
+    queries_file = tmp_path / "queries.txt"
+    queries_file.write_text("boiler pressure\nmineral oil\n", encoding="utf-8")
+    output_file = tmp_path / "artifacts" / "offline_benchmark.json"
+
+    repo_root = Path(__file__).resolve().parents[3]
+    script = repo_root / "examples" / "sdk" / "rag_search_batch_benchmark.py"
+    sdk_src = repo_root / "sdk" / "python" / "src"
+    env = dict(os.environ)
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        str(sdk_src)
+        if not existing_pythonpath
+        else f"{sdk_src}:{existing_pythonpath}"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--offline-demo",
+            "--queries-file",
+            str(queries_file),
+            "--output-file",
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["mode"] == "offline-demo"
+    assert payload["query_count"] == 2
+    assert payload["_meta"]["offline_demo"] is True
+    assert output_file.exists()

@@ -184,6 +184,12 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
   --recursive \
   --query "hybrid retrieval"
 
+# Batch benchmark helper (offline)
+python examples/sdk/rag_search_batch_benchmark.py \
+  --offline-demo \
+  --queries-file ./examples/sdk/fixtures/offline_queries.txt \
+  --output-file ./artifacts/benchmark_offline.json
+
 # Optional planning run: no upload/search side effects
 python examples/sdk/rag_bulk_ingest_and_search.py \
   --base-url http://127.0.0.1:8000 \

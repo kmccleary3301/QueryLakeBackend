@@ -249,6 +249,12 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
   --pattern "*.md" \
   --recursive \
   --query "main contribution"
+
+# Offline batch benchmark helper
+python examples/sdk/rag_search_batch_benchmark.py \
+  --offline-demo \
+  --queries-file ./examples/sdk/fixtures/offline_queries.txt \
+  --output-file ./artifacts/benchmark_offline.json
 ```
 
 For deeper retrieval/ingestion tuning patterns, see `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`.
