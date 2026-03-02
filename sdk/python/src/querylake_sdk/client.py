@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Literal, Optional, Union
 import httpx
 
 from .errors import QueryLakeAPIError, QueryLakeHTTPStatusError, QueryLakeTransportError
-from .models import SearchResultChunk
+from .models import HybridSearchOptions, SearchResultChunk, UploadDirectoryOptions
 
 AuthOverride = Union[Dict[str, str], Literal[False], None]
 
@@ -641,6 +641,23 @@ class QueryLakeClient:
             payload["errors"] = errors
         return payload
 
+    def upload_directory_with_options(
+        self,
+        *,
+        collection_hash_id: Union[str, int],
+        options: UploadDirectoryOptions,
+        auth: AuthOverride = None,
+    ) -> Dict[str, Any]:
+        """
+        Typed wrapper around ``upload_directory`` for reproducible ingestion setup.
+        """
+        kwargs = options.to_kwargs()
+        return self.upload_directory(
+            collection_hash_id=collection_hash_id,
+            auth=auth,
+            **kwargs,
+        )
+
     def search_hybrid(
         self,
         *,
@@ -673,6 +690,22 @@ class QueryLakeClient:
             if isinstance(rows, list):
                 return rows
         return []
+
+    def search_hybrid_with_options(
+        self,
+        *,
+        query: Union[str, Dict[str, Any]],
+        collection_ids: Iterable[Union[str, int]],
+        options: HybridSearchOptions,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        profile_kwargs = options.to_kwargs()
+        return self.search_hybrid(
+            query=query,
+            collection_ids=collection_ids,
+            **profile_kwargs,
+            **kwargs,
+        )
 
     def search_hybrid_with_metrics(
         self,
@@ -707,6 +740,22 @@ class QueryLakeClient:
                 result = {"rows": []}
             return result
         return {"rows": []}
+
+    def search_hybrid_with_metrics_options(
+        self,
+        *,
+        query: Union[str, Dict[str, Any]],
+        collection_ids: Iterable[Union[str, int]],
+        options: HybridSearchOptions,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        profile_kwargs = options.to_kwargs()
+        return self.search_hybrid_with_metrics(
+            query=query,
+            collection_ids=collection_ids,
+            **profile_kwargs,
+            **kwargs,
+        )
 
     def search_hybrid_chunks(self, **kwargs: Any) -> List[SearchResultChunk]:
         rows = self.search_hybrid(**kwargs)

@@ -28,7 +28,7 @@ pip install -e ".[dev]"
 ## Quickstart (Python)
 
 ```python
-from querylake_sdk import QueryLakeClient
+from querylake_sdk import HybridSearchOptions, QueryLakeClient, UploadDirectoryOptions
 
 client = QueryLakeClient(base_url="http://127.0.0.1:8000")
 client.login(username="demo", password="demo-pass")
@@ -69,6 +69,20 @@ run = client.upload_directory(
 )
 print(run["uploaded"], run["failed"])
 
+# Typed option helpers for reproducible configs:
+typed_run = client.upload_directory_with_options(
+    collection_hash_id=collection_id,
+    options=UploadDirectoryOptions(
+        directory="./docs",
+        pattern="*.pdf",
+        recursive=True,
+        dedupe_by_content_hash=True,
+        dedupe_scope="all",
+        idempotency_strategy="content-hash",
+    ),
+)
+print(typed_run["uploaded"], typed_run["failed"])
+
 results = client.search_hybrid_chunks(
     query="What is the main contribution?",
     collection_ids=[collection_id],
@@ -79,6 +93,13 @@ results = client.search_hybrid_chunks(
     similarity_weight=0.4,
     sparse_weight=0.2,
 )
+
+typed_results = client.search_hybrid_with_options(
+    query="What is the main contribution?",
+    collection_ids=[collection_id],
+    options=HybridSearchOptions(limit_bm25=12, limit_similarity=12, limit_sparse=12),
+)
+print(len(typed_results))
 
 for row in results[:5]:
     print(row.document_name, row.hybrid_score)

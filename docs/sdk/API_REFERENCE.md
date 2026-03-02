@@ -46,16 +46,25 @@ Typical bootstrap:
 - `delete_document(document_hash_id) -> Any`
 - `upload_document(file_path, collection_hash_id, idempotency_key=None, ...) -> dict`
 - `upload_directory(collection_hash_id, directory=..., file_paths=..., checkpoint_file=..., resume=False, checkpoint_save_every=1, strict_checkpoint_match=True, dedupe_by_content_hash=False, dedupe_scope="run-local", idempotency_strategy="none", idempotency_prefix="qlsdk", ...) -> dict`
+- `upload_directory_with_options(collection_hash_id, options=UploadDirectoryOptions(...)) -> dict`
 
 ### Retrieval
 
 - `search_hybrid(query, collection_ids, ..., **kwargs) -> list[dict]`
 - `search_hybrid_with_metrics(query, collection_ids, ..., **kwargs) -> dict`
+- `search_hybrid_with_options(query, collection_ids, options=HybridSearchOptions(...), **kwargs) -> list[dict]`
+- `search_hybrid_with_metrics_options(query, collection_ids, options=HybridSearchOptions(...), **kwargs) -> dict`
 - `search_hybrid_chunks(...) -> list[SearchResultChunk]`
 - `count_chunks(collection_ids=None) -> dict`
 - `get_random_chunks(limit=5, collection_ids=None) -> list[dict]`
 
 `search_hybrid_with_metrics` returns the orchestrated backend payload shape (`rows`, `duration`, optional plan/queue metadata) when available.
+
+Typed option models are available in `querylake_sdk`:
+
+- `UploadDirectoryOptions`
+- `HybridSearchOptions`
+- builder helpers: `build_upload_directory_options(...)`, `build_hybrid_search_options(...)`
 
 ### Escape hatch for all backend functions
 

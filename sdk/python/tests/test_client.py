@@ -6,7 +6,12 @@ import json
 import httpx
 import pytest
 
-from querylake_sdk import QueryLakeAPIError, QueryLakeClient
+from querylake_sdk import (
+    HybridSearchOptions,
+    QueryLakeAPIError,
+    QueryLakeClient,
+    UploadDirectoryOptions,
+)
 
 
 def _mock_client(handler):
@@ -366,6 +371,50 @@ def test_upload_directory_rejects_invalid_dedupe_or_idempotency(tmp_path):
         client.close()
 
 
+def test_upload_directory_options_validation():
+    with pytest.raises(ValueError, match="checkpoint_save_every"):
+        UploadDirectoryOptions(file_paths=["/tmp/a.txt"], checkpoint_save_every=0)
+    with pytest.raises(ValueError, match="dedupe_scope"):
+        UploadDirectoryOptions(file_paths=["/tmp/a.txt"], dedupe_scope="invalid")
+    with pytest.raises(ValueError, match="idempotency_strategy"):
+        UploadDirectoryOptions(file_paths=["/tmp/a.txt"], idempotency_strategy="invalid")
+    with pytest.raises(ValueError, match="resume=True requires checkpoint_file"):
+        UploadDirectoryOptions(file_paths=["/tmp/a.txt"], resume=True)
+
+
+def test_upload_directory_with_options(tmp_path, monkeypatch):
+    root = tmp_path / "bulk_options"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("one", encoding="utf-8")
+
+    calls = []
+
+    def _fake_upload_document(**kwargs):
+        calls.append(str(kwargs["file_path"]))
+        return {"hash_id": "doc_ok"}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", _fake_upload_document)
+    try:
+        options = UploadDirectoryOptions(
+            file_paths=[one],
+            dedupe_by_content_hash=True,
+            idempotency_strategy="content-hash",
+            idempotency_prefix="typed",
+        )
+        payload = client.upload_directory_with_options(
+            collection_hash_id="abc123",
+            options=options,
+        )
+        assert payload["uploaded"] == 1
+        assert payload["failed"] == 0
+        assert payload["dedupe_by_content_hash"] is True
+        assert calls == [str(one)]
+    finally:
+        client.close()
+
+
 def test_upload_directory_checkpoint_hash_mismatch(tmp_path, monkeypatch):
     root = tmp_path / "bulk4"
     root.mkdir(parents=True, exist_ok=True)
@@ -393,6 +442,47 @@ def test_upload_directory_checkpoint_hash_mismatch(tmp_path, monkeypatch):
                 checkpoint_file=checkpoint_file,
                 resume=True,
             )
+    finally:
+        client.close()
+
+
+def test_search_hybrid_with_option_models(monkeypatch):
+    captured: list[dict] = []
+
+    def _fake_api(function_name, payload, **kwargs):
+        assert function_name == "search_hybrid"
+        captured.append(dict(payload))
+        return {"rows": [{"id": "row1", "text": "hello"}], "duration": {"total_ms": 1.0}}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "api", _fake_api)
+    try:
+        options = HybridSearchOptions(
+            limit_bm25=5,
+            limit_similarity=7,
+            limit_sparse=9,
+            bm25_weight=0.3,
+            similarity_weight=0.4,
+            sparse_weight=0.3,
+        )
+        rows = client.search_hybrid_with_options(
+            query="hello",
+            collection_ids=["c1"],
+            options=options,
+        )
+        metrics = client.search_hybrid_with_metrics_options(
+            query="hello",
+            collection_ids=["c1"],
+            options=options,
+        )
+        assert len(rows) == 1
+        assert metrics["duration"]["total_ms"] == 1.0
+        assert captured[0]["limit_bm25"] == 5
+        assert captured[0]["limit_similarity"] == 7
+        assert captured[0]["limit_sparse"] == 9
+        assert captured[0]["bm25_weight"] == 0.3
+        assert captured[0]["similarity_weight"] == 0.4
+        assert captured[0]["sparse_weight"] == 0.3
     finally:
         client.close()
 

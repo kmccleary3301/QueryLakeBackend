@@ -6,10 +6,17 @@ from .errors import (
     QueryLakeTransportError,
 )
 from .models import CollectionSummary, QueryLakeProfile, SearchResultChunk, parse_collection_summaries
+from .models import (
+    HybridSearchOptions,
+    UploadDirectoryOptions,
+    build_hybrid_search_options,
+    build_upload_directory_options,
+)
 
 __all__ = [
     "AsyncQueryLakeClient",
     "CollectionSummary",
+    "HybridSearchOptions",
     "parse_collection_summaries",
     "QueryLakeAPIError",
     "QueryLakeClient",
@@ -18,4 +25,7 @@ __all__ = [
     "QueryLakeProfile",
     "QueryLakeTransportError",
     "SearchResultChunk",
+    "UploadDirectoryOptions",
+    "build_hybrid_search_options",
+    "build_upload_directory_options",
 ]
