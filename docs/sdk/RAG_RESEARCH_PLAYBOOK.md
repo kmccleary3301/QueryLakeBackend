@@ -99,6 +99,13 @@ querylake --profile local rag search \
   --mode bm25 \
   --collection-id <collection_id> \
   --query "\"exact phrase\" +must -exclude site:docs.example.com"
+
+# Batch execution from file (one query per line)
+querylake --profile local rag search-batch \
+  --collection-id <collection_id> \
+  --queries-file ./queries.txt \
+  --preset tri-lane \
+  --with-metrics
 ```
 
 ## 4) Python experiment harness

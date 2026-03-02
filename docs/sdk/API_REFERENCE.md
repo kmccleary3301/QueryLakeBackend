@@ -81,6 +81,8 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields
   - add `--preset` for common retrieval profiles (`balanced`, `tri-lane`, `lexical-heavy`, `semantic-heavy`, `sparse-heavy`)
+- `querylake rag search-batch`
+  - run newline-delimited query files with same mode/preset/metrics options as `rag search`
 
 ## Error model
 

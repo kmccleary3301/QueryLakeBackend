@@ -78,6 +78,13 @@ querylake rag search \
   --mode bm25 \
   --collection-id <collection_id> \
   --query "main claim"
+
+# Batch query file (one query per line, '#' comments allowed)
+querylake rag search-batch \
+  --collection-id <collection_id> \
+  --queries-file ./queries.txt \
+  --preset tri-lane \
+  --with-metrics
 ```
 
 ## 6) Profile management (optional)

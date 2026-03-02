@@ -496,3 +496,53 @@ def test_cli_rag_delete_document_requires_confirmation(monkeypatch, tmp_path, ca
     assert code == 0
     out = capsys.readouterr().out
     assert "\"deleted_document_id\": \"doc_42\"" in out
+
+
+def test_cli_rag_search_batch(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home11"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    queries_file = tmp_path / "queries.txt"
+    queries_file.write_text("# comment\nfirst query\n\nsecond query\nthird query\n", encoding="utf-8")
+
+    code = cli.main(
+        [
+            "rag",
+            "search-batch",
+            "--collection-id",
+            "col_1",
+            "--queries-file",
+            str(queries_file),
+            "--preset",
+            "tri-lane",
+            "--with-metrics",
+            "--max-queries",
+            "2",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"query_count\": 2" in out
+    assert "\"first query\"" in out
+    assert "\"second query\"" in out
+    assert "\"third query\"" not in out
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs is not None
+    assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_sparse"] == 12

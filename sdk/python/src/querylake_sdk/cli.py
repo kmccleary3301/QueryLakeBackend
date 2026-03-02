@@ -439,7 +439,7 @@ def _hybrid_search_defaults_for_preset(preset: str) -> Dict[str, float]:
     return dict(profiles[preset])
 
 
-def cmd_rag_search(args: argparse.Namespace) -> int:
+def _resolve_search_profile(args: argparse.Namespace) -> Dict[str, float]:
     preset = _hybrid_search_defaults_for_preset(args.preset)
     limit_bm25 = int(args.limit_bm25) if args.limit_bm25 is not None else int(preset["limit_bm25"])
     limit_similarity = (
@@ -461,64 +461,117 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
     sparse_weight = (
         float(args.sparse_weight) if args.sparse_weight is not None else float(preset["sparse_weight"])
     )
+    return {
+        "limit_bm25": limit_bm25,
+        "limit_similarity": limit_similarity,
+        "limit_sparse": limit_sparse,
+        "bm25_weight": bm25_weight,
+        "similarity_weight": similarity_weight,
+        "sparse_weight": sparse_weight,
+    }
 
+def _run_rag_search(client: QueryLakeClient, args: argparse.Namespace, query: str) -> Dict[str, Any]:
+    profile = _resolve_search_profile(args)
+    if args.mode == "bm25":
+        rows = client.api(
+            "search_bm25",
+            {
+                "query": query,
+                "collection_ids": [args.collection_id],
+                "limit": max(args.top_k, int(profile["limit_bm25"])),
+                "group_chunks": True,
+                "table": "document_chunk",
+            },
+        )
+        if not isinstance(rows, list):
+            rows = []
+        return {"results": rows[: args.top_k], "total": len(rows)}
+
+    if args.with_metrics:
+        metrics_payload = client.search_hybrid_with_metrics(
+            query=query,
+            collection_ids=[args.collection_id],
+            limit_bm25=int(profile["limit_bm25"]),
+            limit_similarity=int(profile["limit_similarity"]),
+            limit_sparse=int(profile["limit_sparse"]),
+            bm25_weight=float(profile["bm25_weight"]),
+            similarity_weight=float(profile["similarity_weight"]),
+            sparse_weight=float(profile["sparse_weight"]),
+            group_chunks=True,
+            rerank=False,
+        )
+        rows = metrics_payload.get("rows", []) if isinstance(metrics_payload, dict) else []
+        if not isinstance(rows, list):
+            rows = []
+        payload: Dict[str, Any] = {"results": rows[: args.top_k], "total": len(rows)}
+        if isinstance(metrics_payload, dict):
+            if "duration" in metrics_payload:
+                payload["duration"] = metrics_payload["duration"]
+            if "profile" in metrics_payload:
+                payload["profile"] = metrics_payload["profile"]
+            if "constraint_hits" in metrics_payload:
+                payload["constraint_hits"] = metrics_payload["constraint_hits"]
+        return payload
+
+    rows = client.search_hybrid(
+        query=query,
+        collection_ids=[args.collection_id],
+        limit_bm25=int(profile["limit_bm25"]),
+        limit_similarity=int(profile["limit_similarity"]),
+        limit_sparse=int(profile["limit_sparse"]),
+        bm25_weight=float(profile["bm25_weight"]),
+        similarity_weight=float(profile["similarity_weight"]),
+        sparse_weight=float(profile["sparse_weight"]),
+        group_chunks=True,
+        rerank=False,
+    )
+    return {"results": rows[: args.top_k], "total": len(rows)}
+
+
+def _load_queries(path: str, *, max_queries: Optional[int]) -> List[str]:
+    file_path = Path(path).expanduser().resolve()
+    if not file_path.exists() or not file_path.is_file():
+        raise SystemExit(f"--queries-file must be an existing file: {file_path}")
+    queries: List[str] = []
+    for raw_line in file_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        queries.append(line)
+        if max_queries is not None and len(queries) >= max(0, int(max_queries)):
+            break
+    if not queries:
+        raise SystemExit(f"No queries found in {file_path}")
+    return queries
+
+
+def cmd_rag_search(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     try:
-        if args.mode == "bm25":
-            rows = client.api(
-                "search_bm25",
-                {
-                    "query": args.query,
-                    "collection_ids": [args.collection_id],
-                    "limit": max(args.top_k, limit_bm25),
-                    "group_chunks": True,
-                    "table": "document_chunk",
-                },
-            )
-            if not isinstance(rows, list):
-                rows = []
-            payload: Dict[str, Any] = {"results": rows[: args.top_k], "total": len(rows)}
-        else:
-            if args.with_metrics:
-                metrics_payload = client.search_hybrid_with_metrics(
-                    query=args.query,
-                    collection_ids=[args.collection_id],
-                    limit_bm25=limit_bm25,
-                    limit_similarity=limit_similarity,
-                    limit_sparse=limit_sparse,
-                    bm25_weight=bm25_weight,
-                    similarity_weight=similarity_weight,
-                    sparse_weight=sparse_weight,
-                    group_chunks=True,
-                    rerank=False,
-                )
-                rows = metrics_payload.get("rows", []) if isinstance(metrics_payload, dict) else []
-                if not isinstance(rows, list):
-                    rows = []
-                payload = {"results": rows[: args.top_k], "total": len(rows)}
-                if isinstance(metrics_payload, dict):
-                    if "duration" in metrics_payload:
-                        payload["duration"] = metrics_payload["duration"]
-                    if "profile" in metrics_payload:
-                        payload["profile"] = metrics_payload["profile"]
-                    if "constraint_hits" in metrics_payload:
-                        payload["constraint_hits"] = metrics_payload["constraint_hits"]
-            else:
-                rows = client.search_hybrid(
-                    query=args.query,
-                    collection_ids=[args.collection_id],
-                    limit_bm25=limit_bm25,
-                    limit_similarity=limit_similarity,
-                    limit_sparse=limit_sparse,
-                    bm25_weight=bm25_weight,
-                    similarity_weight=similarity_weight,
-                    sparse_weight=sparse_weight,
-                    group_chunks=True,
-                    rerank=False,
-                )
-                payload = {"results": rows[: args.top_k], "total": len(rows)}
+        payload = _run_rag_search(client, args, args.query)
     finally:
         client.close()
+    _print_output(payload, as_json=True)
+    return 0
+
+
+def cmd_rag_search_batch(args: argparse.Namespace) -> int:
+    queries = _load_queries(args.queries_file, max_queries=args.max_queries)
+    client = _build_client(args, require_auth=True)
+    outputs: List[Dict[str, Any]] = []
+    try:
+        for query in queries:
+            result = _run_rag_search(client, args, query)
+            outputs.append({"query": query, **result})
+    finally:
+        client.close()
+
+    payload = {
+        "query_count": len(outputs),
+        "mode": args.mode,
+        "preset": args.preset,
+        "results": outputs,
+    }
     _print_output(payload, as_json=True)
     return 0
 
@@ -691,6 +744,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include duration/profile metadata for hybrid mode.",
     )
     p_rag_search.set_defaults(func=cmd_rag_search)
+
+    p_rag_search_batch = rag_sub.add_parser(
+        "search-batch",
+        help="Run search over a newline-delimited query file.",
+    )
+    p_rag_search_batch.add_argument("--collection-id", required=True)
+    p_rag_search_batch.add_argument("--queries-file", required=True)
+    p_rag_search_batch.add_argument("--mode", choices=["hybrid", "bm25"], default="hybrid")
+    p_rag_search_batch.add_argument(
+        "--preset",
+        choices=["balanced", "tri-lane", "lexical-heavy", "semantic-heavy", "sparse-heavy"],
+        default="balanced",
+        help="Default lane limits/weights profile (can be overridden by explicit --limit/--weight args).",
+    )
+    p_rag_search_batch.add_argument("--top-k", type=int, default=5)
+    p_rag_search_batch.add_argument("--limit-bm25", type=int, default=None)
+    p_rag_search_batch.add_argument("--limit-similarity", type=int, default=None)
+    p_rag_search_batch.add_argument("--limit-sparse", type=int, default=None)
+    p_rag_search_batch.add_argument("--bm25-weight", type=float, default=None)
+    p_rag_search_batch.add_argument("--similarity-weight", type=float, default=None)
+    p_rag_search_batch.add_argument("--sparse-weight", type=float, default=None)
+    p_rag_search_batch.add_argument(
+        "--with-metrics",
+        action="store_true",
+        help="Include duration/profile metadata for hybrid mode.",
+    )
+    p_rag_search_batch.add_argument(
+        "--max-queries",
+        type=int,
+        default=None,
+        help="Optional cap on number of non-empty queries to run.",
+    )
+    p_rag_search_batch.set_defaults(func=cmd_rag_search_batch)
 
     return parser
 
