@@ -56,13 +56,13 @@ sdk-precommit-run:
 	uv run --project sdk/python --extra dev pre-commit run --all-files --hook-stage pre-push
 
 sdk-lint:
-	uv run --project sdk/python --extra dev ruff check sdk/python/src sdk/python/tests
+	bash scripts/dev/sdk_quality_gate.sh lint
 
 sdk-type:
-	uv run --project sdk/python --extra dev mypy sdk/python/src/querylake_sdk
+	bash scripts/dev/sdk_quality_gate.sh type
 
 sdk-test:
-	uv run --project sdk/python --extra dev pytest sdk/python/tests
+	bash scripts/dev/sdk_quality_gate.sh test
 
 sdk-build:
 	uv run --project sdk/python --with build python -m build sdk/python

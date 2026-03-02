@@ -7,14 +7,8 @@ cd "${ROOT_DIR}"
 echo "[ci-sdk] cleaning prior build artifacts"
 rm -rf sdk/python/dist
 
-echo "[ci-sdk] running SDK lint checks (ruff)"
-uv run --project sdk/python --extra dev ruff check sdk/python/src sdk/python/tests
-
-echo "[ci-sdk] running SDK type checks (mypy)"
-uv run --project sdk/python --extra dev mypy sdk/python/src/querylake_sdk
-
-echo "[ci-sdk] running SDK tests"
-uv run --project sdk/python --extra dev pytest sdk/python/tests -q
+echo "[ci-sdk] running SDK quality gate (lint + type + tests)"
+bash scripts/dev/sdk_quality_gate.sh all
 
 echo "[ci-sdk] building SDK package"
 uv run --project sdk/python --with build python -m build sdk/python

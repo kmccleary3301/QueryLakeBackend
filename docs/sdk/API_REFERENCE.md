@@ -99,3 +99,9 @@ make sdk-lint
 make sdk-type
 make sdk-ci
 ```
+
+Single-source quality script (used by Make, hooks, and CI):
+
+```bash
+bash scripts/dev/sdk_quality_gate.sh all
+```

@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: sdk-ruff
         name: SDK Ruff
-        entry: uv run --project sdk/python --extra dev ruff check sdk/python/src sdk/python/tests
+        entry: bash scripts/dev/sdk_quality_gate.sh lint
         language: system
         pass_filenames: false
         files: ^sdk/python/
@@ -11,7 +11,7 @@ repos:
 
       - id: sdk-mypy
         name: SDK MyPy
-        entry: uv run --project sdk/python --extra dev mypy sdk/python/src/querylake_sdk
+        entry: bash scripts/dev/sdk_quality_gate.sh type
         language: system
         pass_filenames: false
         files: ^sdk/python/src/querylake_sdk/
@@ -19,7 +19,7 @@ repos:
 
       - id: sdk-tests
         name: SDK Tests
-        entry: uv run --project sdk/python --extra dev pytest sdk/python/tests -q
+        entry: bash scripts/dev/sdk_quality_gate.sh test
         language: system
         pass_filenames: false
         files: ^sdk/python/

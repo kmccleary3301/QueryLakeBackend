@@ -26,6 +26,12 @@ make sdk-release-check
 - `twine check`
 - wheel content validation (`py.typed`, metadata tokens)
 
+The lint/type/test portion is centralized in:
+
+```bash
+bash scripts/dev/sdk_quality_gate.sh all
+```
+
 Expected artifacts:
 
 - `sdk/python/dist/querylake_sdk-<version>-py3-none-any.whl`
