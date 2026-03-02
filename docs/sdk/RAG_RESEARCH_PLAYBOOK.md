@@ -79,7 +79,7 @@ querylake --profile local rag upload-dir \
   --dir ./dataset \
   --pattern "*.txt" \
   --recursive \
-  --sparse-embeddings
+  --ingest-profile tri-lane-fast
 ```
 
 ### Full blocking ingest (small corpora / deterministic runs)

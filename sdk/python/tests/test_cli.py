@@ -943,6 +943,166 @@ def test_cli_rag_upload_dir_dry_run_dedupe_and_idempotency(monkeypatch, tmp_path
     assert "\"idempotency_prefix\": \"idem2\"" in out
 
 
+def test_cli_rag_upload_dir_ingest_profile_named(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5m"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs11"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_14",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--ingest-profile",
+            "tri-lane-fast",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"ingest_profile\": \"tri-lane-fast\"" in out
+    kwargs = _FakeClient.last_upload_directory_kwargs
+    assert kwargs["create_sparse_embeddings"] is True
+    assert kwargs["dedupe_by_content_hash"] is True
+    assert kwargs["dedupe_scope"] == "all"
+    assert kwargs["idempotency_strategy"] == "content-hash"
+    assert kwargs["checkpoint_save_every"] == 10
+
+
+def test_cli_rag_upload_dir_ingest_profile_file(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5n"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs12"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    profile_file = tmp_path / "ingest_profile.json"
+    profile_file.write_text(
+        json.dumps(
+            {
+                "create_sparse_embeddings": True,
+                "dedupe_by_content_hash": True,
+                "dedupe_scope": "checkpoint-resume",
+                "idempotency_strategy": "path-hash",
+                "idempotency_prefix": "fileprof",
+                "checkpoint_save_every": 7,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_15",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--ingest-profile-file",
+            str(profile_file),
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"ingest_profile_file\":" in out
+    kwargs = _FakeClient.last_upload_directory_kwargs
+    assert kwargs["create_sparse_embeddings"] is True
+    assert kwargs["dedupe_by_content_hash"] is True
+    assert kwargs["dedupe_scope"] == "checkpoint-resume"
+    assert kwargs["idempotency_strategy"] == "path-hash"
+    assert kwargs["idempotency_prefix"] == "fileprof"
+    assert kwargs["checkpoint_save_every"] == 7
+
+
+def test_cli_rag_upload_dir_rejects_conflicting_flags(monkeypatch, tmp_path):
+    home = tmp_path / "home5o"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs13"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="--dedupe-content-hash or --no-dedupe-content-hash"):
+        cli.main(
+            [
+                "rag",
+                "upload-dir",
+                "--collection-id",
+                "col_16",
+                "--dir",
+                str(root),
+                "--dedupe-content-hash",
+                "--no-dedupe-content-hash",
+            ]
+        )
+
+    with pytest.raises(SystemExit, match="--sparse-embeddings or --no-sparse-embeddings"):
+        cli.main(
+            [
+                "rag",
+                "upload-dir",
+                "--collection-id",
+                "col_16",
+                "--dir",
+                str(root),
+                "--sparse-embeddings",
+                "--no-sparse-embeddings",
+            ]
+        )
+
+
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):
     home = tmp_path / "home6"
     home.mkdir(parents=True, exist_ok=True)

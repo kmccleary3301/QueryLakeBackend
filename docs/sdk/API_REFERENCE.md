@@ -90,7 +90,10 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - planning mode: `--dry-run` + `--list-files` for selection preview without upload
   - artifact output: `--selection-output` (selected file list), `--report-file` (final payload JSON)
   - resumable mode: `--checkpoint-file`, `--resume`, `--checkpoint-save-every`, `--no-checkpoint-strict`
+  - profile mode: `--ingest-profile`, `--ingest-profile-file`
+  - sparse toggle controls: `--sparse-embeddings`, `--no-sparse-embeddings`
   - dedupe controls: `--dedupe-content-hash`, `--dedupe-scope {run-local,checkpoint-resume,all}`
+  - dedupe override: `--no-dedupe-content-hash`
   - idempotency controls: `--idempotency-strategy {none,content-hash,path-hash}`, `--idempotency-prefix`
   - ingest controls: `--await-embedding`, `--no-scan`, `--no-embeddings`, `--sparse-embeddings`, `--sparse-dimensions`, `--fail-fast`
 - `querylake rag search`

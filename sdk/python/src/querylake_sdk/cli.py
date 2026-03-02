@@ -15,6 +15,185 @@ from .errors import QueryLakeError
 CONFIG_DIR = Path.home() / ".querylake"
 CONFIG_PATH = CONFIG_DIR / "sdk_profiles.json"
 
+INGEST_PROFILE_PRESETS: Dict[str, Dict[str, Any]] = {
+    "dense-fast": {
+        "scan_text": True,
+        "create_embeddings": True,
+        "create_sparse_embeddings": False,
+        "await_embedding": False,
+        "sparse_embedding_dimensions": 1024,
+        "dedupe_by_content_hash": False,
+        "dedupe_scope": "run-local",
+        "idempotency_strategy": "none",
+        "idempotency_prefix": "qlsdk",
+        "fail_fast": False,
+        "checkpoint_save_every": 1,
+    },
+    "dense-blocking": {
+        "scan_text": True,
+        "create_embeddings": True,
+        "create_sparse_embeddings": False,
+        "await_embedding": True,
+        "sparse_embedding_dimensions": 1024,
+        "dedupe_by_content_hash": True,
+        "dedupe_scope": "all",
+        "idempotency_strategy": "content-hash",
+        "idempotency_prefix": "qlsdk",
+        "fail_fast": True,
+        "checkpoint_save_every": 1,
+    },
+    "tri-lane-fast": {
+        "scan_text": True,
+        "create_embeddings": True,
+        "create_sparse_embeddings": True,
+        "await_embedding": False,
+        "sparse_embedding_dimensions": 1024,
+        "dedupe_by_content_hash": True,
+        "dedupe_scope": "all",
+        "idempotency_strategy": "content-hash",
+        "idempotency_prefix": "qlsdk",
+        "fail_fast": False,
+        "checkpoint_save_every": 10,
+    },
+    "tri-lane-blocking": {
+        "scan_text": True,
+        "create_embeddings": True,
+        "create_sparse_embeddings": True,
+        "await_embedding": True,
+        "sparse_embedding_dimensions": 1024,
+        "dedupe_by_content_hash": True,
+        "dedupe_scope": "all",
+        "idempotency_strategy": "content-hash",
+        "idempotency_prefix": "qlsdk",
+        "fail_fast": True,
+        "checkpoint_save_every": 5,
+    },
+}
+
+
+def _normalize_ingest_profile(raw: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    profile = dict(raw)
+    allowed_keys = {
+        "scan_text",
+        "create_embeddings",
+        "create_sparse_embeddings",
+        "await_embedding",
+        "sparse_embedding_dimensions",
+        "dedupe_by_content_hash",
+        "dedupe_scope",
+        "idempotency_strategy",
+        "idempotency_prefix",
+        "fail_fast",
+        "checkpoint_save_every",
+    }
+    extra_keys = sorted(set(profile.keys()) - allowed_keys)
+    if extra_keys:
+        raise SystemExit(
+            f"Ingest profile {source!r}: unsupported key(s): {', '.join(extra_keys)}. "
+            f"Allowed keys: {', '.join(sorted(allowed_keys))}"
+        )
+    bool_keys = {
+        "scan_text",
+        "create_embeddings",
+        "create_sparse_embeddings",
+        "await_embedding",
+        "dedupe_by_content_hash",
+        "fail_fast",
+    }
+    for key in bool_keys:
+        value = profile.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, bool):
+            raise SystemExit(f"Ingest profile {source!r}: {key} must be boolean.")
+
+    int_keys = {"sparse_embedding_dimensions", "checkpoint_save_every"}
+    for key in int_keys:
+        value = profile.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, int) or value < 1:
+            raise SystemExit(f"Ingest profile {source!r}: {key} must be an integer >= 1.")
+
+    dedupe_scope = profile.get("dedupe_scope")
+    if dedupe_scope is not None:
+        dedupe_scope_value = str(dedupe_scope).strip().lower()
+        if dedupe_scope_value not in {"run-local", "checkpoint-resume", "all"}:
+            raise SystemExit(
+                f"Ingest profile {source!r}: dedupe_scope must be one of run-local, checkpoint-resume, all."
+            )
+        profile["dedupe_scope"] = dedupe_scope_value
+
+    idempotency_strategy = profile.get("idempotency_strategy")
+    if idempotency_strategy is not None:
+        idempotency_value = str(idempotency_strategy).strip().lower()
+        if idempotency_value not in {"none", "content-hash", "path-hash"}:
+            raise SystemExit(
+                f"Ingest profile {source!r}: idempotency_strategy must be one of none, content-hash, path-hash."
+            )
+        profile["idempotency_strategy"] = idempotency_value
+
+    if "idempotency_prefix" in profile:
+        value = profile.get("idempotency_prefix")
+        if not isinstance(value, str) or not value.strip():
+            raise SystemExit(f"Ingest profile {source!r}: idempotency_prefix must be a non-empty string.")
+        profile["idempotency_prefix"] = value.strip()
+    return profile
+
+
+def _load_ingest_profile_file(path_value: str) -> Dict[str, Any]:
+    path = Path(path_value).expanduser().resolve()
+    if not path.exists() or not path.is_file():
+        raise SystemExit(f"--ingest-profile-file must be an existing file: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(f"Failed to parse --ingest-profile-file {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"--ingest-profile-file must contain a JSON object: {path}")
+    return _normalize_ingest_profile(payload, source=str(path))
+
+
+def _resolve_upload_ingest_controls(args: argparse.Namespace) -> Dict[str, Any]:
+    controls: Dict[str, Any] = dict(INGEST_PROFILE_PRESETS["dense-fast"])
+    profile_name = getattr(args, "ingest_profile", None)
+    profile_file = getattr(args, "ingest_profile_file", None)
+
+    if isinstance(profile_name, str) and profile_name.strip():
+        controls.update(_normalize_ingest_profile(INGEST_PROFILE_PRESETS[profile_name], source=profile_name))
+    if isinstance(profile_file, str) and profile_file.strip():
+        controls.update(_load_ingest_profile_file(profile_file))
+
+    if args.no_scan:
+        controls["scan_text"] = False
+    if args.no_embeddings:
+        controls["create_embeddings"] = False
+    if args.sparse_embeddings:
+        controls["create_sparse_embeddings"] = True
+    if args.no_sparse_embeddings:
+        controls["create_sparse_embeddings"] = False
+    if args.await_embedding:
+        controls["await_embedding"] = True
+    if args.sparse_dimensions is not None:
+        controls["sparse_embedding_dimensions"] = max(1, int(args.sparse_dimensions))
+    if args.fail_fast:
+        controls["fail_fast"] = True
+    if args.checkpoint_save_every is not None:
+        controls["checkpoint_save_every"] = max(1, int(args.checkpoint_save_every))
+
+    if args.dedupe_content_hash:
+        controls["dedupe_by_content_hash"] = True
+    if args.no_dedupe_content_hash:
+        controls["dedupe_by_content_hash"] = False
+    if isinstance(args.dedupe_scope, str) and args.dedupe_scope.strip():
+        controls["dedupe_scope"] = args.dedupe_scope.strip().lower()
+    if isinstance(args.idempotency_strategy, str) and args.idempotency_strategy.strip():
+        controls["idempotency_strategy"] = args.idempotency_strategy.strip().lower()
+    if isinstance(args.idempotency_prefix, str) and args.idempotency_prefix.strip():
+        controls["idempotency_prefix"] = args.idempotency_prefix.strip()
+
+    return controls
+
 
 def _load_profiles() -> Dict[str, Any]:
     if not CONFIG_PATH.exists():
@@ -466,13 +645,19 @@ def _load_upload_selection_file(
 def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
     if args.resume and not args.checkpoint_file:
         raise SystemExit("--resume requires --checkpoint-file.")
-    dedupe_scope = (args.dedupe_scope or "run-local").strip().lower()
+    if args.dedupe_content_hash and args.no_dedupe_content_hash:
+        raise SystemExit("Choose one of --dedupe-content-hash or --no-dedupe-content-hash, not both.")
+    if args.sparse_embeddings and args.no_sparse_embeddings:
+        raise SystemExit("Choose one of --sparse-embeddings or --no-sparse-embeddings, not both.")
+    ingest_controls = _resolve_upload_ingest_controls(args)
+    dedupe_scope = ingest_controls["dedupe_scope"]
     if dedupe_scope not in {"run-local", "checkpoint-resume", "all"}:
         raise SystemExit("--dedupe-scope must be one of: run-local, checkpoint-resume, all")
-    idempotency_strategy = (args.idempotency_strategy or "none").strip().lower()
+    idempotency_strategy = ingest_controls["idempotency_strategy"]
     if idempotency_strategy not in {"none", "content-hash", "path-hash"}:
         raise SystemExit("--idempotency-strategy must be one of: none, content-hash, path-hash")
-    idempotency_prefix = (args.idempotency_prefix or "qlsdk").strip() or "qlsdk"
+    idempotency_prefix = ingest_controls["idempotency_prefix"]
+    checkpoint_cadence = int(max(1, ingest_controls["checkpoint_save_every"]))
 
     include_extensions: Optional[List[str]] = None
     if isinstance(args.extensions, str) and args.extensions.strip():
@@ -551,6 +736,13 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             "dedupe_skipped": 0,
             "idempotency_strategy": idempotency_strategy,
             "idempotency_prefix": idempotency_prefix,
+            "ingest_controls": ingest_controls,
+            "ingest_profile": args.ingest_profile,
+            "ingest_profile_file": (
+                str(Path(args.ingest_profile_file).expanduser().resolve())
+                if isinstance(args.ingest_profile_file, str) and args.ingest_profile_file.strip()
+                else None
+            ),
         }
         if include_extensions:
             dry_run_payload["extensions"] = include_extensions
@@ -564,7 +756,7 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             dry_run_payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
         if args.checkpoint_file:
             dry_run_payload["checkpoint_file"] = str(Path(args.checkpoint_file).expanduser().resolve())
-            dry_run_payload["checkpoint_save_every"] = int(max(1, args.checkpoint_save_every))
+            dry_run_payload["checkpoint_save_every"] = checkpoint_cadence
         if args.report_file:
             _write_json_file(args.report_file, dry_run_payload)
             dry_run_payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
@@ -580,17 +772,17 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             pattern=args.pattern,
             recursive=args.recursive,
             dry_run=False,
-            fail_fast=args.fail_fast,
-            scan_text=not args.no_scan,
-            create_embeddings=not args.no_embeddings,
-            create_sparse_embeddings=args.sparse_embeddings,
-            await_embedding=args.await_embedding,
-            sparse_embedding_dimensions=args.sparse_dimensions,
+            fail_fast=bool(ingest_controls["fail_fast"]),
+            scan_text=bool(ingest_controls["scan_text"]),
+            create_embeddings=bool(ingest_controls["create_embeddings"]),
+            create_sparse_embeddings=bool(ingest_controls["create_sparse_embeddings"]),
+            await_embedding=bool(ingest_controls["await_embedding"]),
+            sparse_embedding_dimensions=int(ingest_controls["sparse_embedding_dimensions"]),
             checkpoint_file=args.checkpoint_file,
             resume=args.resume,
-            checkpoint_save_every=args.checkpoint_save_every,
+            checkpoint_save_every=checkpoint_cadence,
             strict_checkpoint_match=not args.no_checkpoint_strict,
-            dedupe_by_content_hash=bool(args.dedupe_content_hash),
+            dedupe_by_content_hash=bool(ingest_controls["dedupe_by_content_hash"]),
             dedupe_scope=dedupe_scope,
             idempotency_strategy=idempotency_strategy,
             idempotency_prefix=idempotency_prefix,
@@ -611,6 +803,10 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         payload["exclude_glob"] = exclude_globs
     if selection_source:
         payload["from_selection"] = selection_source
+    payload["ingest_controls"] = ingest_controls
+    payload["ingest_profile"] = args.ingest_profile
+    if isinstance(args.ingest_profile_file, str) and args.ingest_profile_file.strip():
+        payload["ingest_profile_file"] = str(Path(args.ingest_profile_file).expanduser().resolve())
     if args.list_files:
         payload["selected_files"] = selected_files
     if args.selection_output:
@@ -1075,7 +1271,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_upload_dir.add_argument(
         "--checkpoint-save-every",
         type=int,
-        default=1,
+        default=None,
         help="Persist checkpoint state every N processed files.",
     )
     p_rag_upload_dir.add_argument(
@@ -1084,32 +1280,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow resume from checkpoint even when selection_sha256 differs.",
     )
     p_rag_upload_dir.add_argument(
+        "--ingest-profile",
+        choices=sorted(INGEST_PROFILE_PRESETS.keys()),
+        default=None,
+        help="Apply a named ingest profile baseline before explicit CLI overrides.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--ingest-profile-file",
+        default=None,
+        help="Optional JSON file with ingest profile keys (overrides named profile).",
+    )
+    p_rag_upload_dir.add_argument(
         "--dedupe-content-hash",
         action="store_true",
         help="Skip duplicate files based on SHA-256 content hash.",
     )
     p_rag_upload_dir.add_argument(
+        "--no-dedupe-content-hash",
+        action="store_true",
+        help="Force disable content-hash dedupe (useful with ingest profiles).",
+    )
+    p_rag_upload_dir.add_argument(
         "--dedupe-scope",
         choices=["run-local", "checkpoint-resume", "all"],
-        default="run-local",
+        default=None,
         help="Scope for content-hash dedupe when --dedupe-content-hash is enabled.",
     )
     p_rag_upload_dir.add_argument(
         "--idempotency-strategy",
         choices=["none", "content-hash", "path-hash"],
-        default="none",
+        default=None,
         help="Client-side idempotency key strategy injected in document metadata.",
     )
     p_rag_upload_dir.add_argument(
         "--idempotency-prefix",
-        default="qlsdk",
+        default=None,
         help="Prefix for generated idempotency keys when strategy is not 'none'.",
     )
     p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
     p_rag_upload_dir.add_argument("--no-scan", action="store_true")
     p_rag_upload_dir.add_argument("--no-embeddings", action="store_true")
     p_rag_upload_dir.add_argument("--sparse-embeddings", action="store_true")
-    p_rag_upload_dir.add_argument("--sparse-dimensions", type=int, default=1024)
+    p_rag_upload_dir.add_argument("--no-sparse-embeddings", action="store_true")
+    p_rag_upload_dir.add_argument("--sparse-dimensions", type=int, default=None)
     p_rag_upload_dir.add_argument(
         "--fail-fast",
         action="store_true",

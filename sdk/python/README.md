@@ -120,6 +120,7 @@ querylake --profile local rag get-collection --collection-id <id>
 querylake --profile local rag update-collection --collection-id <id> --title "papers-v2"
 querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --await-embedding
 querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
+querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.txt" --recursive --ingest-profile tri-lane-fast
 querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*" --recursive --extensions ".pdf,.md" --exclude-glob "archive/*" --dry-run --list-files --selection-output ./artifacts/selected_files.json --report-file ./artifacts/upload_dry_run.json
 querylake --profile local rag upload-dir --collection-id <id> --from-selection ./artifacts/selected_files.json --report-file ./artifacts/upload_run.json --checkpoint-file ./artifacts/upload_checkpoint.json
 querylake --profile local rag upload-dir --collection-id <id> --from-selection ./artifacts/selected_files.json --resume --checkpoint-file ./artifacts/upload_checkpoint.json --checkpoint-save-every 10 --dedupe-content-hash --dedupe-scope all --idempotency-strategy content-hash --idempotency-prefix qlsdk

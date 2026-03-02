@@ -52,6 +52,14 @@ querylake rag upload-dir \
   --pattern "*.pdf" \
   --recursive
 
+# Apply a named ingest baseline profile for repeatable runs
+querylake rag upload-dir \
+  --collection-id <collection_id> \
+  --dir ./docs \
+  --pattern "*.txt" \
+  --recursive \
+  --ingest-profile tri-lane-fast
+
 # Preview selection only (no upload), with include/exclude filters
 querylake rag upload-dir \
   --collection-id <collection_id> \

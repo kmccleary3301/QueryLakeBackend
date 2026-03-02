@@ -54,10 +54,14 @@ querylake --profile local rag upload-dir \
 | `--resume` | Resume from checkpoint uploaded set |
 | `--checkpoint-save-every` | Save checkpoint every N processed files |
 | `--no-checkpoint-strict` | Allow resume despite selection hash mismatch |
+| `--ingest-profile` | Apply named baseline ingest profile (`dense-fast`, `dense-blocking`, `tri-lane-fast`, `tri-lane-blocking`) |
+| `--ingest-profile-file` | Load JSON ingest profile and merge over baseline |
 | `--dedupe-content-hash` | Skip duplicate files by SHA-256 content hash |
+| `--no-dedupe-content-hash` | Force disable dedupe when enabled by profile |
 | `--dedupe-scope` | Dedupe scope: `run-local`, `checkpoint-resume`, or `all` |
 | `--idempotency-strategy` | Inject idempotency key in metadata (`none`, `content-hash`, `path-hash`) |
 | `--idempotency-prefix` | Prefix for generated idempotency keys |
+| `--no-sparse-embeddings` | Force disable sparse lane when enabled by profile |
 
 ### Planning and replay workflow
 
@@ -85,6 +89,7 @@ querylake --profile local rag upload-dir \
 querylake --profile local rag upload-dir \
   --collection-id <collection_id> \
   --from-selection ./artifacts/selected_files.json \
+  --ingest-profile tri-lane-fast \
   --resume \
   --checkpoint-file ./artifacts/upload_checkpoint.json \
   --checkpoint-save-every 10 \
@@ -149,6 +154,9 @@ report = client.upload_directory(
 | `requested_files` | Number of selected files |
 | `selected_files` | Selected file path list |
 | `selection_sha256` | Deterministic hash of selected file set |
+| `ingest_profile` | Optional named ingest profile used for the run |
+| `ingest_profile_file` | Optional ingest profile JSON path used for the run |
+| `ingest_controls` | Effective merged ingest controls applied by CLI/SDK |
 | `resumed_from_checkpoint` | Whether run resumed from checkpoint |
 | `skipped_already_uploaded` | Count skipped because checkpoint marked uploaded |
 | `dedupe_by_content_hash` | Whether content-hash dedupe was enabled |
