@@ -108,6 +108,17 @@ client.upload_document(
     create_sparse_embeddings=True,
 )
 
+plan = client.upload_directory(
+    collection_hash_id=collection_id,
+    directory="./docs",
+    pattern="*",
+    recursive=True,
+    include_extensions=[".pdf", ".md"],
+    exclude_globs=["archive/*", "*.tmp"],
+    dry_run=True,
+)
+print(plan["requested_files"])
+
 rows = client.search_hybrid(
     query="What is the key claim?",
     collection_ids=[collection_id],

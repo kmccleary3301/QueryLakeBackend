@@ -45,6 +45,7 @@ Typical bootstrap:
 - `list_collection_documents(collection_hash_id, limit=100, offset=0) -> list[dict]`
 - `delete_document(document_hash_id) -> Any`
 - `upload_document(file_path, collection_hash_id, ...) -> dict`
+- `upload_directory(collection_hash_id, directory=..., file_paths=..., ...) -> dict`
 
 ### Retrieval
 

@@ -43,6 +43,18 @@ client.upload_document(
     create_sparse_embeddings=True,
 )
 
+# Bulk local ingest with dry-run planning and filters.
+plan = client.upload_directory(
+    collection_hash_id=collection_id,
+    directory="./docs",
+    pattern="*",
+    recursive=True,
+    include_extensions=[".pdf", ".md"],
+    exclude_globs=["archive/*", "*.tmp"],
+    dry_run=True,
+)
+print(plan["requested_files"])
+
 results = client.search_hybrid_chunks(
     query="What is the main contribution?",
     collection_ids=[collection_id],

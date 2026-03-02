@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -297,6 +298,136 @@ class QueryLakeClient:
                 files=files,
             )
         return _extract_api_result("upload_document", response.json())
+
+    def upload_directory(
+        self,
+        *,
+        collection_hash_id: Union[str, int],
+        directory: Optional[Union[str, Path]] = None,
+        file_paths: Optional[Iterable[Union[str, Path]]] = None,
+        pattern: str = "*",
+        recursive: bool = False,
+        max_files: Optional[int] = None,
+        include_extensions: Optional[Iterable[str]] = None,
+        exclude_globs: Optional[Iterable[str]] = None,
+        dry_run: bool = False,
+        fail_fast: bool = False,
+        scan_text: bool = True,
+        create_embeddings: bool = True,
+        create_sparse_embeddings: bool = False,
+        sparse_embedding_function: str = "embedding_sparse",
+        sparse_embedding_dimensions: int = 1024,
+        enforce_sparse_dimension_match: bool = True,
+        await_embedding: bool = False,
+        document_metadata: Optional[Dict[str, Any]] = None,
+        auth: AuthOverride = None,
+    ) -> Dict[str, Any]:
+        """
+        Bulk upload local files for one collection.
+
+        Selection modes:
+        - directory scan (`directory`, `pattern`, filters)
+        - explicit file list (`file_paths`)
+        """
+        selection_mode = "directory-scan"
+        resolved_files: List[Path] = []
+        payload_directory = "<explicit-file-list>"
+
+        if file_paths is not None:
+            selection_mode = "explicit-file-list"
+            for value in file_paths:
+                candidate = Path(value).expanduser().resolve()
+                if not candidate.exists() or not candidate.is_file():
+                    raise FileNotFoundError(f"File not found: {candidate}")
+                resolved_files.append(candidate)
+            if isinstance(directory, (str, Path)):
+                payload_directory = str(Path(directory).expanduser().resolve())
+        else:
+            if directory is None:
+                raise ValueError("directory is required unless file_paths is provided")
+            root = Path(directory).expanduser().resolve()
+            if not root.exists() or not root.is_dir():
+                raise ValueError(f"directory must be an existing directory: {root}")
+            payload_directory = str(root)
+            iterator = root.rglob(pattern) if recursive else root.glob(pattern)
+            resolved_files = [path for path in iterator if path.is_file()]
+
+            if include_extensions:
+                ext_set = {
+                    value.lower() if value.startswith(".") else f".{value.lower()}"
+                    for value in include_extensions
+                    if isinstance(value, str) and value.strip()
+                }
+                if ext_set:
+                    resolved_files = [path for path in resolved_files if path.suffix.lower() in ext_set]
+
+            if exclude_globs:
+                patterns = [value.strip() for value in exclude_globs if isinstance(value, str) and value.strip()]
+
+                def _is_excluded(path: Path) -> bool:
+                    rel_posix = path.relative_to(root).as_posix()
+                    name = path.name
+                    for pattern_value in patterns:
+                        if fnmatch.fnmatch(rel_posix, pattern_value) or fnmatch.fnmatch(name, pattern_value):
+                            return True
+                    return False
+
+                if patterns:
+                    resolved_files = [path for path in resolved_files if not _is_excluded(path)]
+
+        resolved_files.sort()
+        if max_files is not None:
+            resolved_files = resolved_files[: max(0, int(max_files))]
+        if not resolved_files:
+            raise ValueError("No files selected for upload.")
+
+        selected_files = [str(path) for path in resolved_files]
+        payload: Dict[str, Any] = {
+            "directory": payload_directory,
+            "selection_mode": selection_mode,
+            "pattern": pattern,
+            "recursive": bool(recursive),
+            "requested_files": len(resolved_files),
+            "uploaded": 0,
+            "failed": 0,
+            "dry_run": bool(dry_run),
+            "selected_files": selected_files,
+            "fail_fast": bool(fail_fast),
+        }
+
+        if dry_run:
+            return payload
+
+        errors: List[Dict[str, str]] = []
+        uploaded = 0
+        failed = 0
+        for path in resolved_files:
+            try:
+                self.upload_document(
+                    file_path=path,
+                    collection_hash_id=collection_hash_id,
+                    scan_text=scan_text,
+                    create_embeddings=create_embeddings,
+                    create_sparse_embeddings=create_sparse_embeddings,
+                    sparse_embedding_function=sparse_embedding_function,
+                    sparse_embedding_dimensions=sparse_embedding_dimensions,
+                    enforce_sparse_dimension_match=enforce_sparse_dimension_match,
+                    await_embedding=await_embedding,
+                    document_metadata=document_metadata,
+                    auth=auth,
+                )
+                uploaded += 1
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                errors.append({"file": str(path), "error": str(exc)})
+                if fail_fast:
+                    break
+
+        payload["uploaded"] = uploaded
+        payload["failed"] = failed
+        if errors:
+            payload["errors"] = errors
+        return payload
 
     def search_hybrid(
         self,
