@@ -74,6 +74,7 @@ querylake rag search \
   --bm25-weight 0.4 \
   --similarity-weight 0.4 \
   --sparse-weight 0.2 \
+  --min-total-results 1 \
   --with-metrics
 
 # Optional lexical-only control path
@@ -87,6 +88,8 @@ querylake rag search-batch \
   --collection-id <collection_id> \
   --queries-file ./queries.txt \
   --preset tri-lane \
+  --min-total-results 1 \
+  --fail-on-empty \
   --with-metrics \
   --output-file ./artifacts/batch_results.json
 ```

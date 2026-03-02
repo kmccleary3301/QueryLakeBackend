@@ -546,6 +546,45 @@ def test_cli_rag_search_with_metrics(monkeypatch, tmp_path, capsys):
     assert _FakeClient.last_search_hybrid_with_metrics_kwargs["limit_sparse"] == 0
 
 
+def test_cli_rag_search_gate_failure(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home8_gate"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "search",
+            "--collection-id",
+            "col_1",
+            "--query",
+            "main contribution",
+            "--min-total-results",
+            "3",
+        ]
+    )
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "\"gate_failed\": true" in out.lower()
+
+
 def test_cli_rag_search_preset_tri_lane_and_override(monkeypatch, tmp_path, capsys):
     home = tmp_path / "home9"
     home.mkdir(parents=True, exist_ok=True)
@@ -678,3 +717,46 @@ def test_cli_rag_search_batch(monkeypatch, tmp_path, capsys):
     assert output_file.exists()
     payload = json.loads(output_file.read_text(encoding="utf-8"))
     assert payload["query_count"] == 2
+
+
+def test_cli_rag_search_batch_gate_failure(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home11_gate"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    queries_file = tmp_path / "queries_gate.txt"
+    queries_file.write_text("first query\nsecond query\n", encoding="utf-8")
+
+    code = cli.main(
+        [
+            "rag",
+            "search-batch",
+            "--collection-id",
+            "col_1",
+            "--queries-file",
+            str(queries_file),
+            "--min-total-results",
+            "3",
+        ]
+    )
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "\"gate_failed\": true" in out.lower()
+    assert "\"queries_below_min_total_results\"" in out

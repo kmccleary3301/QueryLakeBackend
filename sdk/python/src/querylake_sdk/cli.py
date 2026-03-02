@@ -600,8 +600,17 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
         payload = _run_rag_search(client, args, args.query)
     finally:
         client.close()
+    failures: List[str] = []
+    total = int(payload.get("total", 0)) if isinstance(payload, dict) else 0
+    if args.fail_on_empty and total == 0:
+        failures.append("total_results == 0")
+    if args.min_total_results is not None and total < int(args.min_total_results):
+        failures.append(f"total_results < min_total_results ({total} < {int(args.min_total_results)})")
+    if failures:
+        payload["gate_failed"] = True
+        payload["gate_failures"] = failures
     _print_output(payload, as_json=True)
-    return 0
+    return 2 if failures else 0
 
 
 def cmd_rag_search_batch(args: argparse.Namespace) -> int:
@@ -637,13 +646,33 @@ def cmd_rag_search_batch(args: argparse.Namespace) -> int:
         },
         "results": outputs,
     }
+    failures: List[str] = []
+    empty_result_queries = sum(1 for item in outputs if int(item.get("total", 0)) == 0)
+    payload["summary"]["empty_result_queries"] = empty_result_queries
+    if args.fail_on_empty and empty_result_queries > 0:
+        failures.append(f"empty_result_queries > 0 ({empty_result_queries})")
+    if args.min_total_results is not None:
+        threshold = int(args.min_total_results)
+        below = [
+            item.get("query", "")
+            for item in outputs
+            if int(item.get("total", 0)) < threshold
+        ]
+        if below:
+            failures.append(
+                f"queries_below_min_total_results > 0 ({len(below)} below {threshold})"
+            )
+            payload["queries_below_min_total_results"] = below
     if args.output_file:
         output_path = Path(args.output_file).expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         payload["output_file"] = str(output_path)
+    if failures:
+        payload["gate_failed"] = True
+        payload["gate_failures"] = failures
     _print_output(payload, as_json=True)
-    return 0
+    return 2 if failures else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -841,6 +870,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include duration/profile metadata for hybrid mode.",
     )
+    p_rag_search.add_argument(
+        "--min-total-results",
+        type=int,
+        default=None,
+        help="Optional gate: fail with exit code 2 if total results are below this threshold.",
+    )
+    p_rag_search.add_argument(
+        "--fail-on-empty",
+        action="store_true",
+        help="Optional gate: fail with exit code 2 when total results are zero.",
+    )
     p_rag_search.set_defaults(func=cmd_rag_search)
 
     p_rag_search_batch = rag_sub.add_parser(
@@ -878,6 +918,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-file",
         default=None,
         help="Optional path to write full JSON payload.",
+    )
+    p_rag_search_batch.add_argument(
+        "--min-total-results",
+        type=int,
+        default=None,
+        help="Optional gate: fail with exit code 2 if any query has fewer results than this threshold.",
+    )
+    p_rag_search_batch.add_argument(
+        "--fail-on-empty",
+        action="store_true",
+        help="Optional gate: fail with exit code 2 when any query returns zero results.",
     )
     p_rag_search_batch.set_defaults(func=cmd_rag_search_batch)
 

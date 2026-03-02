@@ -85,9 +85,11 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields
   - add `--preset` for common retrieval profiles (`balanced`, `tri-lane`, `lexical-heavy`, `semantic-heavy`, `sparse-heavy`)
+  - optional gates: `--min-total-results`, `--fail-on-empty` (exit code `2` on gate failure)
 - `querylake rag search-batch`
   - run newline-delimited query files with same mode/preset/metrics options as `rag search`
   - supports `--output-file` to persist full batch JSON report
+  - optional gates: `--min-total-results`, `--fail-on-empty` (exit code `2` on gate failure)
 
 ## Error model
 

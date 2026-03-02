@@ -70,6 +70,7 @@ querylake --profile local rag search \
   --limit-sparse 0 \
   --bm25-weight 0.55 \
   --similarity-weight 0.45 \
+  --min-total-results 1 \
   --with-metrics
 
 # Inspect indexed state for debugging
@@ -108,6 +109,8 @@ querylake --profile local rag search-batch \
   --collection-id <collection_id> \
   --queries-file ./queries.txt \
   --preset tri-lane \
+  --min-total-results 1 \
+  --fail-on-empty \
   --with-metrics \
   --output-file ./artifacts/query_batch.json
 ```
