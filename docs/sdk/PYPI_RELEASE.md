@@ -17,6 +17,12 @@ make sdk-ci
 make sdk-release-check
 ```
 
+`make sdk-ci` runs the same quality gate used in CI (`scripts/ci_sdk_checks.sh`):
+- SDK tests (with `dev` extra)
+- wheel/sdist build
+- `twine check`
+- wheel content validation (`py.typed`, metadata tokens)
+
 Expected artifacts:
 
 - `sdk/python/dist/querylake_sdk-<version>-py3-none-any.whl`
