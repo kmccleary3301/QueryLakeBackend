@@ -100,6 +100,35 @@ querylake --profile local rag upload-dir \
   --report-file ./artifacts/upload_resume.json
 ```
 
+### Custom ingest profile file (JSON)
+
+```json
+{
+  "scan_text": true,
+  "create_embeddings": true,
+  "create_sparse_embeddings": true,
+  "await_embedding": false,
+  "sparse_embedding_dimensions": 1024,
+  "dedupe_by_content_hash": true,
+  "dedupe_scope": "all",
+  "idempotency_strategy": "content-hash",
+  "idempotency_prefix": "qlsdk",
+  "fail_fast": false,
+  "checkpoint_save_every": 10
+}
+```
+
+Use with:
+
+```bash
+querylake --profile local rag upload-dir \
+  --collection-id <collection_id> \
+  --dir ./dataset \
+  --pattern "*.txt" \
+  --recursive \
+  --ingest-profile-file ./profiles/tri_lane_fast.json
+```
+
 ## Python SDK: `QueryLakeClient.upload_directory(...)`
 
 ### Directory scan mode
@@ -168,6 +197,7 @@ report = client.upload_directory(
 | `errors` | Optional list of file-level error objects |
 | `dry_run` | Whether run was planning-only |
 | `fail_fast` | Whether run stops on first error |
+| `_meta` | Artifact provenance metadata (timestamp, sdk version, profile, base URL, cwd) |
 
 ## Recommended defaults
 

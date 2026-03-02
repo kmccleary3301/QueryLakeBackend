@@ -102,7 +102,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - optional gates: `--min-total-results`, `--fail-on-empty` (exit code `2` on gate failure)
 - `querylake rag search-batch`
   - run newline-delimited query files with same mode/preset/metrics options as `rag search`
-  - supports `--output-file` to persist full batch JSON report
+  - supports `--output-file` to persist full batch JSON report (includes `_meta` provenance block)
   - optional gates: `--min-total-results`, `--fail-on-empty` (exit code `2` on gate failure)
 
 ## Error model

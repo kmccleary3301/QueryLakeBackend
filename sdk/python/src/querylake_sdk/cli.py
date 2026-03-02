@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import fnmatch
 import getpass
 import hashlib
+import importlib.metadata
 import json
 import os
+import platform
 from pathlib import Path
+import socket
+import time
 from typing import Any, Dict, List, Optional
 
 from .client import QueryLakeClient
@@ -282,6 +287,34 @@ def _write_json_file(output_path: str, payload: Any) -> None:
     destination = Path(output_path).expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _artifact_meta(args: argparse.Namespace, *, artifact_type: str, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    now = time.time()
+    profile_name = _resolve_profile_name(args)
+    profile = _resolve_profile(profile_name) if isinstance(profile_name, str) else {}
+    try:
+        base_url = _resolve_base_url(args, profile)
+    except Exception:  # noqa: BLE001
+        base_url = None
+    try:
+        sdk_version = importlib.metadata.version("querylake-sdk")
+    except Exception:  # noqa: BLE001
+        sdk_version = "unknown"
+    payload: Dict[str, Any] = {
+        "artifact_type": artifact_type,
+        "generated_at_unix": now,
+        "generated_at_utc": datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
+        "sdk_version": sdk_version,
+        "python_version": platform.python_version(),
+        "hostname": socket.gethostname(),
+        "cwd": str(Path.cwd()),
+        "profile": profile_name,
+        "base_url": base_url,
+    }
+    if isinstance(extra, dict):
+        payload.update(extra)
+    return payload
 
 
 def _selection_sha256(paths: List[str]) -> str:
@@ -715,6 +748,14 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             selection_payload["exclude_glob"] = exclude_globs
         if selection_source:
             selection_payload["from_selection"] = selection_source
+        selection_payload["_meta"] = _artifact_meta(
+            args,
+            artifact_type="rag-upload-dir-selection",
+            extra={
+                "selection_sha256": selection_hash,
+                "selection_mode": selection_mode,
+            },
+        )
         _write_json_file(args.selection_output, selection_payload)
 
     if args.dry_run:
@@ -757,6 +798,15 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         if args.checkpoint_file:
             dry_run_payload["checkpoint_file"] = str(Path(args.checkpoint_file).expanduser().resolve())
             dry_run_payload["checkpoint_save_every"] = checkpoint_cadence
+        dry_run_payload["_meta"] = _artifact_meta(
+            args,
+            artifact_type="rag-upload-dir-report",
+            extra={
+                "dry_run": True,
+                "selection_sha256": selection_hash,
+                "selection_mode": selection_mode,
+            },
+        )
         if args.report_file:
             _write_json_file(args.report_file, dry_run_payload)
             dry_run_payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
@@ -811,6 +861,15 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         payload["selected_files"] = selected_files
     if args.selection_output:
         payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
+    payload["_meta"] = _artifact_meta(
+        args,
+        artifact_type="rag-upload-dir-report",
+        extra={
+            "dry_run": False,
+            "selection_sha256": selection_hash,
+            "selection_mode": selection_mode,
+        },
+    )
     if args.report_file:
         _write_json_file(args.report_file, payload)
         payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
@@ -1032,6 +1091,15 @@ def cmd_rag_search_batch(args: argparse.Namespace) -> int:
         },
         "results": outputs,
     }
+    payload["_meta"] = _artifact_meta(
+        args,
+        artifact_type="rag-search-batch-report",
+        extra={
+            "query_count": len(outputs),
+            "mode": args.mode,
+            "preset": args.preset,
+        },
+    )
     failures: List[str] = []
     empty_result_queries = sum(1 for item in outputs if int(item.get("total", 0)) == 0)
     payload["summary"]["empty_result_queries"] = empty_result_queries

@@ -560,10 +560,12 @@ def test_cli_rag_upload_dir_writes_selection_and_report_files_dry_run(monkeypatc
     assert selection_payload["requested_files"] == 2
     assert len(selection_payload["selected_files"]) == 2
     assert selection_payload["pattern"] == "*.txt"
+    assert selection_payload["_meta"]["artifact_type"] == "rag-upload-dir-selection"
 
     report_payload = json.loads(report_file.read_text(encoding="utf-8"))
     assert report_payload["dry_run"] is True
     assert report_payload["requested_files"] == 2
+    assert report_payload["_meta"]["artifact_type"] == "rag-upload-dir-report"
 
 
 def test_cli_rag_upload_dir_report_file_includes_errors(monkeypatch, tmp_path, capsys):
@@ -1497,6 +1499,7 @@ def test_cli_rag_search_batch(monkeypatch, tmp_path, capsys):
     assert output_file.exists()
     payload = json.loads(output_file.read_text(encoding="utf-8"))
     assert payload["query_count"] == 2
+    assert payload["_meta"]["artifact_type"] == "rag-search-batch-report"
 
 
 def test_cli_rag_search_batch_gate_failure(monkeypatch, tmp_path, capsys):
