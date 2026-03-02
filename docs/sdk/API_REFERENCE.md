@@ -66,6 +66,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 ## CLI commands
 
 - `querylake doctor`
+- `querylake setup`
 - `querylake login`
 - `querylake models`
 - `querylake profile list`

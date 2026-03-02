@@ -218,6 +218,85 @@ def test_cli_login_saves_profile(monkeypatch, tmp_path, capsys):
     assert "saved_profile" in captured.out
 
 
+def test_cli_setup_non_interactive(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home_setup1"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    code = cli.main(
+        [
+            "setup",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "bootstrap",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+            "--non-interactive",
+        ]
+    )
+    assert code == 0
+    payload = json.loads((home / ".querylake" / "sdk_profiles.json").read_text(encoding="utf-8"))
+    assert payload["profiles"]["bootstrap"]["auth"]["oauth2"] == "tok_demo"
+    out = capsys.readouterr().out
+    assert "\"next_steps\":" in out
+
+
+def test_cli_setup_skip_login(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home_setup2"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    code = cli.main(
+        [
+            "setup",
+            "--url",
+            "http://127.0.0.1:8123",
+            "--profile",
+            "nolock",
+            "--skip-login",
+        ]
+    )
+    assert code == 0
+    payload = json.loads((home / ".querylake" / "sdk_profiles.json").read_text(encoding="utf-8"))
+    assert payload["profiles"]["nolock"]["base_url"] == "http://127.0.0.1:8123"
+    assert "auth" not in payload["profiles"]["nolock"]
+    out = capsys.readouterr().out
+    assert "\"skip_login\": true" in out.lower()
+
+
+def test_cli_setup_interactive_prompts(monkeypatch, tmp_path):
+    home = tmp_path / "home_setup3"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "alice")
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": "secret")
+
+    code = cli.main(
+        [
+            "setup",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "interactive",
+        ]
+    )
+    assert code == 0
+    payload = json.loads((home / ".querylake" / "sdk_profiles.json").read_text(encoding="utf-8"))
+    assert payload["profiles"]["interactive"]["username"] == "alice"
+
+
 def test_cli_doctor(monkeypatch, capsys):
     monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
     code = cli.main(["--url", "http://127.0.0.1:8000", "doctor"])

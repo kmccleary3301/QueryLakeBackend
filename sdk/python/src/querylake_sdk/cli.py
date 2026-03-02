@@ -382,6 +382,89 @@ def cmd_login(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_setup(args: argparse.Namespace) -> int:
+    profile_name = args.profile or "default"
+    default_url = _resolve_base_url(args, {})
+    base_url = args.url.strip() if isinstance(args.url, str) and args.url.strip() else default_url
+
+    if args.skip_login:
+        store = _load_profiles()
+        profiles = store.setdefault("profiles", {})
+        current = profiles.get(profile_name, {})
+        if not isinstance(current, dict):
+            current = {}
+        current["base_url"] = base_url
+        profiles[profile_name] = current
+        store["active_profile"] = profile_name
+        _save_profiles(store)
+        _print_output(
+            {
+                "saved_profile": profile_name,
+                "base_url": base_url,
+                "skip_login": True,
+                "config_path": str(CONFIG_PATH),
+                "next_steps": [
+                    f"querylake --profile {profile_name} doctor",
+                    f"querylake --profile {profile_name} rag list-collections",
+                ],
+            },
+            as_json=True,
+        )
+        return 0
+
+    username = args.username
+    password = args.password
+    if args.non_interactive:
+        if not isinstance(username, str) or not username.strip():
+            raise SystemExit("--username is required in --non-interactive mode.")
+        if not isinstance(password, str) or not password:
+            raise SystemExit("--password is required in --non-interactive mode.")
+    else:
+        if not isinstance(username, str) or not username.strip():
+            username = input("QueryLake username: ").strip()
+        if not isinstance(password, str) or not password:
+            password = getpass.getpass("QueryLake password: ")
+    if not username:
+        raise SystemExit("Username is required.")
+    if not password:
+        raise SystemExit("Password is required.")
+
+    client = QueryLakeClient(base_url=base_url)
+    try:
+        result = client.login(username=username, password=password)
+    finally:
+        client.close()
+    token = result.get("auth") if isinstance(result, dict) else None
+    if not isinstance(token, str) or not token:
+        raise SystemExit("Login succeeded but no oauth2 token returned.")
+
+    store = _load_profiles()
+    profiles = store.setdefault("profiles", {})
+    profiles[profile_name] = {
+        "base_url": base_url,
+        "auth": {"oauth2": token},
+        "username": username,
+    }
+    store["active_profile"] = profile_name
+    _save_profiles(store)
+    _print_output(
+        {
+            "saved_profile": profile_name,
+            "base_url": base_url,
+            "username": username,
+            "active_profile": profile_name,
+            "config_path": str(CONFIG_PATH),
+            "next_steps": [
+                f"querylake --profile {profile_name} doctor",
+                f"querylake --profile {profile_name} rag list-collections",
+                f"querylake --profile {profile_name} rag create-collection --name quickstart",
+            ],
+        },
+        as_json=True,
+    )
+    return 0
+
+
 def cmd_models(args: argparse.Namespace) -> int:
     client = _build_client(args)
     try:
@@ -1143,6 +1226,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = subparsers.add_parser("doctor", help="Run connectivity and readiness checks.")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_setup = subparsers.add_parser(
+        "setup",
+        help="Bootstrap a local profile (interactive by default) and save credentials.",
+    )
+    p_setup.add_argument("--profile", default="default", help="Profile name to create/update.")
+    p_setup.add_argument("--url", default=None, help="QueryLake base URL.")
+    p_setup.add_argument("--username", default=None, help="Username.")
+    p_setup.add_argument("--password", default=None, help="Password.")
+    p_setup.add_argument(
+        "--skip-login",
+        action="store_true",
+        help="Only save profile URL and set active profile (no credential check).",
+    )
+    p_setup.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Fail if required fields are missing instead of prompting.",
+    )
+    p_setup.set_defaults(func=cmd_setup)
 
     p_login = subparsers.add_parser("login", help="Login and save OAuth2 token to a profile.")
     p_login.add_argument("--username", required=True, help="Username.")

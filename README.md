@@ -72,6 +72,7 @@ pip install querylake-sdk
 
 ```bash
 querylake --url http://127.0.0.1:8000 doctor
+querylake setup --url http://127.0.0.1:8000 --profile local --username <u> --password <p> --non-interactive
 querylake login --url http://127.0.0.1:8000 --profile local --username <u> --password <p>
 querylake --profile local rag create-collection --name "papers"
 querylake --profile local rag list-collections

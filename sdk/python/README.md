@@ -104,6 +104,7 @@ querylake --url http://127.0.0.1:8000 doctor
 ### 2) Login + store profile
 
 ```bash
+querylake setup --url http://127.0.0.1:8000 --profile local --username demo --password demo-pass --non-interactive
 querylake login \
   --url http://127.0.0.1:8000 \
   --profile local \
