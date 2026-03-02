@@ -79,6 +79,7 @@ querylake --profile local rag get-collection --collection-id <id>
 querylake --profile local rag update-collection --collection-id <id> --title "papers-v2"
 querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --await-embedding
 querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
+querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*" --recursive --extensions ".pdf,.md" --exclude-glob "archive/*" --dry-run --list-files
 querylake --profile local rag list-documents --collection-id <id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <id>
 querylake --profile local rag random-chunks --collection-ids <id> --limit 5

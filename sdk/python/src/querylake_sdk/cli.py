@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import getpass
 import json
 import os
@@ -368,12 +369,31 @@ def _resolve_upload_dir_files(
     pattern: str,
     recursive: bool,
     max_files: Optional[int],
+    include_extensions: Optional[List[str]] = None,
+    exclude_globs: Optional[List[str]] = None,
 ) -> List[Path]:
     root = Path(directory).expanduser().resolve()
     if not root.exists() or not root.is_dir():
         raise SystemExit(f"--dir must be an existing directory: {root}")
     iterator = root.rglob(pattern) if recursive else root.glob(pattern)
     files = [path for path in iterator if path.is_file()]
+    if include_extensions:
+        ext_set = {
+            value.lower() if value.startswith(".") else f".{value.lower()}" for value in include_extensions
+        }
+        files = [path for path in files if path.suffix.lower() in ext_set]
+    if exclude_globs:
+        patterns = [pattern.strip() for pattern in exclude_globs if isinstance(pattern, str) and pattern.strip()]
+
+        def _is_excluded(path: Path) -> bool:
+            rel_posix = path.relative_to(root).as_posix()
+            name = path.name
+            for pattern in patterns:
+                if fnmatch.fnmatch(rel_posix, pattern) or fnmatch.fnmatch(name, pattern):
+                    return True
+            return False
+
+        files = [path for path in files if not _is_excluded(path)]
     files.sort()
     if max_files is not None:
         files = files[: max(0, int(max_files))]
@@ -381,16 +401,41 @@ def _resolve_upload_dir_files(
 
 
 def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
+    include_extensions: Optional[List[str]] = None
+    if isinstance(args.extensions, str) and args.extensions.strip():
+        include_extensions = [part.strip() for part in args.extensions.split(",") if part.strip()]
+    exclude_globs = list(args.exclude_glob or [])
     files = _resolve_upload_dir_files(
         args.dir,
         pattern=args.pattern,
         recursive=args.recursive,
         max_files=args.max_files,
+        include_extensions=include_extensions,
+        exclude_globs=exclude_globs,
     )
     if not files:
         raise SystemExit(
             f"No files found under {Path(args.dir).expanduser().resolve()} matching pattern {args.pattern!r}."
         )
+
+    if args.dry_run:
+        dry_run_payload: Dict[str, Any] = {
+            "directory": str(Path(args.dir).expanduser().resolve()),
+            "pattern": args.pattern,
+            "recursive": bool(args.recursive),
+            "requested_files": len(files),
+            "uploaded": 0,
+            "failed": 0,
+            "dry_run": True,
+        }
+        if include_extensions:
+            dry_run_payload["extensions"] = include_extensions
+        if exclude_globs:
+            dry_run_payload["exclude_glob"] = exclude_globs
+        if args.list_files:
+            dry_run_payload["selected_files"] = [str(path) for path in files]
+        _print_output(dry_run_payload, as_json=True)
+        return 0
 
     client = _build_client(args, require_auth=True)
     uploaded = 0
@@ -425,7 +470,14 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         "uploaded": uploaded,
         "failed": failed,
         "fail_fast": bool(args.fail_fast),
+        "dry_run": False,
     }
+    if include_extensions:
+        payload["extensions"] = include_extensions
+    if exclude_globs:
+        payload["exclude_glob"] = exclude_globs
+    if args.list_files:
+        payload["selected_files"] = [str(path) for path in files]
     if errors:
         payload["errors"] = errors
     _print_output(payload, as_json=True)
@@ -835,6 +887,27 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional cap on number of files to upload after sorting.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--extensions",
+        default=None,
+        help="Optional comma-separated extension filter (e.g. '.pdf,.md').",
+    )
+    p_rag_upload_dir.add_argument(
+        "--exclude-glob",
+        action="append",
+        default=[],
+        help="Exclude files matching glob relative to --dir (repeatable).",
+    )
+    p_rag_upload_dir.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List/validate selected files without uploading.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--list-files",
+        action="store_true",
+        help="Include selected file paths in output payload.",
     )
     p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
     p_rag_upload_dir.add_argument("--no-scan", action="store_true")

@@ -82,6 +82,10 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag delete-document`
 - `querylake rag upload`
 - `querylake rag upload-dir`
+  - bulk selection controls: `--pattern`, `--recursive`, `--max-files`
+  - filter controls: `--extensions`, `--exclude-glob` (repeatable)
+  - planning mode: `--dry-run` + `--list-files` for selection preview without upload
+  - ingest controls: `--await-embedding`, `--no-scan`, `--no-embeddings`, `--sparse-embeddings`, `--sparse-dimensions`, `--fail-fast`
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields
   - add `--preset` for common retrieval profiles (`balanced`, `tri-lane`, `lexical-heavy`, `semantic-heavy`, `sparse-heavy`)

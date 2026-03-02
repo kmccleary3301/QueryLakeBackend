@@ -24,6 +24,21 @@ querylake --profile local rag update-collection --collection-id <collection_id> 
 
 ## 2) Ingestion profiles
 
+### Dry-run planning (select files before upload)
+
+```bash
+querylake --profile local rag upload-dir \
+  --collection-id <collection_id> \
+  --dir ./dataset \
+  --pattern "*" \
+  --recursive \
+  --extensions ".txt,.md" \
+  --exclude-glob "archive/*" \
+  --exclude-glob "*.tmp" \
+  --dry-run \
+  --list-files
+```
+
 ### Dense-only (cheapest baseline)
 
 ```bash

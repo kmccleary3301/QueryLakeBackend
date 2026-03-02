@@ -323,6 +323,124 @@ def test_cli_rag_upload_dir_fail_fast(monkeypatch, tmp_path, capsys):
     assert "simulated upload failure" in out
 
 
+def test_cli_rag_upload_dir_dry_run_with_filters(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5b"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs3"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    (root / "bad.txt").write_text("x", encoding="utf-8")
+    (root / "note.md").write_text("m", encoding="utf-8")
+    sub = root / "sub"
+    sub.mkdir(parents=True, exist_ok=True)
+    (sub / "nested.txt").write_text("n", encoding="utf-8")
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_3",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*",
+            "--recursive",
+            "--extensions",
+            ".txt",
+            "--exclude-glob",
+            "bad*",
+            "--exclude-glob",
+            "sub/*",
+            "--dry-run",
+            "--list-files",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"dry_run\": true" in out.lower()
+    assert "\"uploaded\": 0" in out
+    assert "\"failed\": 0" in out
+    assert "a.txt" in out
+    assert "bad.txt" not in out
+    assert "nested.txt" not in out
+    assert "note.md" not in out
+
+
+def test_cli_rag_upload_dir_extension_and_exclude_upload(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5c"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs4"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "keep.txt").write_text("k", encoding="utf-8")
+    (root / "skip.md").write_text("m", encoding="utf-8")
+    (root / "bad.txt").write_text("x", encoding="utf-8")
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_4",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*",
+            "--extensions",
+            "txt",
+            "--exclude-glob",
+            "bad*",
+            "--list-files",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"requested_files\": 1" in out
+    assert "\"uploaded\": 1" in out
+    assert "\"failed\": 0" in out
+    assert "keep.txt" in out
+    assert "bad.txt" not in out
+    assert "skip.md" not in out
+
+
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):
     home = tmp_path / "home6"
     home.mkdir(parents=True, exist_ok=True)

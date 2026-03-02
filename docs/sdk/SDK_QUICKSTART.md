@@ -52,6 +52,17 @@ querylake rag upload-dir \
   --pattern "*.pdf" \
   --recursive
 
+# Preview selection only (no upload), with include/exclude filters
+querylake rag upload-dir \
+  --collection-id <collection_id> \
+  --dir ./docs \
+  --pattern "*" \
+  --recursive \
+  --extensions ".pdf,.md" \
+  --exclude-glob "archive/*" \
+  --dry-run \
+  --list-files
+
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
 querylake rag count-chunks --collection-ids <collection_id>
