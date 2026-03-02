@@ -8,7 +8,7 @@ echo "[ci-sdk] cleaning prior build artifacts"
 rm -rf sdk/python/dist
 
 echo "[ci-sdk] running SDK tests"
-uv run --project sdk/python pytest sdk/python/tests -q
+uv run --project sdk/python --extra dev pytest sdk/python/tests -q
 
 echo "[ci-sdk] building SDK package"
 uv run --project sdk/python --with build python -m build sdk/python
