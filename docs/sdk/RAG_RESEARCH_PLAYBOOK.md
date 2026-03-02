@@ -36,7 +36,9 @@ querylake --profile local rag upload-dir \
   --exclude-glob "archive/*" \
   --exclude-glob "*.tmp" \
   --dry-run \
-  --list-files
+  --list-files \
+  --selection-output ./artifacts/selected_files.json \
+  --report-file ./artifacts/upload_dry_run.json
 ```
 
 ### Dense-only (cheapest baseline)

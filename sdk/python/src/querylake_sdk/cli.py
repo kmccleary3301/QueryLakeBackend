@@ -98,6 +98,12 @@ def _print_output(payload: Any, as_json: bool = True) -> None:
         print(payload)
 
 
+def _write_json_file(output_path: str, payload: Any) -> None:
+    destination = Path(output_path).expanduser().resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     client = _build_client(args)
     checks: Dict[str, Any] = {"base_url": client.base_url}
@@ -418,6 +424,21 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             f"No files found under {Path(args.dir).expanduser().resolve()} matching pattern {args.pattern!r}."
         )
 
+    selected_files = [str(path) for path in files]
+    if args.selection_output:
+        selection_payload: Dict[str, Any] = {
+            "directory": str(Path(args.dir).expanduser().resolve()),
+            "pattern": args.pattern,
+            "recursive": bool(args.recursive),
+            "requested_files": len(files),
+            "selected_files": selected_files,
+        }
+        if include_extensions:
+            selection_payload["extensions"] = include_extensions
+        if exclude_globs:
+            selection_payload["exclude_glob"] = exclude_globs
+        _write_json_file(args.selection_output, selection_payload)
+
     if args.dry_run:
         dry_run_payload: Dict[str, Any] = {
             "directory": str(Path(args.dir).expanduser().resolve()),
@@ -433,7 +454,12 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         if exclude_globs:
             dry_run_payload["exclude_glob"] = exclude_globs
         if args.list_files:
-            dry_run_payload["selected_files"] = [str(path) for path in files]
+            dry_run_payload["selected_files"] = selected_files
+        if args.selection_output:
+            dry_run_payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
+        if args.report_file:
+            _write_json_file(args.report_file, dry_run_payload)
+            dry_run_payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
         _print_output(dry_run_payload, as_json=True)
         return 0
 
@@ -477,9 +503,14 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
     if exclude_globs:
         payload["exclude_glob"] = exclude_globs
     if args.list_files:
-        payload["selected_files"] = [str(path) for path in files]
+        payload["selected_files"] = selected_files
+    if args.selection_output:
+        payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
     if errors:
         payload["errors"] = errors
+    if args.report_file:
+        _write_json_file(args.report_file, payload)
+        payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
     _print_output(payload, as_json=True)
     return 0 if failed == 0 else 1
 
@@ -908,6 +939,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-files",
         action="store_true",
         help="Include selected file paths in output payload.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--selection-output",
+        default=None,
+        help="Optional path to write selected file list + selection metadata as JSON.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--report-file",
+        default=None,
+        help="Optional path to write final upload/dry-run JSON payload.",
     )
     p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
     p_rag_upload_dir.add_argument("--no-scan", action="store_true")

@@ -85,6 +85,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - bulk selection controls: `--pattern`, `--recursive`, `--max-files`
   - filter controls: `--extensions`, `--exclude-glob` (repeatable)
   - planning mode: `--dry-run` + `--list-files` for selection preview without upload
+  - artifact output: `--selection-output` (selected file list), `--report-file` (final payload JSON)
   - ingest controls: `--await-embedding`, `--no-scan`, `--no-embeddings`, `--sparse-embeddings`, `--sparse-dimensions`, `--fail-fast`
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields

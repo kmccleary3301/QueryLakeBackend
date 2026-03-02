@@ -61,7 +61,9 @@ querylake rag upload-dir \
   --extensions ".pdf,.md" \
   --exclude-glob "archive/*" \
   --dry-run \
-  --list-files
+  --list-files \
+  --selection-output ./artifacts/selected_files.json \
+  --report-file ./artifacts/upload_dry_run.json
 
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0

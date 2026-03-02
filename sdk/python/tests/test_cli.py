@@ -441,6 +441,130 @@ def test_cli_rag_upload_dir_extension_and_exclude_upload(monkeypatch, tmp_path, 
     assert "skip.md" not in out
 
 
+def test_cli_rag_upload_dir_writes_selection_and_report_files_dry_run(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5d"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs5"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    (root / "b.txt").write_text("b", encoding="utf-8")
+
+    selection_file = tmp_path / "artifacts" / "selection.json"
+    report_file = tmp_path / "artifacts" / "report.json"
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_5",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--dry-run",
+            "--selection-output",
+            str(selection_file),
+            "--report-file",
+            str(report_file),
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"dry_run\": true" in out.lower()
+    assert "\"report_file\":" in out
+    assert "\"selection_output\":" in out
+
+    selection_payload = json.loads(selection_file.read_text(encoding="utf-8"))
+    assert selection_payload["requested_files"] == 2
+    assert len(selection_payload["selected_files"]) == 2
+    assert selection_payload["pattern"] == "*.txt"
+
+    report_payload = json.loads(report_file.read_text(encoding="utf-8"))
+    assert report_payload["dry_run"] is True
+    assert report_payload["requested_files"] == 2
+
+
+def test_cli_rag_upload_dir_report_file_includes_errors(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5e"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs6"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    (root / "bad.txt").write_text("x", encoding="utf-8")
+
+    selection_file = tmp_path / "artifacts2" / "selection.json"
+    report_file = tmp_path / "artifacts2" / "report.json"
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_6",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--selection-output",
+            str(selection_file),
+            "--report-file",
+            str(report_file),
+        ]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "\"failed\": 1" in out
+    assert "\"report_file\":" in out
+
+    selection_payload = json.loads(selection_file.read_text(encoding="utf-8"))
+    assert selection_payload["requested_files"] == 2
+
+    report_payload = json.loads(report_file.read_text(encoding="utf-8"))
+    assert report_payload["failed"] == 1
+    assert report_payload["uploaded"] == 1
+    assert len(report_payload["errors"]) == 1
+    assert "bad.txt" in report_payload["errors"][0]["file"]
+
+
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):
     home = tmp_path / "home6"
     home.mkdir(parents=True, exist_ok=True)
