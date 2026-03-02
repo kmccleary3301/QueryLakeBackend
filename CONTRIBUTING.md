@@ -34,6 +34,8 @@ Run the smallest gate set that matches your change:
 - Retrieval/runtime/checks changes:
   - `make ci-unification`
   - `make ci-retrieval-smoke`
+- Docs-only changes:
+  - `make ci-docs`
 - General backend code changes:
   - `make test`
 
@@ -81,4 +83,3 @@ If your change affects SDK packaging or release flow, update:
 
 - `docs/sdk/PYPI_RELEASE.md`
 - `docs/sdk/API_REFERENCE.md` (if API/CLI changed)
-

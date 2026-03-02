@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -36,6 +36,9 @@ health:
 
 test:
 	uv run pytest
+
+ci-docs:
+	uv run --no-project bash scripts/ci_docs_checks.sh
 
 ci-unification:
 	uv run --no-project bash scripts/ci_unification_checks.sh

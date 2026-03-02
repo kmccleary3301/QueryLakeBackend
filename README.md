@@ -152,6 +152,7 @@ make sdk-release-pypi
 Local CI parity helpers:
 
 ```bash
+make ci-docs
 make ci-unification
 make ci-retrieval-smoke
 ```

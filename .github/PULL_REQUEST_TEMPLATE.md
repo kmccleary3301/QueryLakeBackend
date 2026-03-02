@@ -16,6 +16,7 @@ List commands actually run and key results.
 
 ```bash
 # Example
+make ci-docs
 make sdk-precommit-run
 make sdk-ci
 make ci-unification
@@ -39,4 +40,3 @@ make ci-retrieval-smoke
 - [ ] I updated docs for behavior/setup/workflow changes.
 - [ ] I did not commit local secrets or machine-specific files.
 - [ ] CI workflow effects were validated locally where possible.
-

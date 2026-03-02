@@ -59,6 +59,7 @@ Optional end-to-end validation against a running local backend:
 
 ```bash
 make sdk-smoke
+make ci-docs
 make ci-unification
 make ci-retrieval-smoke
 ```
