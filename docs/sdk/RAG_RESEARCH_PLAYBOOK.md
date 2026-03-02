@@ -17,6 +17,7 @@ Create a collection:
 
 ```bash
 querylake --profile local rag create-collection --name "rag-playbook"
+querylake --profile local rag list-collections
 ```
 
 ## 2) Ingestion profiles
@@ -66,6 +67,10 @@ querylake --profile local rag search \
   --limit-sparse 0 \
   --bm25-weight 0.55 \
   --similarity-weight 0.45
+
+# Inspect indexed state for debugging
+querylake --profile local rag list-documents --collection-id <collection_id> --limit 20
+querylake --profile local rag count-chunks --collection-ids <collection_id>
 ```
 
 ### Three-lane hybrid (BM25 + dense + sparse)

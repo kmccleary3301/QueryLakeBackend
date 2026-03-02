@@ -33,6 +33,34 @@ class _FakeClient:
     def list_models(self):
         return {"data": []}
 
+    def list_collections(self, *, organization_id=None, global_collections=False):
+        return {
+            "collections": [
+                {
+                    "hash_id": "col_1",
+                    "name": "demo",
+                    "organization_id": organization_id,
+                    "global": bool(global_collections),
+                }
+            ]
+        }
+
+    def list_collection_documents(self, *, collection_hash_id, limit=100, offset=0):
+        return [
+            {
+                "hash_id": "doc_1",
+                "collection_hash_id": str(collection_hash_id),
+                "limit_used": int(limit),
+                "offset_used": int(offset),
+            }
+        ]
+
+    def count_chunks(self, *, collection_ids=None):
+        return {
+            "chunk_count": 42,
+            "collection_ids": list(collection_ids) if collection_ids is not None else None,
+        }
+
     def upload_document(
         self,
         *,
@@ -245,3 +273,81 @@ def test_cli_rag_upload_dir_fail_fast(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "\"failed\": 1" in out
     assert "simulated upload failure" in out
+
+
+def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home6"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(["rag", "list-collections", "--global-collections", "--organization-id", "7"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"hash_id\": \"col_1\"" in out
+    assert "\"organization_id\": 7" in out
+
+
+def test_cli_rag_list_documents_and_count_chunks(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home7"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "list-documents",
+            "--collection-id",
+            "col_99",
+            "--limit",
+            "10",
+            "--offset",
+            "5",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"collection_hash_id\": \"col_99\"" in out
+    assert "\"count\": 1" in out
+    assert "\"limit_used\": 10" in out
+    assert "\"offset_used\": 5" in out
+
+    code = cli.main(["rag", "count-chunks", "--collection-ids", "col_99,col_100"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"chunk_count\": 42" in out
+    assert "\"col_99\"" in out
+    assert "\"col_100\"" in out

@@ -253,6 +253,46 @@ def cmd_rag_create_collection(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rag_list_collections(args: argparse.Namespace) -> int:
+    client = _build_client(args, require_auth=True)
+    try:
+        result = client.list_collections(
+            organization_id=args.organization_id,
+            global_collections=args.global_collections,
+        )
+    finally:
+        client.close()
+    _print_output(result, as_json=True)
+    return 0
+
+
+def cmd_rag_list_documents(args: argparse.Namespace) -> int:
+    client = _build_client(args, require_auth=True)
+    try:
+        rows = client.list_collection_documents(
+            collection_hash_id=args.collection_id,
+            limit=args.limit,
+            offset=args.offset,
+        )
+    finally:
+        client.close()
+    _print_output({"documents": rows, "count": len(rows)}, as_json=True)
+    return 0
+
+
+def cmd_rag_count_chunks(args: argparse.Namespace) -> int:
+    client = _build_client(args, require_auth=True)
+    collection_ids = None
+    if isinstance(args.collection_ids, str) and args.collection_ids.strip():
+        collection_ids = [part.strip() for part in args.collection_ids.split(",") if part.strip()]
+    try:
+        result = client.count_chunks(collection_ids=collection_ids)
+    finally:
+        client.close()
+    _print_output(result, as_json=True)
+    return 0
+
+
 def cmd_rag_upload(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     try:
@@ -432,6 +472,38 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_create.add_argument("--public", action="store_true", help="Create a public collection.")
     p_rag_create.add_argument("--organization-id", type=int, default=None)
     p_rag_create.set_defaults(func=cmd_rag_create_collection)
+
+    p_rag_list_collections = rag_sub.add_parser(
+        "list-collections",
+        help="List collections visible to the authenticated user.",
+    )
+    p_rag_list_collections.add_argument("--organization-id", type=int, default=None)
+    p_rag_list_collections.add_argument(
+        "--global-collections",
+        action="store_true",
+        help="Request globally visible collections.",
+    )
+    p_rag_list_collections.set_defaults(func=cmd_rag_list_collections)
+
+    p_rag_list_documents = rag_sub.add_parser(
+        "list-documents",
+        help="List documents in a collection.",
+    )
+    p_rag_list_documents.add_argument("--collection-id", required=True)
+    p_rag_list_documents.add_argument("--limit", type=int, default=100)
+    p_rag_list_documents.add_argument("--offset", type=int, default=0)
+    p_rag_list_documents.set_defaults(func=cmd_rag_list_documents)
+
+    p_rag_count_chunks = rag_sub.add_parser(
+        "count-chunks",
+        help="Count indexed chunks across all or selected collections.",
+    )
+    p_rag_count_chunks.add_argument(
+        "--collection-ids",
+        default=None,
+        help="Optional comma-separated collection IDs.",
+    )
+    p_rag_count_chunks.set_defaults(func=cmd_rag_count_chunks)
 
     p_rag_upload = rag_sub.add_parser("upload", help="Upload a document to a collection.")
     p_rag_upload.add_argument("--collection-id", required=True)

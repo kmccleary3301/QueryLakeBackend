@@ -40,6 +40,7 @@ querylake login \
 
 ```bash
 querylake rag create-collection --name "quickstart"
+querylake rag list-collections
 querylake rag upload --collection-id <collection_id> --file ./paper.pdf --await-embedding
 
 # Bulk upload a folder (helpful for experiments)
@@ -48,6 +49,10 @@ querylake rag upload-dir \
   --dir ./docs \
   --pattern "*.pdf" \
   --recursive
+
+# Inspect corpus state
+querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
+querylake rag count-chunks --collection-ids <collection_id>
 ```
 
 ## 5) Hybrid search
