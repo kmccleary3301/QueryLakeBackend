@@ -41,6 +41,8 @@ querylake login \
 ```bash
 querylake rag create-collection --name "quickstart"
 querylake rag list-collections
+querylake rag get-collection --collection-id <collection_id>
+querylake rag update-collection --collection-id <collection_id> --title "quickstart-v2"
 querylake rag upload --collection-id <collection_id> --file ./paper.pdf --await-embedding
 
 # Bulk upload a folder (helpful for experiments)
@@ -53,6 +55,7 @@ querylake rag upload-dir \
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
 querylake rag count-chunks --collection-ids <collection_id>
+querylake rag random-chunks --collection-ids <collection_id> --limit 5
 
 # Destructive cleanup for one document (requires explicit confirmation)
 querylake rag delete-document --document-id <document_hash_id> --yes

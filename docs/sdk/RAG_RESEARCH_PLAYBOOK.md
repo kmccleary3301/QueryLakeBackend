@@ -18,6 +18,8 @@ Create a collection:
 ```bash
 querylake --profile local rag create-collection --name "rag-playbook"
 querylake --profile local rag list-collections
+querylake --profile local rag get-collection --collection-id <collection_id>
+querylake --profile local rag update-collection --collection-id <collection_id> --title "rag-playbook-v2"
 ```
 
 ## 2) Ingestion profiles
@@ -73,6 +75,7 @@ querylake --profile local rag search \
 # Inspect indexed state for debugging
 querylake --profile local rag list-documents --collection-id <collection_id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <collection_id>
+querylake --profile local rag random-chunks --collection-ids <collection_id> --limit 5
 # Cleanup one noisy document (destructive)
 querylake --profile local rag delete-document --document-id <document_hash_id> --yes
 ```

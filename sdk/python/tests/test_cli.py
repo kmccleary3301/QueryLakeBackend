@@ -59,6 +59,17 @@ class _FakeClient:
             }
         ]
 
+    def fetch_collection(self, *, collection_hash_id):
+        return {"hash_id": str(collection_hash_id), "name": "demo collection"}
+
+    def modify_collection(self, *, collection_hash_id, title=None, description=None):
+        return {
+            "ok": True,
+            "collection_hash_id": str(collection_hash_id),
+            "title": title,
+            "description": description,
+        }
+
     def count_chunks(self, *, collection_ids=None):
         return {
             "chunk_count": 42,
@@ -85,6 +96,18 @@ class _FakeClient:
 
     def delete_document(self, *, document_hash_id):
         return {"ok": True, "document_hash_id": str(document_hash_id)}
+
+    def get_random_chunks(self, *, limit=5, collection_ids=None):
+        out = []
+        for idx in range(int(limit)):
+            out.append(
+                {
+                    "id": f"chunk_{idx}",
+                    "text": "sample",
+                    "collection_ids": list(collection_ids) if collection_ids is not None else None,
+                }
+            )
+        return out
 
     def upload_document(
         self,
@@ -376,6 +399,107 @@ def test_cli_rag_list_documents_and_count_chunks(monkeypatch, tmp_path, capsys):
     assert "\"chunk_count\": 42" in out
     assert "\"col_99\"" in out
     assert "\"col_100\"" in out
+
+
+def test_cli_rag_get_and_update_collection(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home8a"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(["rag", "get-collection", "--collection-id", "col_55"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"hash_id\": \"col_55\"" in out
+
+    code = cli.main(
+        [
+            "rag",
+            "update-collection",
+            "--collection-id",
+            "col_55",
+            "--title",
+            "renamed",
+            "--description",
+            "updated",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"collection_id\": \"col_55\"" in out
+    assert "\"title\": \"renamed\"" in out
+    assert "\"description\": \"updated\"" in out
+
+
+def test_cli_rag_update_collection_requires_field(monkeypatch, tmp_path):
+    home = tmp_path / "home8b"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+    with pytest.raises(SystemExit):
+        cli.main(["rag", "update-collection", "--collection-id", "col_55"])
+
+
+def test_cli_rag_random_chunks(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home8c"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+    code = cli.main(["rag", "random-chunks", "--limit", "3", "--collection-ids", "a,b"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"count\": 3" in out
+    assert "\"chunk_0\"" in out
+    assert "\"a\"" in out
+    assert "\"b\"" in out
 
 
 def test_cli_rag_search_with_metrics(monkeypatch, tmp_path, capsys):

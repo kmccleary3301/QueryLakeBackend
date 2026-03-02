@@ -118,3 +118,26 @@ def test_delete_document_uses_hash_id_payload():
         assert result is True
     finally:
         client.close()
+
+
+def test_modify_collection_payload():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/modify_document_collection"
+        payload = json.loads(request.content.decode("utf-8"))
+        assert payload["collection_hash_id"] == "col_12"
+        assert payload["title"] == "new title"
+        assert payload["description"] == "new desc"
+        return httpx.Response(200, json={"success": True, "result": True})
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    client._client.close()
+    client._client = _mock_client(handler)
+    try:
+        result = client.modify_collection(
+            collection_hash_id="col_12",
+            title="new title",
+            description="new desc",
+        )
+        assert result is True
+    finally:
+        client.close()

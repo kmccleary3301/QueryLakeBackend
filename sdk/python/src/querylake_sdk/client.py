@@ -219,6 +219,20 @@ class QueryLakeClient:
     def fetch_collection(self, *, collection_hash_id: Union[str, int]) -> Dict[str, Any]:
         return self.api("fetch_collection", {"collection_hash_id": str(collection_hash_id)})
 
+    def modify_collection(
+        self,
+        *,
+        collection_hash_id: Union[str, int],
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Any:
+        payload: Dict[str, Any] = {"collection_hash_id": str(collection_hash_id)}
+        if title is not None:
+            payload["title"] = title
+        if description is not None:
+            payload["description"] = description
+        return self.api("modify_document_collection", payload)
+
     def list_collection_documents(
         self,
         *,

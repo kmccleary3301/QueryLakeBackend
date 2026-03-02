@@ -41,6 +41,7 @@ Typical bootstrap:
 - `create_collection(name, description=None, public=False, organization_id=None) -> dict`
 - `list_collections(organization_id=None, global_collections=False) -> dict`
 - `fetch_collection(collection_hash_id) -> dict`
+- `modify_collection(collection_hash_id, title=None, description=None) -> Any`
 - `list_collection_documents(collection_hash_id, limit=100, offset=0) -> list[dict]`
 - `delete_document(document_hash_id) -> Any`
 - `upload_document(file_path, collection_hash_id, ...) -> dict`
@@ -73,8 +74,11 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake profile delete`
 - `querylake rag create-collection`
 - `querylake rag list-collections`
+- `querylake rag get-collection`
+- `querylake rag update-collection`
 - `querylake rag list-documents`
 - `querylake rag count-chunks`
+- `querylake rag random-chunks`
 - `querylake rag delete-document`
 - `querylake rag upload`
 - `querylake rag upload-dir`

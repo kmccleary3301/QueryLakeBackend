@@ -280,6 +280,32 @@ def cmd_rag_list_documents(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rag_get_collection(args: argparse.Namespace) -> int:
+    client = _build_client(args, require_auth=True)
+    try:
+        result = client.fetch_collection(collection_hash_id=args.collection_id)
+    finally:
+        client.close()
+    _print_output(result, as_json=True)
+    return 0
+
+
+def cmd_rag_update_collection(args: argparse.Namespace) -> int:
+    if args.title is None and args.description is None:
+        raise SystemExit("At least one of --title or --description is required.")
+    client = _build_client(args, require_auth=True)
+    try:
+        result = client.modify_collection(
+            collection_hash_id=args.collection_id,
+            title=args.title,
+            description=args.description,
+        )
+    finally:
+        client.close()
+    _print_output({"collection_id": args.collection_id, "result": result}, as_json=True)
+    return 0
+
+
 def cmd_rag_count_chunks(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     collection_ids = None
@@ -290,6 +316,19 @@ def cmd_rag_count_chunks(args: argparse.Namespace) -> int:
     finally:
         client.close()
     _print_output(result, as_json=True)
+    return 0
+
+
+def cmd_rag_random_chunks(args: argparse.Namespace) -> int:
+    collection_ids = None
+    if isinstance(args.collection_ids, str) and args.collection_ids.strip():
+        collection_ids = [part.strip() for part in args.collection_ids.split(",") if part.strip()]
+    client = _build_client(args, require_auth=True)
+    try:
+        rows = client.get_random_chunks(limit=args.limit, collection_ids=collection_ids)
+    finally:
+        client.close()
+    _print_output({"results": rows, "count": len(rows)}, as_json=True)
     return 0
 
 
@@ -654,6 +693,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_list_documents.add_argument("--offset", type=int, default=0)
     p_rag_list_documents.set_defaults(func=cmd_rag_list_documents)
 
+    p_rag_get_collection = rag_sub.add_parser(
+        "get-collection",
+        help="Fetch collection metadata by collection ID.",
+    )
+    p_rag_get_collection.add_argument("--collection-id", required=True)
+    p_rag_get_collection.set_defaults(func=cmd_rag_get_collection)
+
+    p_rag_update_collection = rag_sub.add_parser(
+        "update-collection",
+        help="Update collection title/description.",
+    )
+    p_rag_update_collection.add_argument("--collection-id", required=True)
+    p_rag_update_collection.add_argument("--title", default=None)
+    p_rag_update_collection.add_argument("--description", default=None)
+    p_rag_update_collection.set_defaults(func=cmd_rag_update_collection)
+
     p_rag_count_chunks = rag_sub.add_parser(
         "count-chunks",
         help="Count indexed chunks across all or selected collections.",
@@ -664,6 +719,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional comma-separated collection IDs.",
     )
     p_rag_count_chunks.set_defaults(func=cmd_rag_count_chunks)
+
+    p_rag_random_chunks = rag_sub.add_parser(
+        "random-chunks",
+        help="Sample random chunks for quick retrieval inspection.",
+    )
+    p_rag_random_chunks.add_argument("--limit", type=int, default=5)
+    p_rag_random_chunks.add_argument(
+        "--collection-ids",
+        default=None,
+        help="Optional comma-separated collection IDs.",
+    )
+    p_rag_random_chunks.set_defaults(func=cmd_rag_random_chunks)
 
     p_rag_delete_document = rag_sub.add_parser(
         "delete-document",
