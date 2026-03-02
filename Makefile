@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-unification ci-retrieval-smoke sdk-install-dev sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-unification ci-retrieval-smoke sdk-install-dev sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -47,6 +47,12 @@ ci-retrieval-smoke:
 
 sdk-install-dev:
 	uv run --project sdk/python pip install -e sdk/python
+
+sdk-lint:
+	uv run --project sdk/python --extra dev ruff check sdk/python/src sdk/python/tests
+
+sdk-type:
+	uv run --project sdk/python --extra dev mypy sdk/python/src/querylake_sdk
 
 sdk-test:
 	uv run --project sdk/python pytest sdk/python/tests

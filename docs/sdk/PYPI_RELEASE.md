@@ -18,6 +18,8 @@ make sdk-release-check
 ```
 
 `make sdk-ci` runs the same quality gate used in CI (`scripts/ci_sdk_checks.sh`):
+- lint (`ruff`)
+- typing (`mypy`)
 - SDK tests (with `dev` extra)
 - wheel/sdist build
 - `twine check`

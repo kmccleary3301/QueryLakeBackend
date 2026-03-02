@@ -48,6 +48,8 @@ make health
 
 ```bash
 make sdk-install-dev
+make sdk-lint
+make sdk-type
 make sdk-test
 make sdk-ci
 ```

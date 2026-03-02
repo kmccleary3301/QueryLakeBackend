@@ -137,6 +137,8 @@ Use the standalone SDK package for application developers and researchers. Keep 
 Release helpers:
 
 ```bash
+make sdk-lint
+make sdk-type
 make sdk-ci
 make sdk-release-check
 # optional publish helpers

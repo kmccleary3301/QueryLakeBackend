@@ -87,3 +87,13 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - SDK is intentionally thin around query shaping and retrieval strategy so research teams can pass lane/fusion options directly.
 - Helper methods standardize common workflows; low-level `api()` keeps full backend reach.
 - `upload_document` passes parameters via query string JSON to mirror backend multipart contract exactly.
+
+## SDK quality gate (contributors)
+
+From repo root:
+
+```bash
+make sdk-lint
+make sdk-type
+make sdk-ci
+```
