@@ -41,7 +41,7 @@ jobs:
       - name: Retrieval parity (smoke)
         run: uv run --no-project bash scripts/ci_retrieval_parity.sh smoke
       - name: BCAS strict script tests
-        run: uv run --no-project --with pytest pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+        run: uv run --no-project --with pytest --with sqlmodel --with pgvector --with psycopg2-binary pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
       - name: Build summary
         run: |
           uv run --no-project python scripts/ci_retrieval_summary.py \
@@ -77,7 +77,7 @@ jobs:
       - name: Retrieval parity (nightly)
         run: uv run --no-project bash scripts/ci_retrieval_parity.sh nightly
       - name: BCAS strict script tests
-        run: uv run --no-project --with pytest pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+        run: uv run --no-project --with pytest --with sqlmodel --with pgvector --with psycopg2-binary pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
       - name: Build summary
         run: |
           uv run --no-project python scripts/ci_retrieval_summary.py \
