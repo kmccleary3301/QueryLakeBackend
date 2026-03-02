@@ -31,19 +31,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/pr_fast_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (smoke)
-        run: bash scripts/ci_retrieval_preflight.sh smoke
+        run: uv run --no-project bash scripts/ci_retrieval_preflight.sh smoke
       - name: Retrieval eval (smoke)
-        run: bash scripts/ci_retrieval_eval.sh smoke
+        run: uv run --no-project bash scripts/ci_retrieval_eval.sh smoke
       - name: Retrieval parity (smoke)
-        run: bash scripts/ci_retrieval_parity.sh smoke
+        run: uv run --no-project bash scripts/ci_retrieval_parity.sh smoke
       - name: BCAS strict script tests
-        run: pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+        run: uv run --no-project --with pytest pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
       - name: Build summary
         run: |
-          python scripts/ci_retrieval_summary.py \
+          uv run --no-project python scripts/ci_retrieval_summary.py \
             --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
             --mode smoke \
             --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
@@ -66,19 +67,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/nightly_medium_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (nightly)
-        run: bash scripts/ci_retrieval_preflight.sh nightly
+        run: uv run --no-project bash scripts/ci_retrieval_preflight.sh nightly
       - name: Retrieval eval (nightly)
-        run: bash scripts/ci_retrieval_eval.sh nightly
+        run: uv run --no-project bash scripts/ci_retrieval_eval.sh nightly
       - name: Retrieval parity (nightly)
-        run: bash scripts/ci_retrieval_parity.sh nightly
+        run: uv run --no-project bash scripts/ci_retrieval_parity.sh nightly
       - name: BCAS strict script tests
-        run: pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
+        run: uv run --no-project --with pytest pytest -q tests/test_bcas_phase2_scripts.py tests/test_paradedb_query_parser.py
       - name: Build summary
         run: |
-          python scripts/ci_retrieval_summary.py \
+          uv run --no-project python scripts/ci_retrieval_summary.py \
             --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
             --mode nightly \
             --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
@@ -99,17 +101,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/heavy_self_hosted_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (heavy)
-        run: bash scripts/ci_retrieval_preflight.sh heavy
+        run: uv run --no-project bash scripts/ci_retrieval_preflight.sh heavy
       - name: Retrieval eval (heavy)
-        run: bash scripts/ci_retrieval_eval.sh heavy
+        run: uv run --no-project bash scripts/ci_retrieval_eval.sh heavy
       - name: Retrieval parity (heavy)
-        run: bash scripts/ci_retrieval_parity.sh heavy
+        run: uv run --no-project bash scripts/ci_retrieval_parity.sh heavy
       - name: Build summary
         run: |
-          python scripts/ci_retrieval_summary.py \
+          uv run --no-project python scripts/ci_retrieval_summary.py \
             --out-dir "${CI_RETRIEVAL_OUT_DIR}" \
             --mode heavy \
             --output "${CI_RETRIEVAL_OUT_DIR}/summary.md"
