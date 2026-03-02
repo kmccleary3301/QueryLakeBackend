@@ -241,6 +241,14 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
   --selection-output ./artifacts/selected_files.json \
   --upload-report-file ./artifacts/upload_dry_run.json \
   --query "main contribution"
+
+# Fully offline deterministic mode (no backend/auth required)
+python examples/sdk/rag_bulk_ingest_and_search.py \
+  --offline-demo \
+  --dir ./docs \
+  --pattern "*.md" \
+  --recursive \
+  --query "main contribution"
 ```
 
 For deeper retrieval/ingestion tuning patterns, see `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`.

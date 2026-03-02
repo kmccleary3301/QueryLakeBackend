@@ -1,0 +1,29 @@
+[
+  {
+    "id": "offline_row_1",
+    "text": "Boiler pressure safety guidance recommends bounded operating windows and staged validation.",
+    "document_name": "offline_demo_manual.md",
+    "collection_id": "offline_demo_collection",
+    "hybrid_score": 0.93,
+    "bm25_score": 0.88,
+    "similarity_score": 0.91
+  },
+  {
+    "id": "offline_row_2",
+    "text": "Mineral oil procedures should include contamination checks, temperature controls, and periodic sampling.",
+    "document_name": "offline_demo_process.md",
+    "collection_id": "offline_demo_collection",
+    "hybrid_score": 0.87,
+    "bm25_score": 0.83,
+    "similarity_score": 0.86
+  },
+  {
+    "id": "offline_row_3",
+    "text": "Flue-gas diagnostics combine sensor trends with threshold alerts to isolate anomalies early.",
+    "document_name": "offline_demo_diagnostics.md",
+    "collection_id": "offline_demo_collection",
+    "hybrid_score": 0.81,
+    "bm25_score": 0.79,
+    "similarity_score": 0.8
+  }
+]
