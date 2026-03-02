@@ -66,7 +66,8 @@ querylake --profile local rag search \
   --limit-similarity 12 \
   --limit-sparse 0 \
   --bm25-weight 0.55 \
-  --similarity-weight 0.45
+  --similarity-weight 0.45 \
+  --with-metrics
 
 # Inspect indexed state for debugging
 querylake --profile local rag list-documents --collection-id <collection_id> --limit 20

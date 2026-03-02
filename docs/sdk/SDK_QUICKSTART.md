@@ -66,7 +66,8 @@ querylake rag search \
   --limit-sparse 12 \
   --bm25-weight 0.4 \
   --similarity-weight 0.4 \
-  --sparse-weight 0.2
+  --sparse-weight 0.2 \
+  --with-metrics
 
 # Optional lexical-only control path
 querylake rag search \

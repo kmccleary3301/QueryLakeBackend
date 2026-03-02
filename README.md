@@ -79,7 +79,7 @@ querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --a
 querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
 querylake --profile local rag list-documents --collection-id <id> --limit 20
 querylake --profile local rag count-chunks --collection-ids <id>
-querylake --profile local rag search --collection-id <id> --query "main contribution"
+querylake --profile local rag search --collection-id <id> --query "main contribution" --with-metrics
 ```
 
 ### Python flow

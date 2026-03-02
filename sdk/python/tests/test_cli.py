@@ -61,6 +61,24 @@ class _FakeClient:
             "collection_ids": list(collection_ids) if collection_ids is not None else None,
         }
 
+    def search_hybrid(self, **kwargs):
+        _ = kwargs
+        return [{"id": "r1", "text": "alpha"}, {"id": "r2", "text": "beta"}]
+
+    def search_hybrid_with_metrics(self, **kwargs):
+        _ = kwargs
+        return {
+            "rows": [{"id": "r1", "text": "alpha"}, {"id": "r2", "text": "beta"}],
+            "duration": {"total_ms": 12.34},
+            "profile": {"lanes": ["bm25", "dense", "sparse"]},
+            "constraint_hits": 1,
+        }
+
+    def api(self, function_name, payload):
+        if function_name == "search_bm25":
+            return [{"id": "bm25_1", "text": payload.get("query", "")}]
+        return {"ok": True}
+
     def upload_document(
         self,
         *,
@@ -351,3 +369,43 @@ def test_cli_rag_list_documents_and_count_chunks(monkeypatch, tmp_path, capsys):
     assert "\"chunk_count\": 42" in out
     assert "\"col_99\"" in out
     assert "\"col_100\"" in out
+
+
+def test_cli_rag_search_with_metrics(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home8"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "search",
+            "--collection-id",
+            "col_1",
+            "--query",
+            "main contribution",
+            "--with-metrics",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"duration\"" in out
+    assert "\"total_ms\": 12.34" in out
+    assert "\"constraint_hits\": 1" in out

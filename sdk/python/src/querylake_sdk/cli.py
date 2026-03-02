@@ -397,22 +397,49 @@ def cmd_rag_search(args: argparse.Namespace) -> int:
             )
             if not isinstance(rows, list):
                 rows = []
+            payload: Dict[str, Any] = {"results": rows[: args.top_k], "total": len(rows)}
         else:
-            rows = client.search_hybrid(
-                query=args.query,
-                collection_ids=[args.collection_id],
-                limit_bm25=args.limit_bm25,
-                limit_similarity=args.limit_similarity,
-                limit_sparse=args.limit_sparse,
-                bm25_weight=args.bm25_weight,
-                similarity_weight=args.similarity_weight,
-                sparse_weight=args.sparse_weight,
-                group_chunks=True,
-                rerank=False,
-            )
+            if args.with_metrics:
+                metrics_payload = client.search_hybrid_with_metrics(
+                    query=args.query,
+                    collection_ids=[args.collection_id],
+                    limit_bm25=args.limit_bm25,
+                    limit_similarity=args.limit_similarity,
+                    limit_sparse=args.limit_sparse,
+                    bm25_weight=args.bm25_weight,
+                    similarity_weight=args.similarity_weight,
+                    sparse_weight=args.sparse_weight,
+                    group_chunks=True,
+                    rerank=False,
+                )
+                rows = metrics_payload.get("rows", []) if isinstance(metrics_payload, dict) else []
+                if not isinstance(rows, list):
+                    rows = []
+                payload = {"results": rows[: args.top_k], "total": len(rows)}
+                if isinstance(metrics_payload, dict):
+                    if "duration" in metrics_payload:
+                        payload["duration"] = metrics_payload["duration"]
+                    if "profile" in metrics_payload:
+                        payload["profile"] = metrics_payload["profile"]
+                    if "constraint_hits" in metrics_payload:
+                        payload["constraint_hits"] = metrics_payload["constraint_hits"]
+            else:
+                rows = client.search_hybrid(
+                    query=args.query,
+                    collection_ids=[args.collection_id],
+                    limit_bm25=args.limit_bm25,
+                    limit_similarity=args.limit_similarity,
+                    limit_sparse=args.limit_sparse,
+                    bm25_weight=args.bm25_weight,
+                    similarity_weight=args.similarity_weight,
+                    sparse_weight=args.sparse_weight,
+                    group_chunks=True,
+                    rerank=False,
+                )
+                payload = {"results": rows[: args.top_k], "total": len(rows)}
     finally:
         client.close()
-    _print_output({"results": rows[: args.top_k], "total": len(rows)}, as_json=True)
+    _print_output(payload, as_json=True)
     return 0
 
 
@@ -560,6 +587,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_search.add_argument("--bm25-weight", type=float, default=0.55)
     p_rag_search.add_argument("--similarity-weight", type=float, default=0.45)
     p_rag_search.add_argument("--sparse-weight", type=float, default=0.0)
+    p_rag_search.add_argument(
+        "--with-metrics",
+        action="store_true",
+        help="Include duration/profile metadata for hybrid mode.",
+    )
     p_rag_search.set_defaults(func=cmd_rag_search)
 
     return parser

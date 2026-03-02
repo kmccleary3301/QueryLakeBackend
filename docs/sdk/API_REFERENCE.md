@@ -77,6 +77,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag upload`
 - `querylake rag upload-dir`
 - `querylake rag search`
+  - add `--with-metrics` in hybrid mode to include duration/profile fields
 
 ## Error model
 
