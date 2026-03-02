@@ -6,6 +6,7 @@ on:
     paths:
       - "README.md"
       - "CONTRIBUTING.md"
+      - "sdk/python/README.md"
       - "docs/**"
       - "scripts/ci_docs_checks.py"
       - "scripts/ci_docs_checks.sh"
@@ -16,6 +17,7 @@ on:
     paths:
       - "README.md"
       - "CONTRIBUTING.md"
+      - "sdk/python/README.md"
       - "docs/**"
       - "scripts/ci_docs_checks.py"
       - "scripts/ci_docs_checks.sh"

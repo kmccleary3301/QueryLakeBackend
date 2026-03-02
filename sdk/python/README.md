@@ -90,6 +90,7 @@ querylake login \
 ```bash
 querylake --profile local rag create-collection --name "papers"
 querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --await-embedding
+querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
 querylake --profile local rag search --collection-id <id> --query "hybrid retrieval design"
 # lexical-only control path (direct BM25)
 querylake --profile local rag search --mode bm25 --collection-id <id> --query "hybrid retrieval design"
@@ -97,6 +98,22 @@ querylake --profile local rag search --mode bm25 --collection-id <id> --query "h
 
 Profiles are stored at `~/.querylake/sdk_profiles.json`.
 The login profile becomes the active default, so you can omit `--profile` afterward.
+
+### Runnable bulk example
+
+From repo root:
+
+```bash
+python examples/sdk/rag_bulk_ingest_and_search.py \
+  --base-url http://127.0.0.1:8000 \
+  --username demo \
+  --password demo-pass \
+  --collection sdk-bulk-demo \
+  --dir ./docs \
+  --pattern "*.md" \
+  --recursive \
+  --query "hybrid retrieval"
+```
 
 ### Profile management
 

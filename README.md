@@ -75,6 +75,7 @@ querylake --url http://127.0.0.1:8000 doctor
 querylake login --url http://127.0.0.1:8000 --profile local --username <u> --password <p>
 querylake --profile local rag create-collection --name "papers"
 querylake --profile local rag upload --collection-id <id> --file ./paper.pdf --await-embedding
+querylake --profile local rag upload-dir --collection-id <id> --dir ./docs --pattern "*.pdf" --recursive
 querylake --profile local rag search --collection-id <id> --query "main contribution"
 ```
 
@@ -123,6 +124,7 @@ print(rows[:3])
 - SDK quickstart: `docs/sdk/SDK_QUICKSTART.md`
 - SDK API reference: `docs/sdk/API_REFERENCE.md`
 - SDK PyPI release runbook: `docs/sdk/PYPI_RELEASE.md`
+- SDK runnable examples: `examples/sdk/`
 - Route and unification docs: `docs/unification/`
 - Contributor guide: `CONTRIBUTING.md`
 

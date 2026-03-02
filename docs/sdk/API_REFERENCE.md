@@ -72,6 +72,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake profile delete`
 - `querylake rag create-collection`
 - `querylake rag upload`
+- `querylake rag upload-dir`
 - `querylake rag search`
 
 ## Error model

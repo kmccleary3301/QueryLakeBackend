@@ -130,12 +130,12 @@ def main() -> int:
         "--path",
         action="append",
         default=[],
-        help="File or directory to scan. Defaults to README.md, CONTRIBUTING.md, docs/.",
+        help="File or directory to scan. Defaults to README.md, CONTRIBUTING.md, sdk/python/README.md, docs/.",
     )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
-    scan_paths = args.path or ["README.md", "CONTRIBUTING.md", "docs"]
+    scan_paths = args.path or ["README.md", "CONTRIBUTING.md", "sdk/python/README.md", "docs"]
     files = _iter_markdown_files(repo_root, scan_paths)
     heading_cache: Dict[Path, Set[str]] = {}
 

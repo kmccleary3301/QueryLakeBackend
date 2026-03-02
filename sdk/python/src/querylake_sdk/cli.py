@@ -5,7 +5,7 @@ import getpass
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .client import QueryLakeClient
 from .errors import QueryLakeError
@@ -271,6 +271,76 @@ def cmd_rag_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_upload_dir_files(
+    directory: str,
+    *,
+    pattern: str,
+    recursive: bool,
+    max_files: Optional[int],
+) -> List[Path]:
+    root = Path(directory).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        raise SystemExit(f"--dir must be an existing directory: {root}")
+    iterator = root.rglob(pattern) if recursive else root.glob(pattern)
+    files = [path for path in iterator if path.is_file()]
+    files.sort()
+    if max_files is not None:
+        files = files[: max(0, int(max_files))]
+    return files
+
+
+def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
+    files = _resolve_upload_dir_files(
+        args.dir,
+        pattern=args.pattern,
+        recursive=args.recursive,
+        max_files=args.max_files,
+    )
+    if not files:
+        raise SystemExit(
+            f"No files found under {Path(args.dir).expanduser().resolve()} matching pattern {args.pattern!r}."
+        )
+
+    client = _build_client(args, require_auth=True)
+    uploaded = 0
+    failed = 0
+    errors: List[Dict[str, str]] = []
+    try:
+        for path in files:
+            try:
+                client.upload_document(
+                    file_path=path,
+                    collection_hash_id=args.collection_id,
+                    scan_text=not args.no_scan,
+                    create_embeddings=not args.no_embeddings,
+                    create_sparse_embeddings=args.sparse_embeddings,
+                    await_embedding=args.await_embedding,
+                    sparse_embedding_dimensions=args.sparse_dimensions,
+                )
+                uploaded += 1
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                errors.append({"file": str(path), "error": str(exc)})
+                if args.fail_fast:
+                    break
+    finally:
+        client.close()
+
+    payload: Dict[str, Any] = {
+        "directory": str(Path(args.dir).expanduser().resolve()),
+        "pattern": args.pattern,
+        "recursive": bool(args.recursive),
+        "requested_files": len(files),
+        "uploaded": uploaded,
+        "failed": failed,
+        "fail_fast": bool(args.fail_fast),
+    }
+    if errors:
+        payload["errors"] = errors
+    _print_output(payload, as_json=True)
+    return 0 if failed == 0 else 1
+
+
 def cmd_rag_search(args: argparse.Namespace) -> int:
     client = _build_client(args, require_auth=True)
     try:
@@ -372,6 +442,40 @@ def build_parser() -> argparse.ArgumentParser:
     p_rag_upload.add_argument("--sparse-embeddings", action="store_true")
     p_rag_upload.add_argument("--sparse-dimensions", type=int, default=1024)
     p_rag_upload.set_defaults(func=cmd_rag_upload)
+
+    p_rag_upload_dir = rag_sub.add_parser(
+        "upload-dir",
+        help="Bulk upload documents from a directory to a collection.",
+    )
+    p_rag_upload_dir.add_argument("--collection-id", required=True)
+    p_rag_upload_dir.add_argument("--dir", required=True, help="Directory containing source files.")
+    p_rag_upload_dir.add_argument(
+        "--pattern",
+        default="*",
+        help="Glob pattern for file selection (default: '*').",
+    )
+    p_rag_upload_dir.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recursively include matching files from subdirectories.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        help="Optional cap on number of files to upload after sorting.",
+    )
+    p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
+    p_rag_upload_dir.add_argument("--no-scan", action="store_true")
+    p_rag_upload_dir.add_argument("--no-embeddings", action="store_true")
+    p_rag_upload_dir.add_argument("--sparse-embeddings", action="store_true")
+    p_rag_upload_dir.add_argument("--sparse-dimensions", type=int, default=1024)
+    p_rag_upload_dir.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Stop immediately on first upload failure.",
+    )
+    p_rag_upload_dir.set_defaults(func=cmd_rag_upload_dir)
 
     p_rag_search = rag_sub.add_parser("search", help="Hybrid search over a collection.")
     p_rag_search.add_argument("--collection-id", required=True)

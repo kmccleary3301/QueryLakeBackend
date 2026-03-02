@@ -19,4 +19,9 @@ uv run --project sdk/python --with twine python -m twine check sdk/python/dist/*
 echo "[ci-sdk] verifying wheel contents"
 uv run --no-project python scripts/dev/verify_sdk_wheel.py --dist-dir sdk/python/dist
 
+if compgen -G "examples/sdk/*.py" > /dev/null; then
+  echo "[ci-sdk] syntax-checking SDK examples"
+  uv run --project sdk/python python -m py_compile examples/sdk/*.py
+fi
+
 echo "[ci-sdk] done"

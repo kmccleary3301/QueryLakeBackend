@@ -41,6 +41,13 @@ querylake login \
 ```bash
 querylake rag create-collection --name "quickstart"
 querylake rag upload --collection-id <collection_id> --file ./paper.pdf --await-embedding
+
+# Bulk upload a folder (helpful for experiments)
+querylake rag upload-dir \
+  --collection-id <collection_id> \
+  --dir ./docs \
+  --pattern "*.pdf" \
+  --recursive
 ```
 
 ## 5) Hybrid search
@@ -116,4 +123,18 @@ async def run():
         print(await client.healthz())
 
 asyncio.run(run())
+```
+
+## Runnable example script
+
+```bash
+python examples/sdk/rag_bulk_ingest_and_search.py \
+  --base-url http://127.0.0.1:8000 \
+  --username <username> \
+  --password <password> \
+  --collection sdk-bulk-demo \
+  --dir ./docs \
+  --pattern "*.pdf" \
+  --recursive \
+  --query "main contribution"
 ```
