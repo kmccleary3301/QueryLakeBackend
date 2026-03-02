@@ -190,4 +190,5 @@ asyncio.run(run())
 See also:
 - `docs/sdk/SDK_QUICKSTART.md`
 - `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`
+- `docs/sdk/BULK_INGEST_REFERENCE.md`
 - `docs/sdk/API_REFERENCE.md`

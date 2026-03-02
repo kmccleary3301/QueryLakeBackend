@@ -10,6 +10,8 @@
   - `docs/sdk/SDK_QUICKSTART.md`
 - SDK RAG research playbook:
   - `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`
+- SDK bulk ingest reference:
+  - `docs/sdk/BULK_INGEST_REFERENCE.md`
 - SDK API reference:
   - `docs/sdk/API_REFERENCE.md`
 - SDK release/publish runbook:
