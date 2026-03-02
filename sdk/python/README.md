@@ -137,6 +137,22 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
   --pattern "*.md" \
   --recursive \
   --query "hybrid retrieval"
+
+# Optional planning run: no upload/search side effects
+python examples/sdk/rag_bulk_ingest_and_search.py \
+  --base-url http://127.0.0.1:8000 \
+  --username demo \
+  --password demo-pass \
+  --collection sdk-bulk-demo \
+  --dir ./docs \
+  --pattern "*" \
+  --recursive \
+  --extensions ".md,.txt" \
+  --exclude-glob "archive/*" \
+  --dry-run \
+  --selection-output ./artifacts/selected_files.json \
+  --upload-report-file ./artifacts/upload_dry_run.json \
+  --query "hybrid retrieval"
 ```
 
 ### Profile management
