@@ -8,6 +8,8 @@
   - `docs/setup/DEVELOPER_EXPERIENCE_PLAN.md`
 - SDK quickstart:
   - `docs/sdk/SDK_QUICKSTART.md`
+- SDK RAG research playbook:
+  - `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`
 - SDK API reference:
   - `docs/sdk/API_REFERENCE.md`
 - SDK release/publish runbook:

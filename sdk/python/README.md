@@ -148,3 +148,8 @@ asyncio.run(run())
 - Designed for fast iteration in research and developer workflows.
 - Keeps auth/session and low-level route details out of your app code.
 - Leaves advanced experimentation flexible via raw `client.api("function_name", payload)` calls.
+
+See also:
+- `docs/sdk/SDK_QUICKSTART.md`
+- `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`
+- `docs/sdk/API_REFERENCE.md`

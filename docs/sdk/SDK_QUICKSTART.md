@@ -138,3 +138,5 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
   --recursive \
   --query "main contribution"
 ```
+
+For deeper retrieval/ingestion tuning patterns, see `docs/sdk/RAG_RESEARCH_PLAYBOOK.md`.
