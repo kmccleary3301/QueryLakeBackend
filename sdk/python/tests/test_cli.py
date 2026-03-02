@@ -565,6 +565,137 @@ def test_cli_rag_upload_dir_report_file_includes_errors(monkeypatch, tmp_path, c
     assert "bad.txt" in report_payload["errors"][0]["file"]
 
 
+def test_cli_rag_upload_dir_from_selection_file(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5f"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs7"
+    root.mkdir(parents=True, exist_ok=True)
+    keep = root / "keep.txt"
+    keep.write_text("keep", encoding="utf-8")
+    skip = root / "skip.txt"
+    skip.write_text("skip", encoding="utf-8")
+
+    selection_file = tmp_path / "selection_input.json"
+    selection_file.write_text(
+        json.dumps(
+            {
+                "directory": str(root),
+                "selected_files": [str(keep)],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_7",
+            "--from-selection",
+            str(selection_file),
+            "--list-files",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"requested_files\": 1" in out
+    assert "\"uploaded\": 1" in out
+    assert "\"from_selection\":" in out
+    assert "\"selection_mode\": \"from-selection\"" in out
+    assert "keep.txt" in out
+    assert "skip.txt" not in out
+
+
+def test_cli_rag_upload_dir_requires_dir_when_not_using_selection(monkeypatch, tmp_path):
+    home = tmp_path / "home5g"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    with pytest.raises(SystemExit, match="--dir is required unless --from-selection is provided"):
+        cli.main(
+            [
+                "rag",
+                "upload-dir",
+                "--collection-id",
+                "col_8",
+                "--pattern",
+                "*.txt",
+            ]
+        )
+
+
+def test_cli_rag_upload_dir_from_selection_missing_file(monkeypatch, tmp_path):
+    home = tmp_path / "home5h"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    with pytest.raises(SystemExit, match="--from-selection must be an existing file"):
+        cli.main(
+            [
+                "rag",
+                "upload-dir",
+                "--collection-id",
+                "col_9",
+                "--from-selection",
+                str(tmp_path / "missing_selection.json"),
+            ]
+        )
+
+
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):
     home = tmp_path / "home6"
     home.mkdir(parents=True, exist_ok=True)

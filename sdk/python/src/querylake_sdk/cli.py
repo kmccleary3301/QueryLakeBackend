@@ -406,28 +406,101 @@ def _resolve_upload_dir_files(
     return files
 
 
+def _load_upload_selection_file(
+    selection_file: str,
+    *,
+    base_dir: Optional[str] = None,
+) -> tuple[List[Path], Optional[str]]:
+    selection_path = Path(selection_file).expanduser().resolve()
+    if not selection_path.exists() or not selection_path.is_file():
+        raise SystemExit(f"--from-selection must be an existing file: {selection_path}")
+
+    try:
+        payload = json.loads(selection_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(f"Failed to parse selection file {selection_path}: {exc}") from exc
+
+    selected_files: Any = payload
+    payload_directory: Optional[str] = None
+    if isinstance(payload, dict):
+        selected_files = payload.get("selected_files")
+        directory_value = payload.get("directory")
+        if isinstance(directory_value, str) and directory_value.strip():
+            payload_directory = directory_value.strip()
+    if not isinstance(selected_files, list) or not selected_files:
+        raise SystemExit(
+            f"Selection file {selection_path} must be a non-empty list of file paths or contain 'selected_files'."
+        )
+
+    resolved_base = None
+    base_candidate = base_dir or payload_directory
+    if isinstance(base_candidate, str) and base_candidate.strip():
+        resolved_base = Path(base_candidate).expanduser().resolve()
+
+    resolved_files: List[Path] = []
+    for value in selected_files:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute() and resolved_base is not None:
+            candidate = resolved_base / candidate
+        resolved_files.append(candidate.resolve())
+
+    if not resolved_files:
+        raise SystemExit(f"Selection file {selection_path} did not contain any usable file paths.")
+
+    missing = [str(path) for path in resolved_files if not path.exists() or not path.is_file()]
+    if missing:
+        preview = ", ".join(missing[:5])
+        suffix = " ..." if len(missing) > 5 else ""
+        raise SystemExit(f"Selection file references missing/non-file paths: {preview}{suffix}")
+    return resolved_files, payload_directory
+
+
 def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
     include_extensions: Optional[List[str]] = None
     if isinstance(args.extensions, str) and args.extensions.strip():
         include_extensions = [part.strip() for part in args.extensions.split(",") if part.strip()]
     exclude_globs = list(args.exclude_glob or [])
-    files = _resolve_upload_dir_files(
-        args.dir,
-        pattern=args.pattern,
-        recursive=args.recursive,
-        max_files=args.max_files,
-        include_extensions=include_extensions,
-        exclude_globs=exclude_globs,
-    )
-    if not files:
-        raise SystemExit(
-            f"No files found under {Path(args.dir).expanduser().resolve()} matching pattern {args.pattern!r}."
+    selection_source: Optional[str] = None
+    selection_mode = "directory-scan"
+    payload_directory: str
+
+    if args.from_selection:
+        selection_mode = "from-selection"
+        files, selected_directory = _load_upload_selection_file(args.from_selection, base_dir=args.dir)
+        selection_source = str(Path(args.from_selection).expanduser().resolve())
+        include_extensions = None
+        exclude_globs = []
+        payload_directory = (
+            str(Path(selected_directory).expanduser().resolve())
+            if isinstance(selected_directory, str) and selected_directory.strip()
+            else str(Path(args.dir).expanduser().resolve())
+            if isinstance(args.dir, str) and args.dir.strip()
+            else "<selection-file>"
         )
+    else:
+        if not isinstance(args.dir, str) or not args.dir.strip():
+            raise SystemExit("--dir is required unless --from-selection is provided.")
+        files = _resolve_upload_dir_files(
+            args.dir,
+            pattern=args.pattern,
+            recursive=args.recursive,
+            max_files=args.max_files,
+            include_extensions=include_extensions,
+            exclude_globs=exclude_globs,
+        )
+        if not files:
+            raise SystemExit(
+                f"No files found under {Path(args.dir).expanduser().resolve()} matching pattern {args.pattern!r}."
+            )
+        payload_directory = str(Path(args.dir).expanduser().resolve())
 
     selected_files = [str(path) for path in files]
     if args.selection_output:
         selection_payload: Dict[str, Any] = {
-            "directory": str(Path(args.dir).expanduser().resolve()),
+            "directory": payload_directory,
+            "selection_mode": selection_mode,
             "pattern": args.pattern,
             "recursive": bool(args.recursive),
             "requested_files": len(files),
@@ -437,11 +510,14 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             selection_payload["extensions"] = include_extensions
         if exclude_globs:
             selection_payload["exclude_glob"] = exclude_globs
+        if selection_source:
+            selection_payload["from_selection"] = selection_source
         _write_json_file(args.selection_output, selection_payload)
 
     if args.dry_run:
         dry_run_payload: Dict[str, Any] = {
-            "directory": str(Path(args.dir).expanduser().resolve()),
+            "directory": payload_directory,
+            "selection_mode": selection_mode,
             "pattern": args.pattern,
             "recursive": bool(args.recursive),
             "requested_files": len(files),
@@ -453,6 +529,8 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             dry_run_payload["extensions"] = include_extensions
         if exclude_globs:
             dry_run_payload["exclude_glob"] = exclude_globs
+        if selection_source:
+            dry_run_payload["from_selection"] = selection_source
         if args.list_files:
             dry_run_payload["selected_files"] = selected_files
         if args.selection_output:
@@ -489,7 +567,8 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         client.close()
 
     payload: Dict[str, Any] = {
-        "directory": str(Path(args.dir).expanduser().resolve()),
+        "directory": payload_directory,
+        "selection_mode": selection_mode,
         "pattern": args.pattern,
         "recursive": bool(args.recursive),
         "requested_files": len(files),
@@ -502,6 +581,8 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         payload["extensions"] = include_extensions
     if exclude_globs:
         payload["exclude_glob"] = exclude_globs
+    if selection_source:
+        payload["from_selection"] = selection_source
     if args.list_files:
         payload["selected_files"] = selected_files
     if args.selection_output:
@@ -902,7 +983,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Bulk upload documents from a directory to a collection.",
     )
     p_rag_upload_dir.add_argument("--collection-id", required=True)
-    p_rag_upload_dir.add_argument("--dir", required=True, help="Directory containing source files.")
+    p_rag_upload_dir.add_argument("--dir", required=False, help="Directory containing source files.")
+    p_rag_upload_dir.add_argument(
+        "--from-selection",
+        default=None,
+        help="Optional JSON selection file from a prior upload-dir run (uses selected_files list).",
+    )
     p_rag_upload_dir.add_argument(
         "--pattern",
         default="*",

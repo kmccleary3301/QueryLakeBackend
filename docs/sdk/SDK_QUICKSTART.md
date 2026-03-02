@@ -65,6 +65,12 @@ querylake rag upload-dir \
   --selection-output ./artifacts/selected_files.json \
   --report-file ./artifacts/upload_dry_run.json
 
+# Re-run upload from a saved selection file (exact same file set)
+querylake rag upload-dir \
+  --collection-id <collection_id> \
+  --from-selection ./artifacts/selected_files.json \
+  --report-file ./artifacts/upload_run.json
+
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
 querylake rag count-chunks --collection-ids <collection_id>

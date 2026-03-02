@@ -39,6 +39,12 @@ querylake --profile local rag upload-dir \
   --list-files \
   --selection-output ./artifacts/selected_files.json \
   --report-file ./artifacts/upload_dry_run.json
+
+# Execute upload from saved selection artifact (useful for repeatable sweeps)
+querylake --profile local rag upload-dir \
+  --collection-id <collection_id> \
+  --from-selection ./artifacts/selected_files.json \
+  --report-file ./artifacts/upload_run.json
 ```
 
 ### Dense-only (cheapest baseline)

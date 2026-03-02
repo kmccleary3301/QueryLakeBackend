@@ -82,7 +82,9 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake rag delete-document`
 - `querylake rag upload`
 - `querylake rag upload-dir`
+  - source selection: `--dir` (required unless `--from-selection` is provided)
   - bulk selection controls: `--pattern`, `--recursive`, `--max-files`
+  - replay exact file sets: `--from-selection` (JSON artifact with `selected_files`)
   - filter controls: `--extensions`, `--exclude-glob` (repeatable)
   - planning mode: `--dry-run` + `--list-files` for selection preview without upload
   - artifact output: `--selection-output` (selected file list), `--report-file` (final payload JSON)
