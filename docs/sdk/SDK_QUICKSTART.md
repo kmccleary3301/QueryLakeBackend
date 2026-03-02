@@ -79,6 +79,10 @@ querylake rag upload-dir \
   --resume \
   --checkpoint-file ./artifacts/upload_checkpoint.json \
   --checkpoint-save-every 10 \
+  --dedupe-content-hash \
+  --dedupe-scope all \
+  --idempotency-strategy content-hash \
+  --idempotency-prefix qlsdk \
   --report-file ./artifacts/upload_resume.json
 
 # Inspect corpus state
@@ -169,6 +173,10 @@ run = client.upload_directory(
     recursive=True,
     checkpoint_file="./artifacts/upload_checkpoint.json",
     checkpoint_save_every=10,
+    dedupe_by_content_hash=True,
+    dedupe_scope="all",
+    idempotency_strategy="content-hash",
+    idempotency_prefix="qlsdk",
 )
 print(run["uploaded"], run["failed"])
 

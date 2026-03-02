@@ -12,6 +12,7 @@ class _FakeClient:
     last_base_url = None
     last_search_hybrid_kwargs = None
     last_search_hybrid_with_metrics_kwargs = None
+    last_upload_directory_kwargs = None
 
     def __init__(self, *args, **kwargs):
         self.base_url = kwargs.get("base_url", "http://localhost")
@@ -128,6 +129,7 @@ class _FakeClient:
         return {"hash_id": "doc_demo", "collection_hash_id": collection_hash_id}
 
     def upload_directory(self, **kwargs):
+        _FakeClient.last_upload_directory_kwargs = dict(kwargs)
         file_paths = list(kwargs.get("file_paths") or [])
         uploaded = 0
         failed = 0
@@ -156,6 +158,11 @@ class _FakeClient:
             "selection_sha256": "fake_sha256",
             "resumed_from_checkpoint": bool(kwargs.get("resume")),
             "skipped_already_uploaded": 0,
+            "dedupe_by_content_hash": bool(kwargs.get("dedupe_by_content_hash")),
+            "dedupe_scope": kwargs.get("dedupe_scope", "none"),
+            "dedupe_skipped": 0,
+            "idempotency_strategy": kwargs.get("idempotency_strategy", "none"),
+            "idempotency_prefix": kwargs.get("idempotency_prefix", "qlsdk"),
         }
         checkpoint_file = kwargs.get("checkpoint_file")
         if isinstance(checkpoint_file, str):
@@ -169,6 +176,7 @@ class _FakeClient:
                         "version": 1,
                         "selection_sha256": "fake_sha256",
                         "uploaded_files": [str(path) for path in file_paths[:uploaded]],
+                        "uploaded_content_hashes": [],
                         "errors": errors,
                     },
                     indent=2,
@@ -835,6 +843,104 @@ def test_cli_rag_upload_dir_checkpoint_flags(monkeypatch, tmp_path, capsys):
     assert "\"checkpoint_file\":" in out
     assert "\"checkpoint_save_every\": 2" in out
     assert checkpoint_file.exists()
+
+
+def test_cli_rag_upload_dir_dedupe_and_idempotency_flags(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5k"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs9"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    (root / "b.txt").write_text("a", encoding="utf-8")
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_12",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--dedupe-content-hash",
+            "--dedupe-scope",
+            "all",
+            "--idempotency-strategy",
+            "path-hash",
+            "--idempotency-prefix",
+            "idem",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"dedupe_by_content_hash\": true" in out.lower()
+    assert "\"dedupe_scope\": \"all\"" in out
+    assert "\"idempotency_strategy\": \"path-hash\"" in out
+    assert "\"idempotency_prefix\": \"idem\"" in out
+    assert _FakeClient.last_upload_directory_kwargs["dedupe_by_content_hash"] is True
+    assert _FakeClient.last_upload_directory_kwargs["dedupe_scope"] == "all"
+    assert _FakeClient.last_upload_directory_kwargs["idempotency_strategy"] == "path-hash"
+    assert _FakeClient.last_upload_directory_kwargs["idempotency_prefix"] == "idem"
+
+
+def test_cli_rag_upload_dir_dry_run_dedupe_and_idempotency(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5l"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs10"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_13",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--dry-run",
+            "--dedupe-content-hash",
+            "--dedupe-scope",
+            "checkpoint-resume",
+            "--idempotency-strategy",
+            "content-hash",
+            "--idempotency-prefix",
+            "idem2",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"dedupe_by_content_hash\": true" in out.lower()
+    assert "\"dedupe_scope\": \"checkpoint-resume\"" in out
+    assert "\"idempotency_strategy\": \"content-hash\"" in out
+    assert "\"idempotency_prefix\": \"idem2\"" in out
 
 
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):

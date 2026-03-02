@@ -466,6 +466,14 @@ def _load_upload_selection_file(
 def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
     if args.resume and not args.checkpoint_file:
         raise SystemExit("--resume requires --checkpoint-file.")
+    dedupe_scope = (args.dedupe_scope or "run-local").strip().lower()
+    if dedupe_scope not in {"run-local", "checkpoint-resume", "all"}:
+        raise SystemExit("--dedupe-scope must be one of: run-local, checkpoint-resume, all")
+    idempotency_strategy = (args.idempotency_strategy or "none").strip().lower()
+    if idempotency_strategy not in {"none", "content-hash", "path-hash"}:
+        raise SystemExit("--idempotency-strategy must be one of: none, content-hash, path-hash")
+    idempotency_prefix = (args.idempotency_prefix or "qlsdk").strip() or "qlsdk"
+
     include_extensions: Optional[List[str]] = None
     if isinstance(args.extensions, str) and args.extensions.strip():
         include_extensions = [part.strip() for part in args.extensions.split(",") if part.strip()]
@@ -538,6 +546,11 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             "selection_sha256": selection_hash,
             "resumed_from_checkpoint": bool(args.resume),
             "skipped_already_uploaded": 0,
+            "dedupe_by_content_hash": bool(args.dedupe_content_hash),
+            "dedupe_scope": dedupe_scope if args.dedupe_content_hash else "none",
+            "dedupe_skipped": 0,
+            "idempotency_strategy": idempotency_strategy,
+            "idempotency_prefix": idempotency_prefix,
         }
         if include_extensions:
             dry_run_payload["extensions"] = include_extensions
@@ -577,6 +590,10 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             resume=args.resume,
             checkpoint_save_every=args.checkpoint_save_every,
             strict_checkpoint_match=not args.no_checkpoint_strict,
+            dedupe_by_content_hash=bool(args.dedupe_content_hash),
+            dedupe_scope=dedupe_scope,
+            idempotency_strategy=idempotency_strategy,
+            idempotency_prefix=idempotency_prefix,
         )
     finally:
         client.close()
@@ -1065,6 +1082,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-checkpoint-strict",
         action="store_true",
         help="Allow resume from checkpoint even when selection_sha256 differs.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--dedupe-content-hash",
+        action="store_true",
+        help="Skip duplicate files based on SHA-256 content hash.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--dedupe-scope",
+        choices=["run-local", "checkpoint-resume", "all"],
+        default="run-local",
+        help="Scope for content-hash dedupe when --dedupe-content-hash is enabled.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--idempotency-strategy",
+        choices=["none", "content-hash", "path-hash"],
+        default="none",
+        help="Client-side idempotency key strategy injected in document metadata.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--idempotency-prefix",
+        default="qlsdk",
+        help="Prefix for generated idempotency keys when strategy is not 'none'.",
     )
     p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
     p_rag_upload_dir.add_argument("--no-scan", action="store_true")

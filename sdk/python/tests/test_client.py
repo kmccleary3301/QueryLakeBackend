@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 import httpx
@@ -75,6 +76,37 @@ def test_upload_document_round_trip(tmp_path):
         client.close()
 
 
+def test_upload_document_injects_idempotency_key(tmp_path):
+    sample = tmp_path / "sample2.txt"
+    sample.write_text("hello world", encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/upload_document"
+        params = dict(request.url.params)
+        decoded = json.loads(params["parameters"])
+        metadata = decoded.get("document_metadata")
+        assert isinstance(metadata, dict)
+        assert metadata.get("existing") == "value"
+        ingest_meta = metadata.get("_querylake_ingest")
+        assert isinstance(ingest_meta, dict)
+        assert ingest_meta.get("idempotency_key") == "idem_123"
+        return httpx.Response(200, json={"success": True, "result": {"hash_id": "doc2"}})
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    client._client.close()
+    client._client = _mock_client(handler)
+    try:
+        result = client.upload_document(
+            file_path=sample,
+            collection_hash_id="abc123",
+            document_metadata={"existing": "value"},
+            idempotency_key="idem_123",
+        )
+        assert result["hash_id"] == "doc2"
+    finally:
+        client.close()
+
+
 def test_upload_directory_dry_run_with_filters(tmp_path):
     root = tmp_path / "bulk"
     root.mkdir(parents=True, exist_ok=True)
@@ -141,6 +173,118 @@ def test_upload_directory_explicit_file_list_and_errors(tmp_path, monkeypatch):
         client.close()
 
 
+def test_upload_directory_dedupe_content_hash_run_local(tmp_path, monkeypatch):
+    root = tmp_path / "bulk_hash"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "a.txt"
+    one.write_text("same", encoding="utf-8")
+    two = root / "b.txt"
+    two.write_text("same", encoding="utf-8")
+    three = root / "c.txt"
+    three.write_text("different", encoding="utf-8")
+
+    calls = []
+
+    def _fake_upload_document(**kwargs):
+        calls.append(str(kwargs["file_path"]))
+        return {"hash_id": "doc_ok"}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", _fake_upload_document)
+    try:
+        payload = client.upload_directory(
+            collection_hash_id="abc123",
+            file_paths=[one, two, three],
+            dedupe_by_content_hash=True,
+            dedupe_scope="run-local",
+        )
+        assert payload["uploaded"] == 2
+        assert payload["failed"] == 0
+        assert payload["dedupe_by_content_hash"] is True
+        assert payload["dedupe_scope"] == "run-local"
+        assert payload["dedupe_skipped"] == 1
+        assert len(payload["dedupe_skipped_files"]) == 1
+        assert payload["dedupe_skipped_files"][0]["reason"] == "run-local-duplicate"
+        assert calls == [str(one), str(three)]
+    finally:
+        client.close()
+
+
+def test_upload_directory_dedupe_checkpoint_resume(tmp_path, monkeypatch):
+    root = tmp_path / "bulk_hash_checkpoint"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("same", encoding="utf-8")
+    one_hash = hashlib.sha256(one.read_bytes()).hexdigest()
+    checkpoint_file = tmp_path / "checkpoint_hash.json"
+    checkpoint_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "selection_sha256": "mismatch-ok",
+                "uploaded_files": [],
+                "uploaded_content_hashes": [one_hash],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def _fake_upload_document(**kwargs):
+        calls.append(str(kwargs["file_path"]))
+        return {"hash_id": "doc_ok"}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", _fake_upload_document)
+    try:
+        payload = client.upload_directory(
+            collection_hash_id="abc123",
+            file_paths=[one],
+            checkpoint_file=checkpoint_file,
+            resume=True,
+            strict_checkpoint_match=False,
+            dedupe_by_content_hash=True,
+            dedupe_scope="checkpoint-resume",
+        )
+        assert payload["dedupe_skipped"] == 1
+        assert payload["uploaded"] == 0
+        assert payload["failed"] == 0
+        assert payload["status"] == "already_complete"
+        assert payload["dedupe_skipped_files"][0]["reason"] == "checkpoint-resume-duplicate"
+        assert calls == []
+    finally:
+        client.close()
+
+
+def test_upload_directory_content_hash_idempotency_strategy(tmp_path, monkeypatch):
+    root = tmp_path / "bulk_idem"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("one", encoding="utf-8")
+    one_hash = hashlib.sha256(one.read_bytes()).hexdigest()
+
+    keys = []
+
+    def _fake_upload_document(**kwargs):
+        keys.append(kwargs.get("idempotency_key"))
+        return {"hash_id": "doc_ok"}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", _fake_upload_document)
+    try:
+        payload = client.upload_directory(
+            collection_hash_id="abc123",
+            file_paths=[one],
+            idempotency_strategy="content-hash",
+            idempotency_prefix="test-prefix",
+        )
+        assert payload["uploaded"] == 1
+        assert keys == [f"test-prefix:abc123:{one_hash}"]
+    finally:
+        client.close()
+
+
 def test_upload_directory_checkpoint_resume(tmp_path, monkeypatch):
     root = tmp_path / "bulk3"
     root.mkdir(parents=True, exist_ok=True)
@@ -193,6 +337,31 @@ def test_upload_directory_checkpoint_resume(tmp_path, monkeypatch):
         assert second["failed"] == 0
         assert first_pass_calls == [str(one), str(two)]
         assert second_pass_calls == [str(two)]
+    finally:
+        client.close()
+
+
+def test_upload_directory_rejects_invalid_dedupe_or_idempotency(tmp_path):
+    root = tmp_path / "bulk5"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("one", encoding="utf-8")
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    try:
+        with pytest.raises(ValueError, match="Unsupported dedupe_scope"):
+            client.upload_directory(
+                collection_hash_id="abc123",
+                file_paths=[one],
+                dedupe_by_content_hash=True,
+                dedupe_scope="bad-scope",
+            )
+        with pytest.raises(ValueError, match="Unsupported idempotency_strategy"):
+            client.upload_directory(
+                collection_hash_id="abc123",
+                file_paths=[one],
+                idempotency_strategy="bad-strategy",
+            )
     finally:
         client.close()
 

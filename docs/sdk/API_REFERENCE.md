@@ -44,8 +44,8 @@ Typical bootstrap:
 - `modify_collection(collection_hash_id, title=None, description=None) -> Any`
 - `list_collection_documents(collection_hash_id, limit=100, offset=0) -> list[dict]`
 - `delete_document(document_hash_id) -> Any`
-- `upload_document(file_path, collection_hash_id, ...) -> dict`
-- `upload_directory(collection_hash_id, directory=..., file_paths=..., checkpoint_file=..., resume=False, checkpoint_save_every=1, strict_checkpoint_match=True, ...) -> dict`
+- `upload_document(file_path, collection_hash_id, idempotency_key=None, ...) -> dict`
+- `upload_directory(collection_hash_id, directory=..., file_paths=..., checkpoint_file=..., resume=False, checkpoint_save_every=1, strict_checkpoint_match=True, dedupe_by_content_hash=False, dedupe_scope="run-local", idempotency_strategy="none", idempotency_prefix="qlsdk", ...) -> dict`
 
 ### Retrieval
 
@@ -90,6 +90,8 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - planning mode: `--dry-run` + `--list-files` for selection preview without upload
   - artifact output: `--selection-output` (selected file list), `--report-file` (final payload JSON)
   - resumable mode: `--checkpoint-file`, `--resume`, `--checkpoint-save-every`, `--no-checkpoint-strict`
+  - dedupe controls: `--dedupe-content-hash`, `--dedupe-scope {run-local,checkpoint-resume,all}`
+  - idempotency controls: `--idempotency-strategy {none,content-hash,path-hash}`, `--idempotency-prefix`
   - ingest controls: `--await-embedding`, `--no-scan`, `--no-embeddings`, `--sparse-embeddings`, `--sparse-dimensions`, `--fail-fast`
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields

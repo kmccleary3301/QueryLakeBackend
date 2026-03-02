@@ -71,6 +71,15 @@ def _selection_sha256(paths: Iterable[Union[str, Path]]) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def _file_sha256(path: Union[str, Path]) -> str:
+    resolved = Path(path).expanduser().resolve()
+    hasher = hashlib.sha256()
+    with resolved.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 class QueryLakeClient:
     """Synchronous QueryLake SDK client."""
 
@@ -275,6 +284,7 @@ class QueryLakeClient:
         enforce_sparse_dimension_match: bool = True,
         await_embedding: bool = False,
         document_metadata: Optional[Dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
         auth: AuthOverride = None,
     ) -> Dict[str, Any]:
         resolved_auth = self._resolve_auth(auth)
@@ -295,8 +305,19 @@ class QueryLakeClient:
             "enforce_sparse_dimension_match": bool(enforce_sparse_dimension_match),
             "await_embedding": bool(await_embedding),
         }
-        if document_metadata is not None:
-            params_payload["document_metadata"] = document_metadata
+        effective_metadata: Optional[Dict[str, Any]] = None
+        if isinstance(document_metadata, dict):
+            effective_metadata = dict(document_metadata)
+        if isinstance(idempotency_key, str) and idempotency_key.strip():
+            if effective_metadata is None:
+                effective_metadata = {}
+            ingest_meta = effective_metadata.get("_querylake_ingest")
+            if not isinstance(ingest_meta, dict):
+                ingest_meta = {}
+            ingest_meta["idempotency_key"] = idempotency_key.strip()
+            effective_metadata["_querylake_ingest"] = ingest_meta
+        if effective_metadata is not None:
+            params_payload["document_metadata"] = effective_metadata
 
         with path.open("rb") as f:
             files = {"file": (path.name, f, "application/octet-stream")}
@@ -333,6 +354,10 @@ class QueryLakeClient:
         resume: bool = False,
         checkpoint_save_every: int = 1,
         strict_checkpoint_match: bool = True,
+        dedupe_by_content_hash: bool = False,
+        dedupe_scope: str = "run-local",
+        idempotency_strategy: str = "none",
+        idempotency_prefix: str = "qlsdk",
         auth: AuthOverride = None,
     ) -> Dict[str, Any]:
         """
@@ -405,6 +430,7 @@ class QueryLakeClient:
         checkpoint_started_at_unix: Optional[float] = None
         checkpoint_cadence = int(max(1, checkpoint_save_every))
 
+        loaded_checkpoint: Dict[str, Any] = {}
         if checkpoint_file is not None:
             checkpoint_path = Path(checkpoint_file).expanduser().resolve()
             checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -412,6 +438,7 @@ class QueryLakeClient:
                 loaded = json.loads(checkpoint_path.read_text(encoding="utf-8"))
                 if not isinstance(loaded, dict):
                     raise ValueError(f"Invalid checkpoint payload at {checkpoint_path}: expected object.")
+                loaded_checkpoint = loaded
                 checkpoint_hash = loaded.get("selection_sha256")
                 if strict_checkpoint_match and checkpoint_hash != selection_hash:
                     raise ValueError(
@@ -436,6 +463,61 @@ class QueryLakeClient:
             resolved_files = [path for path in resolved_files if str(path) not in uploaded_set]
             skipped_already_uploaded = before - len(resolved_files)
 
+        dedupe_scope_value = (dedupe_scope or "run-local").strip().lower()
+        valid_dedupe_scopes = {"run-local", "checkpoint-resume", "all"}
+        if dedupe_by_content_hash and dedupe_scope_value not in valid_dedupe_scopes:
+            raise ValueError(f"Unsupported dedupe_scope={dedupe_scope!r}. Choose one of {sorted(valid_dedupe_scopes)}.")
+        idempotency_strategy_value = (idempotency_strategy or "none").strip().lower()
+        valid_idempotency = {"none", "content-hash", "path-hash"}
+        if idempotency_strategy_value not in valid_idempotency:
+            raise ValueError(
+                f"Unsupported idempotency_strategy={idempotency_strategy!r}. Choose one of {sorted(valid_idempotency)}."
+            )
+
+        need_content_hash = dedupe_by_content_hash or idempotency_strategy_value == "content-hash"
+        content_hash_by_path: Dict[str, str] = {}
+        if need_content_hash:
+            for path in resolved_files:
+                content_hash_by_path[str(path)] = _file_sha256(path)
+
+        checkpoint_uploaded_hashes: set[str] = set()
+        if dedupe_by_content_hash and resumed_from_checkpoint:
+            prior_hashes = loaded_checkpoint.get("uploaded_content_hashes")
+            if isinstance(prior_hashes, list):
+                checkpoint_uploaded_hashes = {str(value) for value in prior_hashes if isinstance(value, str)}
+
+        dedupe_skipped_files: List[Dict[str, Any]] = []
+        seen_hashes: set[str] = set()
+        if dedupe_by_content_hash:
+            filtered_files: List[Path] = []
+            for path in resolved_files:
+                path_key = str(path)
+                content_hash = content_hash_by_path.get(path_key)
+                if not isinstance(content_hash, str):
+                    filtered_files.append(path)
+                    continue
+                skip_reason: Optional[str] = None
+                if dedupe_scope_value in {"run-local", "all"} and content_hash in seen_hashes:
+                    skip_reason = "run-local-duplicate"
+                if (
+                    skip_reason is None
+                    and dedupe_scope_value in {"checkpoint-resume", "all"}
+                    and content_hash in checkpoint_uploaded_hashes
+                ):
+                    skip_reason = "checkpoint-resume-duplicate"
+                if skip_reason is not None:
+                    dedupe_skipped_files.append(
+                        {
+                            "file": path_key,
+                            "content_sha256": content_hash,
+                            "reason": skip_reason,
+                        }
+                    )
+                    continue
+                seen_hashes.add(content_hash)
+                filtered_files.append(path)
+            resolved_files = filtered_files
+
         payload: Dict[str, Any] = {
             "directory": payload_directory,
             "selection_mode": selection_mode,
@@ -451,7 +533,14 @@ class QueryLakeClient:
             "selection_sha256": selection_hash,
             "resumed_from_checkpoint": resumed_from_checkpoint,
             "skipped_already_uploaded": skipped_already_uploaded,
+            "dedupe_by_content_hash": bool(dedupe_by_content_hash),
+            "dedupe_scope": dedupe_scope_value if dedupe_by_content_hash else "none",
+            "dedupe_skipped": len(dedupe_skipped_files),
+            "idempotency_strategy": idempotency_strategy_value,
+            "idempotency_prefix": idempotency_prefix,
         }
+        if dedupe_skipped_files:
+            payload["dedupe_skipped_files"] = dedupe_skipped_files
         if checkpoint_path is not None:
             payload["checkpoint_file"] = str(checkpoint_path)
             payload["checkpoint_save_every"] = checkpoint_cadence
@@ -475,6 +564,8 @@ class QueryLakeClient:
                 "pending_files": len(resolved_files),
                 "uploaded_files_count": len(uploaded_payload),
                 "uploaded_files": sorted(uploaded_payload),
+                "uploaded_content_hashes_count": len(uploaded_content_hashes),
+                "uploaded_content_hashes": sorted(uploaded_content_hashes),
                 "errors": errors_payload,
                 "fail_fast": bool(fail_fast),
                 "checkpoint_save_every": checkpoint_cadence,
@@ -492,10 +583,18 @@ class QueryLakeClient:
             )
 
         errors: List[Dict[str, Any]] = list(persisted_errors)
+        uploaded_content_hashes: set[str] = set(checkpoint_uploaded_hashes)
         uploaded = 0
         failed = 0
         since_flush = 0
         for path in resolved_files:
+            path_key = str(path)
+            content_hash = content_hash_by_path.get(path_key)
+            idempotency_key: Optional[str] = None
+            if idempotency_strategy_value == "content-hash" and isinstance(content_hash, str):
+                idempotency_key = f"{idempotency_prefix}:{collection_hash_id}:{content_hash}"
+            elif idempotency_strategy_value == "path-hash":
+                idempotency_key = f"{idempotency_prefix}:{collection_hash_id}:{hashlib.sha256(path_key.encode('utf-8')).hexdigest()}"
             try:
                 self.upload_document(
                     file_path=path,
@@ -508,13 +607,23 @@ class QueryLakeClient:
                     enforce_sparse_dimension_match=enforce_sparse_dimension_match,
                     await_embedding=await_embedding,
                     document_metadata=document_metadata,
+                    idempotency_key=idempotency_key,
                     auth=auth,
                 )
                 uploaded += 1
-                uploaded_set.add(str(path))
+                uploaded_set.add(path_key)
+                if isinstance(content_hash, str):
+                    uploaded_content_hashes.add(content_hash)
             except Exception as exc:  # noqa: BLE001
                 failed += 1
-                errors.append({"file": str(path), "error": str(exc)})
+                errors.append(
+                    {
+                        "file": path_key,
+                        "error": str(exc),
+                        "idempotency_key": idempotency_key,
+                        "content_sha256": content_hash,
+                    }
+                )
                 if fail_fast:
                     _flush_checkpoint(errors, uploaded_set, completed=False)
                     break

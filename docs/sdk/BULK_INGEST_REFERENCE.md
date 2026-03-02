@@ -54,6 +54,10 @@ querylake --profile local rag upload-dir \
 | `--resume` | Resume from checkpoint uploaded set |
 | `--checkpoint-save-every` | Save checkpoint every N processed files |
 | `--no-checkpoint-strict` | Allow resume despite selection hash mismatch |
+| `--dedupe-content-hash` | Skip duplicate files by SHA-256 content hash |
+| `--dedupe-scope` | Dedupe scope: `run-local`, `checkpoint-resume`, or `all` |
+| `--idempotency-strategy` | Inject idempotency key in metadata (`none`, `content-hash`, `path-hash`) |
+| `--idempotency-prefix` | Prefix for generated idempotency keys |
 
 ### Planning and replay workflow
 
@@ -84,6 +88,10 @@ querylake --profile local rag upload-dir \
   --resume \
   --checkpoint-file ./artifacts/upload_checkpoint.json \
   --checkpoint-save-every 10 \
+  --dedupe-content-hash \
+  --dedupe-scope all \
+  --idempotency-strategy content-hash \
+  --idempotency-prefix qlsdk \
   --report-file ./artifacts/upload_resume.json
 ```
 
@@ -107,6 +115,10 @@ report = client.upload_directory(
     create_sparse_embeddings=True,
     checkpoint_file="./artifacts/upload_checkpoint.json",
     checkpoint_save_every=10,
+    dedupe_by_content_hash=True,
+    dedupe_scope="all",
+    idempotency_strategy="content-hash",
+    idempotency_prefix="qlsdk",
 )
 ```
 
@@ -139,6 +151,9 @@ report = client.upload_directory(
 | `selection_sha256` | Deterministic hash of selected file set |
 | `resumed_from_checkpoint` | Whether run resumed from checkpoint |
 | `skipped_already_uploaded` | Count skipped because checkpoint marked uploaded |
+| `dedupe_by_content_hash` | Whether content-hash dedupe was enabled |
+| `dedupe_scope` | Dedupe scope (`run-local`, `checkpoint-resume`, `all`, or `none`) |
+| `dedupe_skipped` | Count skipped by dedupe filter |
 | `pending_files` | Number of files queued for this run after resume filtering |
 | `uploaded` | Upload success count |
 | `failed` | Upload failure count |

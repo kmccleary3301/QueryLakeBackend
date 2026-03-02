@@ -54,6 +54,10 @@ querylake --profile local rag upload-dir \
   --resume \
   --checkpoint-file ./artifacts/upload_checkpoint.json \
   --checkpoint-save-every 10 \
+  --dedupe-content-hash \
+  --dedupe-scope all \
+  --idempotency-strategy content-hash \
+  --idempotency-prefix qlsdk \
   --report-file ./artifacts/upload_resume.json
 ```
 
