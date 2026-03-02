@@ -32,9 +32,9 @@ def _load_selected_files(selection_path: str) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--username", required=True)
-    parser.add_argument("--password", required=True)
-    parser.add_argument("--collection", required=True, help="Collection name (created if needed).")
+    parser.add_argument("--username", default=None)
+    parser.add_argument("--password", default=None)
+    parser.add_argument("--collection", default="sdk-bulk-demo", help="Collection name (created if needed).")
     parser.add_argument("--dir", default=None)
     parser.add_argument(
         "--from-selection",
@@ -106,6 +106,11 @@ def main() -> int:
                 upload_result["upload_report_file"] = str(destination)
             print(json.dumps(upload_result, indent=2, sort_keys=True))
             return 0
+
+        if not isinstance(args.username, str) or not args.username.strip():
+            raise SystemExit("--username is required when not using --dry-run.")
+        if not isinstance(args.password, str) or not args.password:
+            raise SystemExit("--password is required when not using --dry-run.")
 
         login_result = client.login(username=args.username, password=args.password)
         if not isinstance(login_result, dict) or not login_result.get("auth"):

@@ -195,8 +195,6 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
 # Plan-only pass with saved artifacts
 python examples/sdk/rag_bulk_ingest_and_search.py \
   --base-url http://127.0.0.1:8000 \
-  --username <username> \
-  --password <password> \
   --collection sdk-bulk-demo \
   --dir ./docs \
   --pattern "*" \

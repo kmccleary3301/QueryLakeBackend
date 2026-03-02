@@ -141,8 +141,6 @@ python examples/sdk/rag_bulk_ingest_and_search.py \
 # Optional planning run: no upload/search side effects
 python examples/sdk/rag_bulk_ingest_and_search.py \
   --base-url http://127.0.0.1:8000 \
-  --username demo \
-  --password demo-pass \
   --collection sdk-bulk-demo \
   --dir ./docs \
   --pattern "*" \
