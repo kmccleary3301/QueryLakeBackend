@@ -137,10 +137,18 @@ Use the standalone SDK package for application developers and researchers. Keep 
 Release helpers:
 
 ```bash
+make sdk-ci
 make sdk-release-check
 # optional publish helpers
 make sdk-release-testpypi
 make sdk-release-pypi
+```
+
+Local CI parity helpers:
+
+```bash
+make ci-unification
+make ci-retrieval-smoke
 ```
 
 ## Runtime notes

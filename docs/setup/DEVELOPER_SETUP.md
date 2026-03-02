@@ -49,8 +49,15 @@ make health
 ```bash
 make sdk-install-dev
 make sdk-test
+make sdk-ci
+```
+
+Optional end-to-end validation against a running local backend:
+
+```bash
 make sdk-smoke
-make sdk-release-check
+make ci-unification
+make ci-retrieval-smoke
 ```
 
 ## Common workflows

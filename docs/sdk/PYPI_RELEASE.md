@@ -13,8 +13,7 @@ This runbook publishes the standalone Python SDK located at `sdk/python`.
 From repo root:
 
 ```bash
-make sdk-test
-make sdk-build
+make sdk-ci
 make sdk-release-check
 ```
 
@@ -37,21 +36,7 @@ Use semver:
 
 ## Publish
 
-```bash
-cd sdk/python
-python -m pip install --upgrade build twine
-python -m build
-python -m twine check dist/*
-python -m twine upload dist/*
-```
-
-For TestPyPI:
-
-```bash
-python -m twine upload --repository testpypi dist/*
-```
-
-Or use the helper script from repo root:
+Use the helper script from repo root:
 
 ```bash
 # Check-only

@@ -11,14 +11,8 @@ REPO_TARGET="${1:-check}"
 #   pypi      -> upload to PyPI
 
 echo "[sdk-release] target=${REPO_TARGET}"
-echo "[sdk-release] running SDK unit tests"
-uv run --project sdk/python pytest sdk/python/tests -q
-
-echo "[sdk-release] building artifacts"
-uv run --project sdk/python --with build python -m build sdk/python
-
-echo "[sdk-release] validating package metadata"
-uv run --project sdk/python --with twine python -m twine check sdk/python/dist/*
+echo "[sdk-release] running SDK CI checks (tests + build + metadata + wheel validation)"
+bash scripts/ci_sdk_checks.sh
 
 if [[ "${REPO_TARGET}" == "check" ]]; then
   echo "[sdk-release] done (check-only mode)"

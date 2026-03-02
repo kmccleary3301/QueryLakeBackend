@@ -2,6 +2,12 @@
 
 This guide is the fastest way to go from zero to a working QueryLake RAG workflow.
 
+For contributors validating packaging quality locally, run:
+
+```bash
+make sdk-ci
+```
+
 ## 1) Install SDK
 
 ```bash

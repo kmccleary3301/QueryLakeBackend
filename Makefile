@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test sdk-install-dev sdk-test sdk-build sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-unification ci-retrieval-smoke sdk-install-dev sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -37,6 +37,14 @@ health:
 test:
 	uv run pytest
 
+ci-unification:
+	uv run --no-project bash scripts/ci_unification_checks.sh
+
+ci-retrieval-smoke:
+	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_preflight.sh smoke
+	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_eval.sh smoke
+	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_parity.sh smoke
+
 sdk-install-dev:
 	uv run --project sdk/python pip install -e sdk/python
 
@@ -45,6 +53,9 @@ sdk-test:
 
 sdk-build:
 	uv run --project sdk/python --with build python -m build sdk/python
+
+sdk-ci:
+	bash scripts/ci_sdk_checks.sh
 
 sdk-smoke:
 	./scripts/dev/smoke_sdk_local.sh
