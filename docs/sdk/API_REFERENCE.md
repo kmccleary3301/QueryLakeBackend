@@ -45,7 +45,7 @@ Typical bootstrap:
 - `list_collection_documents(collection_hash_id, limit=100, offset=0) -> list[dict]`
 - `delete_document(document_hash_id) -> Any`
 - `upload_document(file_path, collection_hash_id, ...) -> dict`
-- `upload_directory(collection_hash_id, directory=..., file_paths=..., ...) -> dict`
+- `upload_directory(collection_hash_id, directory=..., file_paths=..., checkpoint_file=..., resume=False, checkpoint_save_every=1, strict_checkpoint_match=True, ...) -> dict`
 
 ### Retrieval
 
@@ -89,6 +89,7 @@ This keeps the SDK forward-compatible with new backend API functions without wai
   - filter controls: `--extensions`, `--exclude-glob` (repeatable)
   - planning mode: `--dry-run` + `--list-files` for selection preview without upload
   - artifact output: `--selection-output` (selected file list), `--report-file` (final payload JSON)
+  - resumable mode: `--checkpoint-file`, `--resume`, `--checkpoint-save-every`, `--no-checkpoint-strict`
   - ingest controls: `--await-embedding`, `--no-scan`, `--no-embeddings`, `--sparse-embeddings`, `--sparse-dimensions`, `--fail-fast`
 - `querylake rag search`
   - add `--with-metrics` in hybrid mode to include duration/profile fields

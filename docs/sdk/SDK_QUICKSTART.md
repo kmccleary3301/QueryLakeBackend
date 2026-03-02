@@ -69,7 +69,17 @@ querylake rag upload-dir \
 querylake rag upload-dir \
   --collection-id <collection_id> \
   --from-selection ./artifacts/selected_files.json \
-  --report-file ./artifacts/upload_run.json
+  --report-file ./artifacts/upload_run.json \
+  --checkpoint-file ./artifacts/upload_checkpoint.json
+
+# Resume interrupted upload from checkpoint
+querylake rag upload-dir \
+  --collection-id <collection_id> \
+  --from-selection ./artifacts/selected_files.json \
+  --resume \
+  --checkpoint-file ./artifacts/upload_checkpoint.json \
+  --checkpoint-save-every 10 \
+  --report-file ./artifacts/upload_resume.json
 
 # Inspect corpus state
 querylake rag list-documents --collection-id <collection_id> --limit 20 --offset 0
@@ -151,6 +161,16 @@ plan = client.upload_directory(
     dry_run=True,
 )
 print(plan["requested_files"])
+
+run = client.upload_directory(
+    collection_hash_id=collection_id,
+    directory="./docs",
+    pattern="*.pdf",
+    recursive=True,
+    checkpoint_file="./artifacts/upload_checkpoint.json",
+    checkpoint_save_every=10,
+)
+print(run["uploaded"], run["failed"])
 
 rows = client.search_hybrid_chunks(
     query="main contribution",

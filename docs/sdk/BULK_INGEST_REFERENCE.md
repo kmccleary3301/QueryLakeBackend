@@ -50,6 +50,10 @@ querylake --profile local rag upload-dir \
 |---|---|
 | `--selection-output` | Write selected-file artifact JSON |
 | `--report-file` | Write final run payload JSON |
+| `--checkpoint-file` | Persist resumable progress checkpoint JSON |
+| `--resume` | Resume from checkpoint uploaded set |
+| `--checkpoint-save-every` | Save checkpoint every N processed files |
+| `--no-checkpoint-strict` | Allow resume despite selection hash mismatch |
 
 ### Planning and replay workflow
 
@@ -70,7 +74,17 @@ querylake --profile local rag upload-dir \
 querylake --profile local rag upload-dir \
   --collection-id <collection_id> \
   --from-selection ./artifacts/selected_files.json \
-  --report-file ./artifacts/upload_run.json
+  --report-file ./artifacts/upload_run.json \
+  --checkpoint-file ./artifacts/upload_checkpoint.json
+
+# 3) Resume interrupted run from checkpoint
+querylake --profile local rag upload-dir \
+  --collection-id <collection_id> \
+  --from-selection ./artifacts/selected_files.json \
+  --resume \
+  --checkpoint-file ./artifacts/upload_checkpoint.json \
+  --checkpoint-save-every 10 \
+  --report-file ./artifacts/upload_resume.json
 ```
 
 ## Python SDK: `QueryLakeClient.upload_directory(...)`
@@ -91,6 +105,8 @@ report = client.upload_directory(
     fail_fast=True,
     await_embedding=False,
     create_sparse_embeddings=True,
+    checkpoint_file="./artifacts/upload_checkpoint.json",
+    checkpoint_save_every=10,
 )
 ```
 
@@ -120,6 +136,10 @@ report = client.upload_directory(
 | `selection_mode` | `directory-scan` or `explicit-file-list` |
 | `requested_files` | Number of selected files |
 | `selected_files` | Selected file path list |
+| `selection_sha256` | Deterministic hash of selected file set |
+| `resumed_from_checkpoint` | Whether run resumed from checkpoint |
+| `skipped_already_uploaded` | Count skipped because checkpoint marked uploaded |
+| `pending_files` | Number of files queued for this run after resume filtering |
 | `uploaded` | Upload success count |
 | `failed` | Upload failure count |
 | `errors` | Optional list of file-level error objects |

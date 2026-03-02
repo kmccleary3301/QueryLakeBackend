@@ -44,7 +44,17 @@ querylake --profile local rag upload-dir \
 querylake --profile local rag upload-dir \
   --collection-id <collection_id> \
   --from-selection ./artifacts/selected_files.json \
-  --report-file ./artifacts/upload_run.json
+  --report-file ./artifacts/upload_run.json \
+  --checkpoint-file ./artifacts/upload_checkpoint.json
+
+# Resume interrupted run
+querylake --profile local rag upload-dir \
+  --collection-id <collection_id> \
+  --from-selection ./artifacts/selected_files.json \
+  --resume \
+  --checkpoint-file ./artifacts/upload_checkpoint.json \
+  --checkpoint-save-every 10 \
+  --report-file ./artifacts/upload_resume.json
 ```
 
 ### Dense-only (cheapest baseline)

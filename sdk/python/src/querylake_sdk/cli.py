@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import getpass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,11 @@ def _write_json_file(output_path: str, payload: Any) -> None:
     destination = Path(output_path).expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _selection_sha256(paths: List[str]) -> str:
+    normalized = sorted(str(Path(value).expanduser().resolve()) for value in paths)
+    return hashlib.sha256("\n".join(normalized).encode("utf-8")).hexdigest()
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -458,6 +464,8 @@ def _load_upload_selection_file(
 
 
 def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
+    if args.resume and not args.checkpoint_file:
+        raise SystemExit("--resume requires --checkpoint-file.")
     include_extensions: Optional[List[str]] = None
     if isinstance(args.extensions, str) and args.extensions.strip():
         include_extensions = [part.strip() for part in args.extensions.split(",") if part.strip()]
@@ -497,6 +505,7 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         payload_directory = str(Path(args.dir).expanduser().resolve())
 
     selected_files = [str(path) for path in files]
+    selection_hash = _selection_sha256(selected_files)
     if args.selection_output:
         selection_payload: Dict[str, Any] = {
             "directory": payload_directory,
@@ -505,6 +514,7 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             "recursive": bool(args.recursive),
             "requested_files": len(files),
             "selected_files": selected_files,
+            "selection_sha256": selection_hash,
         }
         if include_extensions:
             selection_payload["extensions"] = include_extensions
@@ -521,9 +531,13 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             "pattern": args.pattern,
             "recursive": bool(args.recursive),
             "requested_files": len(files),
+            "pending_files": len(files),
             "uploaded": 0,
             "failed": 0,
             "dry_run": True,
+            "selection_sha256": selection_hash,
+            "resumed_from_checkpoint": bool(args.resume),
+            "skipped_already_uploaded": 0,
         }
         if include_extensions:
             dry_run_payload["extensions"] = include_extensions
@@ -535,6 +549,9 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
             dry_run_payload["selected_files"] = selected_files
         if args.selection_output:
             dry_run_payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
+        if args.checkpoint_file:
+            dry_run_payload["checkpoint_file"] = str(Path(args.checkpoint_file).expanduser().resolve())
+            dry_run_payload["checkpoint_save_every"] = int(max(1, args.checkpoint_save_every))
         if args.report_file:
             _write_json_file(args.report_file, dry_run_payload)
             dry_run_payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
@@ -542,41 +559,35 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         return 0
 
     client = _build_client(args, require_auth=True)
-    uploaded = 0
-    failed = 0
-    errors: List[Dict[str, str]] = []
     try:
-        for path in files:
-            try:
-                client.upload_document(
-                    file_path=path,
-                    collection_hash_id=args.collection_id,
-                    scan_text=not args.no_scan,
-                    create_embeddings=not args.no_embeddings,
-                    create_sparse_embeddings=args.sparse_embeddings,
-                    await_embedding=args.await_embedding,
-                    sparse_embedding_dimensions=args.sparse_dimensions,
-                )
-                uploaded += 1
-            except Exception as exc:  # noqa: BLE001
-                failed += 1
-                errors.append({"file": str(path), "error": str(exc)})
-                if args.fail_fast:
-                    break
+        upload_report = client.upload_directory(
+            collection_hash_id=args.collection_id,
+            directory=payload_directory,
+            file_paths=files,
+            pattern=args.pattern,
+            recursive=args.recursive,
+            dry_run=False,
+            fail_fast=args.fail_fast,
+            scan_text=not args.no_scan,
+            create_embeddings=not args.no_embeddings,
+            create_sparse_embeddings=args.sparse_embeddings,
+            await_embedding=args.await_embedding,
+            sparse_embedding_dimensions=args.sparse_dimensions,
+            checkpoint_file=args.checkpoint_file,
+            resume=args.resume,
+            checkpoint_save_every=args.checkpoint_save_every,
+            strict_checkpoint_match=not args.no_checkpoint_strict,
+        )
     finally:
         client.close()
 
-    payload: Dict[str, Any] = {
-        "directory": payload_directory,
-        "selection_mode": selection_mode,
-        "pattern": args.pattern,
-        "recursive": bool(args.recursive),
-        "requested_files": len(files),
-        "uploaded": uploaded,
-        "failed": failed,
-        "fail_fast": bool(args.fail_fast),
-        "dry_run": False,
-    }
+    payload: Dict[str, Any] = dict(upload_report)
+    payload["directory"] = payload_directory
+    payload["selection_mode"] = selection_mode
+    payload["pattern"] = args.pattern
+    payload["recursive"] = bool(args.recursive)
+    payload["requested_files"] = len(files)
+    payload["selection_sha256"] = selection_hash
     if include_extensions:
         payload["extensions"] = include_extensions
     if exclude_globs:
@@ -587,13 +598,11 @@ def cmd_rag_upload_dir(args: argparse.Namespace) -> int:
         payload["selected_files"] = selected_files
     if args.selection_output:
         payload["selection_output"] = str(Path(args.selection_output).expanduser().resolve())
-    if errors:
-        payload["errors"] = errors
     if args.report_file:
         _write_json_file(args.report_file, payload)
         payload["report_file"] = str(Path(args.report_file).expanduser().resolve())
     _print_output(payload, as_json=True)
-    return 0 if failed == 0 else 1
+    return 0 if int(payload.get("failed", 0)) == 0 else 1
 
 
 def _hybrid_search_defaults_for_preset(preset: str) -> Dict[str, float]:
@@ -1035,6 +1044,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--report-file",
         default=None,
         help="Optional path to write final upload/dry-run JSON payload.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--checkpoint-file",
+        default=None,
+        help="Optional JSON checkpoint path for resumable runs.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from checkpoint file uploaded set (requires --checkpoint-file).",
+    )
+    p_rag_upload_dir.add_argument(
+        "--checkpoint-save-every",
+        type=int,
+        default=1,
+        help="Persist checkpoint state every N processed files.",
+    )
+    p_rag_upload_dir.add_argument(
+        "--no-checkpoint-strict",
+        action="store_true",
+        help="Allow resume from checkpoint even when selection_sha256 differs.",
     )
     p_rag_upload_dir.add_argument("--await-embedding", action="store_true")
     p_rag_upload_dir.add_argument("--no-scan", action="store_true")

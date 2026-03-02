@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Union
 
@@ -60,6 +62,13 @@ def _extract_api_result(function_name: str, payload: Any) -> Any:
     if remainder:
         return remainder
     return None
+
+
+def _selection_sha256(paths: Iterable[Union[str, Path]]) -> str:
+    normalized = [str(Path(value).expanduser().resolve()) for value in paths]
+    normalized.sort()
+    blob = "\n".join(normalized).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
 
 class QueryLakeClient:
@@ -320,6 +329,10 @@ class QueryLakeClient:
         enforce_sparse_dimension_match: bool = True,
         await_embedding: bool = False,
         document_metadata: Optional[Dict[str, Any]] = None,
+        checkpoint_file: Optional[Union[str, Path]] = None,
+        resume: bool = False,
+        checkpoint_save_every: int = 1,
+        strict_checkpoint_match: bool = True,
         auth: AuthOverride = None,
     ) -> Dict[str, Any]:
         """
@@ -382,25 +395,106 @@ class QueryLakeClient:
             raise ValueError("No files selected for upload.")
 
         selected_files = [str(path) for path in resolved_files]
+        selection_hash = _selection_sha256(selected_files)
+
+        checkpoint_path: Optional[Path] = None
+        resumed_from_checkpoint = False
+        skipped_already_uploaded = 0
+        uploaded_set: set[str] = set()
+        persisted_errors: List[Dict[str, Any]] = []
+        checkpoint_started_at_unix: Optional[float] = None
+        checkpoint_cadence = int(max(1, checkpoint_save_every))
+
+        if checkpoint_file is not None:
+            checkpoint_path = Path(checkpoint_file).expanduser().resolve()
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            if resume and checkpoint_path.exists():
+                loaded = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                if not isinstance(loaded, dict):
+                    raise ValueError(f"Invalid checkpoint payload at {checkpoint_path}: expected object.")
+                checkpoint_hash = loaded.get("selection_sha256")
+                if strict_checkpoint_match and checkpoint_hash != selection_hash:
+                    raise ValueError(
+                        "Checkpoint selection hash mismatch. "
+                        f"checkpoint={checkpoint_hash} current={selection_hash}"
+                    )
+                prior_uploaded = loaded.get("uploaded_files")
+                if isinstance(prior_uploaded, list):
+                    uploaded_set = {str(value) for value in prior_uploaded if isinstance(value, str)}
+                prior_errors = loaded.get("errors")
+                if isinstance(prior_errors, list):
+                    persisted_errors = [row for row in prior_errors if isinstance(row, dict)]
+                started_value = loaded.get("started_at_unix")
+                if isinstance(started_value, (int, float)):
+                    checkpoint_started_at_unix = float(started_value)
+                resumed_from_checkpoint = True
+            elif resume and not checkpoint_path.exists():
+                raise ValueError(f"Checkpoint file does not exist for resume: {checkpoint_path}")
+
+        if uploaded_set:
+            before = len(resolved_files)
+            resolved_files = [path for path in resolved_files if str(path) not in uploaded_set]
+            skipped_already_uploaded = before - len(resolved_files)
+
         payload: Dict[str, Any] = {
             "directory": payload_directory,
             "selection_mode": selection_mode,
             "pattern": pattern,
             "recursive": bool(recursive),
-            "requested_files": len(resolved_files),
+            "requested_files": len(selected_files),
+            "pending_files": len(resolved_files),
             "uploaded": 0,
             "failed": 0,
             "dry_run": bool(dry_run),
             "selected_files": selected_files,
             "fail_fast": bool(fail_fast),
+            "selection_sha256": selection_hash,
+            "resumed_from_checkpoint": resumed_from_checkpoint,
+            "skipped_already_uploaded": skipped_already_uploaded,
         }
+        if checkpoint_path is not None:
+            payload["checkpoint_file"] = str(checkpoint_path)
+            payload["checkpoint_save_every"] = checkpoint_cadence
 
         if dry_run:
             return payload
 
-        errors: List[Dict[str, str]] = []
+        if not resolved_files:
+            payload["status"] = "already_complete"
+            return payload
+
+        def _checkpoint_payload(errors_payload: List[Dict[str, Any]], uploaded_payload: set[str], completed: bool) -> Dict[str, Any]:
+            now = time.time()
+            started = checkpoint_started_at_unix if checkpoint_started_at_unix is not None else now
+            return {
+                "version": 1,
+                "collection_hash_id": str(collection_hash_id),
+                "selection_mode": selection_mode,
+                "selection_sha256": selection_hash,
+                "requested_files": len(selected_files),
+                "pending_files": len(resolved_files),
+                "uploaded_files_count": len(uploaded_payload),
+                "uploaded_files": sorted(uploaded_payload),
+                "errors": errors_payload,
+                "fail_fast": bool(fail_fast),
+                "checkpoint_save_every": checkpoint_cadence,
+                "completed": bool(completed),
+                "started_at_unix": started,
+                "updated_at_unix": now,
+            }
+
+        def _flush_checkpoint(errors_payload: List[Dict[str, Any]], uploaded_payload: set[str], completed: bool) -> None:
+            if checkpoint_path is None:
+                return
+            checkpoint_path.write_text(
+                json.dumps(_checkpoint_payload(errors_payload, uploaded_payload, completed), indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+        errors: List[Dict[str, Any]] = list(persisted_errors)
         uploaded = 0
         failed = 0
+        since_flush = 0
         for path in resolved_files:
             try:
                 self.upload_document(
@@ -417,11 +511,20 @@ class QueryLakeClient:
                     auth=auth,
                 )
                 uploaded += 1
+                uploaded_set.add(str(path))
             except Exception as exc:  # noqa: BLE001
                 failed += 1
                 errors.append({"file": str(path), "error": str(exc)})
                 if fail_fast:
+                    _flush_checkpoint(errors, uploaded_set, completed=False)
                     break
+            since_flush += 1
+            if since_flush >= checkpoint_cadence:
+                _flush_checkpoint(errors, uploaded_set, completed=False)
+                since_flush = 0
+
+        completed = failed == 0 and uploaded >= len(resolved_files)
+        _flush_checkpoint(errors, uploaded_set, completed=completed)
 
         payload["uploaded"] = uploaded
         payload["failed"] = failed

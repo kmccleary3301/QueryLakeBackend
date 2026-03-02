@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -125,6 +126,59 @@ class _FakeClient:
             raise RuntimeError("simulated upload failure")
         self.uploaded.append(path_str)
         return {"hash_id": "doc_demo", "collection_hash_id": collection_hash_id}
+
+    def upload_directory(self, **kwargs):
+        file_paths = list(kwargs.get("file_paths") or [])
+        uploaded = 0
+        failed = 0
+        errors = []
+        for file_path in file_paths:
+            path_str = str(file_path)
+            if path_str.endswith("bad.txt"):
+                failed += 1
+                errors.append({"file": path_str, "error": "simulated upload failure"})
+                if kwargs.get("fail_fast"):
+                    break
+                continue
+            uploaded += 1
+        payload = {
+            "directory": kwargs.get("directory"),
+            "selection_mode": "explicit-file-list",
+            "pattern": kwargs.get("pattern", "*"),
+            "recursive": bool(kwargs.get("recursive")),
+            "requested_files": len(file_paths),
+            "pending_files": len(file_paths),
+            "uploaded": uploaded,
+            "failed": failed,
+            "dry_run": bool(kwargs.get("dry_run")),
+            "selected_files": [str(path) for path in file_paths],
+            "fail_fast": bool(kwargs.get("fail_fast")),
+            "selection_sha256": "fake_sha256",
+            "resumed_from_checkpoint": bool(kwargs.get("resume")),
+            "skipped_already_uploaded": 0,
+        }
+        checkpoint_file = kwargs.get("checkpoint_file")
+        if isinstance(checkpoint_file, str):
+            payload["checkpoint_file"] = str(checkpoint_file)
+            payload["checkpoint_save_every"] = int(kwargs.get("checkpoint_save_every", 1))
+            checkpoint_path = Path(checkpoint_file).expanduser().resolve()
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "selection_sha256": "fake_sha256",
+                        "uploaded_files": [str(path) for path in file_paths[:uploaded]],
+                        "errors": errors,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+        if errors:
+            payload["errors"] = errors
+        return payload
 
 
 def test_cli_login_saves_profile(monkeypatch, tmp_path, capsys):
@@ -694,6 +748,93 @@ def test_cli_rag_upload_dir_from_selection_missing_file(monkeypatch, tmp_path):
                 str(tmp_path / "missing_selection.json"),
             ]
         )
+
+
+def test_cli_rag_upload_dir_resume_requires_checkpoint(monkeypatch, tmp_path):
+    home = tmp_path / "home5i"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    with pytest.raises(SystemExit, match="--resume requires --checkpoint-file"):
+        cli.main(
+            [
+                "rag",
+                "upload-dir",
+                "--collection-id",
+                "col_10",
+                "--dir",
+                str(tmp_path),
+                "--resume",
+            ]
+        )
+
+
+def test_cli_rag_upload_dir_checkpoint_flags(monkeypatch, tmp_path, capsys):
+    home = tmp_path / "home5j"
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "CONFIG_DIR", home / ".querylake")
+    monkeypatch.setattr(cli, "CONFIG_PATH", home / ".querylake" / "sdk_profiles.json")
+    monkeypatch.setattr(cli, "QueryLakeClient", _FakeClient)
+
+    root = tmp_path / "docs8"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    (root / "b.txt").write_text("b", encoding="utf-8")
+    checkpoint_file = tmp_path / "artifacts3" / "checkpoint.json"
+
+    cli.main(
+        [
+            "login",
+            "--url",
+            "http://127.0.0.1:8000",
+            "--profile",
+            "local",
+            "--username",
+            "alice",
+            "--password",
+            "secret",
+        ]
+    )
+
+    code = cli.main(
+        [
+            "rag",
+            "upload-dir",
+            "--collection-id",
+            "col_11",
+            "--dir",
+            str(root),
+            "--pattern",
+            "*.txt",
+            "--checkpoint-file",
+            str(checkpoint_file),
+            "--checkpoint-save-every",
+            "2",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\"checkpoint_file\":" in out
+    assert "\"checkpoint_save_every\": 2" in out
+    assert checkpoint_file.exists()
 
 
 def test_cli_rag_list_collections(monkeypatch, tmp_path, capsys):

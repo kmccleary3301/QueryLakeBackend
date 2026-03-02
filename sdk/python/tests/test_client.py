@@ -141,6 +141,93 @@ def test_upload_directory_explicit_file_list_and_errors(tmp_path, monkeypatch):
         client.close()
 
 
+def test_upload_directory_checkpoint_resume(tmp_path, monkeypatch):
+    root = tmp_path / "bulk3"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("one", encoding="utf-8")
+    two = root / "two.txt"
+    two.write_text("two", encoding="utf-8")
+    checkpoint_file = tmp_path / "checkpoint.json"
+
+    first_pass_calls = []
+
+    def _first_pass_upload(**kwargs):
+        file_path = str(kwargs["file_path"])
+        first_pass_calls.append(file_path)
+        if file_path.endswith("two.txt"):
+            raise RuntimeError("transient failure")
+        return {"hash_id": "doc_ok"}
+
+    second_pass_calls = []
+
+    def _second_pass_upload(**kwargs):
+        file_path = str(kwargs["file_path"])
+        second_pass_calls.append(file_path)
+        return {"hash_id": "doc_ok"}
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", _first_pass_upload)
+    try:
+        first = client.upload_directory(
+            collection_hash_id="abc123",
+            file_paths=[one, two],
+            fail_fast=True,
+            checkpoint_file=checkpoint_file,
+            checkpoint_save_every=1,
+        )
+        assert first["uploaded"] == 1
+        assert first["failed"] == 1
+        assert checkpoint_file.exists()
+
+        monkeypatch.setattr(client, "upload_document", _second_pass_upload)
+        second = client.upload_directory(
+            collection_hash_id="abc123",
+            file_paths=[one, two],
+            checkpoint_file=checkpoint_file,
+            resume=True,
+        )
+        assert second["resumed_from_checkpoint"] is True
+        assert second["skipped_already_uploaded"] == 1
+        assert second["uploaded"] == 1
+        assert second["failed"] == 0
+        assert first_pass_calls == [str(one), str(two)]
+        assert second_pass_calls == [str(two)]
+    finally:
+        client.close()
+
+
+def test_upload_directory_checkpoint_hash_mismatch(tmp_path, monkeypatch):
+    root = tmp_path / "bulk4"
+    root.mkdir(parents=True, exist_ok=True)
+    one = root / "one.txt"
+    one.write_text("one", encoding="utf-8")
+    checkpoint_file = tmp_path / "checkpoint_mismatch.json"
+    checkpoint_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "selection_sha256": "mismatch",
+                "uploaded_files": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    client = QueryLakeClient(base_url="http://testserver", oauth2="token")
+    monkeypatch.setattr(client, "upload_document", lambda **kwargs: {"hash_id": "doc_ok"})
+    try:
+        with pytest.raises(ValueError, match="selection hash mismatch"):
+            client.upload_directory(
+                collection_hash_id="abc123",
+                file_paths=[one],
+                checkpoint_file=checkpoint_file,
+                resume=True,
+            )
+    finally:
+        client.close()
+
+
 def test_search_hybrid_accepts_orchestrated_dict_payload():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/search_hybrid"
