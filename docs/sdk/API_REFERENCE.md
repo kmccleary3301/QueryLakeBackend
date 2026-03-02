@@ -66,6 +66,10 @@ This keeps the SDK forward-compatible with new backend API functions without wai
 - `querylake login`
 - `querylake models`
 - `querylake profile list`
+- `querylake profile show`
+- `querylake profile set-default`
+- `querylake profile set-url`
+- `querylake profile delete`
 - `querylake rag create-collection`
 - `querylake rag upload`
 - `querylake rag search`

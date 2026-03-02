@@ -96,6 +96,17 @@ querylake --profile local rag search --mode bm25 --collection-id <id> --query "h
 ```
 
 Profiles are stored at `~/.querylake/sdk_profiles.json`.
+The login profile becomes the active default, so you can omit `--profile` afterward.
+
+### Profile management
+
+```bash
+querylake profile list
+querylake profile show --name local
+querylake profile set-url --name local --url http://127.0.0.1:8000
+querylake profile set-default --name local
+querylake profile delete --name old-profile
+```
 
 ---
 

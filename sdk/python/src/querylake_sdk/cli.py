@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 from pathlib import Path
@@ -15,15 +16,20 @@ CONFIG_PATH = CONFIG_DIR / "sdk_profiles.json"
 
 def _load_profiles() -> Dict[str, Any]:
     if not CONFIG_PATH.exists():
-        return {"profiles": {}}
+        return {"profiles": {}, "active_profile": None}
     try:
         payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
-        return {"profiles": {}}
+        return {"profiles": {}, "active_profile": None}
     if not isinstance(payload, dict):
-        return {"profiles": {}}
+        return {"profiles": {}, "active_profile": None}
     if "profiles" not in payload or not isinstance(payload["profiles"], dict):
         payload["profiles"] = {}
+    active = payload.get("active_profile")
+    if active is not None and not isinstance(active, str):
+        payload["active_profile"] = None
+    if "active_profile" not in payload:
+        payload["active_profile"] = None
     return payload
 
 
@@ -33,10 +39,10 @@ def _save_profiles(payload: Dict[str, Any]) -> None:
 
 
 def _resolve_profile(name: Optional[str]) -> Dict[str, Any]:
-    if not name:
+    if not isinstance(name, str) or not name.strip():
         return {}
     profiles = _load_profiles().get("profiles", {})
-    value = profiles.get(name, {})
+    value = profiles.get(name.strip(), {})
     return value if isinstance(value, dict) else {}
 
 
@@ -52,15 +58,29 @@ def _resolve_auth(args: argparse.Namespace, profile: Dict[str, Any]) -> Dict[str
 
 
 def _resolve_base_url(args: argparse.Namespace, profile: Dict[str, Any]) -> str:
-    if getattr(args, "url", None):
-        return args.url
+    explicit = getattr(args, "url", None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
     if isinstance(profile.get("base_url"), str) and profile["base_url"].strip():
         return profile["base_url"]
     return os.getenv("QUERYLAKE_BASE_URL", "http://127.0.0.1:8000")
 
 
+def _resolve_profile_name(args: argparse.Namespace) -> Optional[str]:
+    explicit = getattr(args, "profile", None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    store = _load_profiles()
+    active = store.get("active_profile")
+    profiles = store.get("profiles", {})
+    if isinstance(active, str) and active in profiles:
+        return active
+    return None
+
+
 def _build_client(args: argparse.Namespace, *, require_auth: bool = False) -> QueryLakeClient:
-    profile = _resolve_profile(getattr(args, "profile", None))
+    profile_name = _resolve_profile_name(args)
+    profile = _resolve_profile(profile_name)
     base_url = _resolve_base_url(args, profile)
     auth = _resolve_auth(args, profile)
     if require_auth and not auth:
@@ -96,12 +116,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_login(args: argparse.Namespace) -> int:
-    if not args.username or not args.password:
-        raise SystemExit("--username and --password are required")
+    if not args.username:
+        raise SystemExit("--username is required")
+    password = args.password
+    if not isinstance(password, str) or not password:
+        password = getpass.getpass("QueryLake password: ")
+    if not password:
+        raise SystemExit("Password is required.")
     profile_name = args.profile or "default"
-    client = QueryLakeClient(base_url=args.url)
+    base_url = _resolve_base_url(args, {})
+    client = QueryLakeClient(base_url=base_url)
     try:
-        result = client.login(username=args.username, password=args.password)
+        result = client.login(username=args.username, password=password)
     finally:
         client.close()
 
@@ -112,17 +138,19 @@ def cmd_login(args: argparse.Namespace) -> int:
     store = _load_profiles()
     profiles = store.setdefault("profiles", {})
     profiles[profile_name] = {
-        "base_url": args.url,
+        "base_url": base_url,
         "auth": {"oauth2": token},
         "username": args.username,
     }
+    store["active_profile"] = profile_name
     _save_profiles(store)
     _print_output(
         {
             "saved_profile": profile_name,
             "config_path": str(CONFIG_PATH),
-            "base_url": args.url,
+            "base_url": base_url,
             "username": args.username,
+            "active_profile": profile_name,
         },
         as_json=True,
     )
@@ -142,6 +170,71 @@ def cmd_models(args: argparse.Namespace) -> int:
 def cmd_profile_list(args: argparse.Namespace) -> int:
     store = _load_profiles()
     _print_output(store, as_json=True)
+    return 0
+
+
+def cmd_profile_show(args: argparse.Namespace) -> int:
+    store = _load_profiles()
+    profiles = store.get("profiles", {})
+    name = args.name or _resolve_profile_name(args)
+    if not name:
+        raise SystemExit("No profile selected. Pass --name or set an active profile.")
+    profile = profiles.get(name)
+    if not isinstance(profile, dict):
+        raise SystemExit(f"Profile not found: {name}")
+    _print_output(
+        {
+            "profile": name,
+            "active": store.get("active_profile") == name,
+            "data": profile,
+            "config_path": str(CONFIG_PATH),
+        },
+        as_json=True,
+    )
+    return 0
+
+
+def cmd_profile_set_default(args: argparse.Namespace) -> int:
+    store = _load_profiles()
+    profiles = store.get("profiles", {})
+    name = args.name
+    if name not in profiles:
+        raise SystemExit(f"Profile not found: {name}")
+    store["active_profile"] = name
+    _save_profiles(store)
+    _print_output({"active_profile": name, "config_path": str(CONFIG_PATH)}, as_json=True)
+    return 0
+
+
+def cmd_profile_set_url(args: argparse.Namespace) -> int:
+    store = _load_profiles()
+    profiles = store.get("profiles", {})
+    name = args.name or _resolve_profile_name(args)
+    if not name:
+        raise SystemExit("No profile selected. Pass --name or set an active profile.")
+    profile = profiles.get(name)
+    if not isinstance(profile, dict):
+        raise SystemExit(f"Profile not found: {name}")
+    profile["base_url"] = args.url.strip()
+    profiles[name] = profile
+    if store.get("active_profile") is None:
+        store["active_profile"] = name
+    _save_profiles(store)
+    _print_output({"profile": name, "base_url": profile["base_url"]}, as_json=True)
+    return 0
+
+
+def cmd_profile_delete(args: argparse.Namespace) -> int:
+    store = _load_profiles()
+    profiles = store.get("profiles", {})
+    name = args.name
+    if name not in profiles:
+        raise SystemExit(f"Profile not found: {name}")
+    profiles.pop(name, None)
+    if store.get("active_profile") == name:
+        store["active_profile"] = None
+    _save_profiles(store)
+    _print_output({"deleted_profile": name, "active_profile": store.get("active_profile")}, as_json=True)
     return 0
 
 
@@ -220,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    parser.add_argument("--url", default="http://127.0.0.1:8000", help="QueryLake base URL.")
+    parser.add_argument("--url", default=None, help="QueryLake base URL override.")
     parser.add_argument("--profile", default=None, help="Saved profile name under ~/.querylake.")
     parser.add_argument("--oauth2", default=None, help="OAuth2 token override.")
     parser.add_argument("--api-key", dest="api_key", default=None, help="API key override.")
@@ -230,13 +323,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_login = subparsers.add_parser("login", help="Login and save OAuth2 token to a profile.")
     p_login.add_argument("--username", required=True, help="Username.")
-    p_login.add_argument("--password", required=True, help="Password.")
+    p_login.add_argument("--password", default=None, help="Password. If omitted, CLI prompts securely.")
     p_login.add_argument(
         "--profile",
         default="default",
         help="Profile name to save. Defaults to 'default'.",
     )
-    p_login.add_argument("--url", default="http://127.0.0.1:8000", help="QueryLake base URL.")
+    p_login.add_argument("--url", default=None, help="QueryLake base URL.")
     p_login.set_defaults(func=cmd_login)
 
     p_models = subparsers.add_parser("models", help="List OpenAI-compatible models.")
@@ -246,6 +339,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_profile_sub = p_profile.add_subparsers(dest="profile_command", required=True)
     p_profile_list = p_profile_sub.add_parser("list", help="List saved profiles.")
     p_profile_list.set_defaults(func=cmd_profile_list)
+    p_profile_show = p_profile_sub.add_parser("show", help="Show one profile (or active profile).")
+    p_profile_show.add_argument("--name", default=None, help="Profile name.")
+    p_profile_show.set_defaults(func=cmd_profile_show)
+    p_profile_default = p_profile_sub.add_parser("set-default", help="Set active default profile.")
+    p_profile_default.add_argument("--name", required=True, help="Profile name.")
+    p_profile_default.set_defaults(func=cmd_profile_set_default)
+    p_profile_set_url = p_profile_sub.add_parser("set-url", help="Set base URL for a profile.")
+    p_profile_set_url.add_argument("--name", default=None, help="Profile name (defaults to active).")
+    p_profile_set_url.add_argument("--url", required=True, help="QueryLake base URL.")
+    p_profile_set_url.set_defaults(func=cmd_profile_set_url)
+    p_profile_delete = p_profile_sub.add_parser("delete", help="Delete a saved profile.")
+    p_profile_delete.add_argument("--name", required=True, help="Profile name.")
+    p_profile_delete.set_defaults(func=cmd_profile_delete)
 
     p_rag = subparsers.add_parser("rag", help="RAG workflow helpers.")
     rag_sub = p_rag.add_subparsers(dest="rag_command", required=True)

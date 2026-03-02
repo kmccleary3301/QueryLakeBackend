@@ -24,17 +24,19 @@ querylake login \
   --password <password>
 ```
 
+`login` also sets this profile as the active default profile.
+
 ## 4) Create a collection and upload a document
 
 ```bash
-querylake --profile local rag create-collection --name "quickstart"
-querylake --profile local rag upload --collection-id <collection_id> --file ./paper.pdf --await-embedding
+querylake rag create-collection --name "quickstart"
+querylake rag upload --collection-id <collection_id> --file ./paper.pdf --await-embedding
 ```
 
 ## 5) Hybrid search
 
 ```bash
-querylake --profile local rag search \
+querylake rag search \
   --collection-id <collection_id> \
   --query "What is the main claim?" \
   --limit-bm25 12 \
@@ -45,10 +47,20 @@ querylake --profile local rag search \
   --sparse-weight 0.2
 
 # Optional lexical-only control path
-querylake --profile local rag search \
+querylake rag search \
   --mode bm25 \
   --collection-id <collection_id> \
   --query "main claim"
+```
+
+## 6) Profile management (optional)
+
+```bash
+querylake profile list
+querylake profile show
+querylake profile set-url --url http://127.0.0.1:8000
+querylake profile set-default --name local
+querylake profile delete --name stale-profile
 ```
 
 ## Python API (sync)
