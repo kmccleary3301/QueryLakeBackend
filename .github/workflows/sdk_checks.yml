@@ -1,21 +1,30 @@
 name: SDK Checks
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "sdk/python/**"
+      - "scripts/ci_sdk_checks.sh"
+      - "scripts/dev/verify_sdk_wheel.py"
+      - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
       - "README.md"
       - "Makefile"
+      - ".github/workflows/sdk_checks.yml"
   push:
     branches: ["main"]
     paths:
       - "sdk/python/**"
+      - "scripts/ci_sdk_checks.sh"
+      - "scripts/dev/verify_sdk_wheel.py"
+      - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
       - "README.md"
       - "Makefile"
+      - ".github/workflows/sdk_checks.yml"
 
 jobs:
   sdk-test-build:
