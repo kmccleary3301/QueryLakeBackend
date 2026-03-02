@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose an improvement to QueryLake backend, retrieval primitives, or SDK ergonomics.
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDK
+        - Retrieval/runtime
+        - API/backend
+        - CI/workflows
+        - Docs/setup
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is painful today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the target behavior and expected user flow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you evaluate?
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete outcomes that define done.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: measurement
+    attributes:
+      label: Metrics / validation plan
+      description: For retrieval/runtime, include quality + latency gate ideas.
+    validations:
+      required: false
+

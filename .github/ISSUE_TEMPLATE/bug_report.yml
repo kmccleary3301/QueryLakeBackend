@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible defect in QueryLake backend, retrieval/runtime, or SDK.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDK
+        - Retrieval/runtime
+        - API/backend
+        - CI/workflows
+        - Docs/setup
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed and what did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include exact commands, payloads, or sequence.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs / traces / artifacts
+      description: Paste relevant output. Redact sensitive info.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python, uv version, and runtime mode (API-only/full).
+      placeholder: |
+        OS:
+        Python:
+        uv:
+        Runtime mode:
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who/what is blocked? Is there a workaround?
+    validations:
+      required: true
+

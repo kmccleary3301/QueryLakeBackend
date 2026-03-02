@@ -124,6 +124,7 @@ print(rows[:3])
 - SDK API reference: `docs/sdk/API_REFERENCE.md`
 - SDK PyPI release runbook: `docs/sdk/PYPI_RELEASE.md`
 - Route and unification docs: `docs/unification/`
+- Contributor guide: `CONTRIBUTING.md`
 
 ## Packaging and PyPI
 
