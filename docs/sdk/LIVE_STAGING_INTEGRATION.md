@@ -85,3 +85,8 @@ Enforces:
 4. Transient staging/API instability during nightly/manual runs.
    - symptom: intermittent integration failure
    - mitigation: retain `junit.xml` + artifact diagnostics and use explicit rerun triage policy
+
+5. Repository-level live vars/secrets absent on branch validation runs.
+   - symptom: preflight fails with `QUERYLAKE_LIVE_BASE_URL is required` before tests start
+   - evidence: workflow run `22642371545` (`docs_tmp/RAG/ci/live_integration/run_22642371545_failed.log`)
+   - mitigation: define the required vars/secrets contract at repository or environment scope before enabling nightly/live checks
