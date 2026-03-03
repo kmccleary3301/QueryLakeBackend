@@ -16,6 +16,7 @@ From repo root:
 make sdk-precommit-run
 make sdk-ci
 make sdk-release-check
+make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main SKIP_REMOTE_CHECK=1
 ```
 
 `make sdk-ci` runs the same quality gate used in CI (`scripts/ci_sdk_checks.sh`):
@@ -57,6 +58,9 @@ Use the helper script from repo root:
 # Check-only
 ./scripts/dev/release_sdk.sh check
 
+# Validate publish guard directly (optional, explicit)
+make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main
+
 # Upload to TestPyPI
 ./scripts/dev/release_sdk.sh testpypi
 
@@ -69,6 +73,10 @@ Or use GitHub Actions:
 - Workflow: `.github/workflows/sdk_publish.yml`
 - Trigger: manual (`workflow_dispatch`)
 - Input `target`: `testpypi` or `pypi`
+- Guard policy:
+  - `target=pypi` must run from `refs/heads/main` or tag `refs/tags/v<version>`
+  - `target=pypi` requires stable semver version format `X.Y.Z`
+  - target/version uniqueness is checked against the selected index
 
 ## Post-release verification
 

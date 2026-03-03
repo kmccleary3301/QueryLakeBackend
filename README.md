@@ -186,6 +186,7 @@ make sdk-lint
 make sdk-type
 make sdk-ci
 make sdk-release-check
+make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main
 # optional publish helpers
 make sdk-release-testpypi
 make sdk-release-pypi

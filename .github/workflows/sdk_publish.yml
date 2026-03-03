@@ -31,6 +31,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      - name: Validate publish guard
+        run: |
+          uv run --no-project python scripts/dev/verify_sdk_publish_guard.py \
+            --target "${{ github.event.inputs.target }}" \
+            --package-name "querylake-sdk" \
+            --github-ref "${{ github.ref }}"
+
       - name: Run SDK CI checks
         run: bash scripts/ci_sdk_checks.sh
 

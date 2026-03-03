@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -84,3 +84,13 @@ sdk-release-testpypi:
 
 sdk-release-pypi:
 	./scripts/dev/release_sdk.sh pypi
+
+sdk-publish-guard:
+	@if [[ -z "$(TARGET)" ]]; then \
+		echo "usage: make sdk-publish-guard TARGET=testpypi|pypi [GITHUB_REF=refs/heads/main] [SKIP_REMOTE_CHECK=1]"; \
+		exit 2; \
+	fi
+	@GUARD_ARGS="--target $(TARGET) --package-name querylake-sdk"; \
+	if [[ -n "$(GITHUB_REF)" ]]; then GUARD_ARGS="$$GUARD_ARGS --github-ref $(GITHUB_REF)"; fi; \
+	if [[ "$(SKIP_REMOTE_CHECK)" == "1" ]]; then GUARD_ARGS="$$GUARD_ARGS --skip-remote-check"; fi; \
+	uv run --no-project python scripts/dev/verify_sdk_publish_guard.py $$GUARD_ARGS
