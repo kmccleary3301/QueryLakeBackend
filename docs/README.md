@@ -18,6 +18,8 @@
   - `docs/sdk/PYPI_RELEASE.md`
 - SDK CI profiles and publish policy:
   - `docs/sdk/CI_PROFILES.md`
+- SDK TestPyPI dry-run runbook:
+  - `docs/sdk/TESTPYPI_DRYRUN.md`
 
 ## Core architecture and unification docs
 

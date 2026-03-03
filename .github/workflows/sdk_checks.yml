@@ -8,6 +8,7 @@ on:
       - "scripts/ci_sdk_checks.sh"
       - "scripts/dev/verify_sdk_wheel.py"
       - "scripts/dev/verify_sdk_publish_guard.py"
+      - "scripts/dev/prepare_sdk_dryrun_version.py"
       - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
@@ -15,6 +16,8 @@ on:
       - "README.md"
       - "Makefile"
       - ".github/workflows/sdk_checks.yml"
+      - ".github/workflows/sdk_publish.yml"
+      - ".github/workflows/sdk_publish_dryrun.yml"
   push:
     branches: ["main"]
     paths:
@@ -22,6 +25,7 @@ on:
       - "scripts/ci_sdk_checks.sh"
       - "scripts/dev/verify_sdk_wheel.py"
       - "scripts/dev/verify_sdk_publish_guard.py"
+      - "scripts/dev/prepare_sdk_dryrun_version.py"
       - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
@@ -29,6 +33,8 @@ on:
       - "README.md"
       - "Makefile"
       - ".github/workflows/sdk_checks.yml"
+      - ".github/workflows/sdk_publish.yml"
+      - ".github/workflows/sdk_publish_dryrun.yml"
 
 concurrency:
   group: sdk-checks-${{ github.ref }}

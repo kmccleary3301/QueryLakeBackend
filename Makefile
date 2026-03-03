@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard sdk-dryrun-version
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -94,3 +94,11 @@ sdk-publish-guard:
 	if [[ -n "$(GITHUB_REF)" ]]; then GUARD_ARGS="$$GUARD_ARGS --github-ref $(GITHUB_REF)"; fi; \
 	if [[ "$(SKIP_REMOTE_CHECK)" == "1" ]]; then GUARD_ARGS="$$GUARD_ARGS --skip-remote-check"; fi; \
 	uv run --no-project python scripts/dev/verify_sdk_publish_guard.py $$GUARD_ARGS
+
+sdk-dryrun-version:
+	@TOKEN_VALUE="$(TOKEN)"; \
+	if [[ -z "$$TOKEN_VALUE" ]]; then TOKEN_VALUE="$$(date -u +%Y%m%d%H%M%S)"; fi; \
+	uv run --no-project python scripts/dev/prepare_sdk_dryrun_version.py \
+		--version-file sdk/python/pyproject.toml \
+		--token "$$TOKEN_VALUE" \
+		$(if $(WRITE),--write,)

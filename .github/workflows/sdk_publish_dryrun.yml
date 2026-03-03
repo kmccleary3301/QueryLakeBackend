@@ -1,0 +1,130 @@
+name: SDK Publish Dry-Run (TestPyPI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_non_main:
+        description: "Allow running from non-main refs"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "25 7 * * *"
+
+concurrency:
+  group: sdk-publish-dryrun-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dryrun-publish-testpypi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      id-token: write
+      contents: read
+    environment: testpypi
+    steps:
+      - name: Enforce branch policy
+        run: |
+          ALLOW_NON_MAIN="false"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.allow_non_main }}" == "true" ]]; then
+            ALLOW_NON_MAIN="true"
+          fi
+          if [[ "${{ github.ref }}" != "refs/heads/main" && "${ALLOW_NON_MAIN}" != "true" ]]; then
+            echo "Dry-run publish is restricted to main unless allow_non_main=true." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Prepare unique dry-run version
+        id: dryrun_version
+        run: |
+          TOKEN="${{ github.run_id }}${{ github.run_attempt }}"
+          uv run --no-project python scripts/dev/prepare_sdk_dryrun_version.py \
+            --version-file sdk/python/pyproject.toml \
+            --token "${TOKEN}" \
+            --write \
+            --github-output "$GITHUB_OUTPUT" | tee dryrun_version.json
+
+      - name: Validate publish guard (TestPyPI)
+        run: |
+          uv run --no-project python scripts/dev/verify_sdk_publish_guard.py \
+            --target testpypi \
+            --package-name querylake-sdk \
+            --github-ref "${{ github.ref }}"
+
+      - name: Run SDK CI checks
+        run: bash scripts/ci_sdk_checks.sh
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: sdk/python/dist/
+
+      - name: Verify install from TestPyPI in clean venv
+        run: |
+          python -m venv /tmp/ql-sdk-dryrun-verify
+          source /tmp/ql-sdk-dryrun-verify/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "querylake-sdk==${{ steps.dryrun_version.outputs.dryrun_version }}"
+          python - <<'PY'
+          import querylake_sdk
+          print("import_ok", getattr(querylake_sdk, "__name__", "querylake_sdk"))
+          PY
+          querylake --help >/tmp/ql-sdk-dryrun-cli-help.txt
+          python examples/sdk/rag_bulk_ingest_and_search.py \
+            --offline-demo \
+            --out docs_tmp/RAG/ci/sdk_publish_dryrun/offline_demo
+
+      - name: Build dry-run summary
+        run: |
+          mkdir -p docs_tmp/RAG/ci/sdk_publish_dryrun
+          cat > docs_tmp/RAG/ci/sdk_publish_dryrun/summary.json <<JSON
+          {
+            "workflow": "sdk_publish_dryrun",
+            "target": "testpypi",
+            "ref": "${{ github.ref }}",
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "version": "${{ steps.dryrun_version.outputs.dryrun_version }}",
+            "package_url": "https://test.pypi.org/project/querylake-sdk/${{ steps.dryrun_version.outputs.dryrun_version }}/",
+            "status": "published_and_verified"
+          }
+          JSON
+
+      - name: Publish step summary
+        run: |
+          {
+            echo "## SDK TestPyPI Dry-Run";
+            echo "";
+            echo "- Ref: \`${{ github.ref }}\`";
+            echo "- Version: \`${{ steps.dryrun_version.outputs.dryrun_version }}\`";
+            echo "- Package URL: https://test.pypi.org/project/querylake-sdk/${{ steps.dryrun_version.outputs.dryrun_version }}/";
+            echo "- Verification: import + CLI + offline demo passed";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload dry-run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dryrun-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            sdk/python/dist/*
+            dryrun_version.json
+            /tmp/ql-sdk-dryrun-cli-help.txt
+            docs_tmp/RAG/ci/sdk_publish_dryrun/summary.json
+            docs_tmp/RAG/ci/sdk_publish_dryrun/offline_demo/**
+          retention-days: 14

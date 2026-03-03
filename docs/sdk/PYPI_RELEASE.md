@@ -5,6 +5,9 @@ This runbook publishes the standalone Python SDK located at `sdk/python`.
 For CI profile definitions (light matrix, release guard, local parity), see:
 `docs/sdk/CI_PROFILES.md`.
 
+For guarded TestPyPI dry-run publishing, see:
+`docs/sdk/TESTPYPI_DRYRUN.md`.
+
 ## Package scope
 
 - Distribution: `querylake-sdk`
@@ -80,6 +83,12 @@ Or use GitHub Actions:
   - `target=pypi` must run from `refs/heads/main` or tag `refs/tags/v<version>`
   - `target=pypi` requires stable semver version format `X.Y.Z`
   - target/version uniqueness is checked against the selected index
+
+Dry-run TestPyPI workflow:
+
+- Workflow: `.github/workflows/sdk_publish_dryrun.yml`
+- Trigger: manual + nightly schedule
+- Behavior: generates unique `dev` version, publishes to TestPyPI, verifies clean install
 
 ## Post-release verification
 

@@ -40,6 +40,17 @@ Workflow: `.github/workflows/sdk_checks.yml`
 
 The matrix validates interpreter compatibility while avoiding duplicated lint/type cost.
 
+### 4) TestPyPI dry-run publish profile (`sdk_publish_dryrun.yml`)
+
+Workflow: `.github/workflows/sdk_publish_dryrun.yml`
+
+- runs manual + nightly
+- enforces main-branch default policy
+- generates unique `dev` version per run
+- validates publish guard + full SDK CI checks
+- uploads to TestPyPI
+- verifies clean install/import/CLI/offline demo
+
 ## Publish policy
 
 Workflow: `.github/workflows/sdk_publish.yml`
