@@ -28,9 +28,36 @@ on:
       - "Makefile"
       - ".github/workflows/sdk_checks.yml"
 
+concurrency:
+  group: sdk-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  sdk-test-build:
+  sdk-light-matrix:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: SDK tests
+        run: make sdk-test
+
+  sdk-lint-type:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,8 +70,41 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Run SDK CI checks
-        run: bash scripts/ci_sdk_checks.sh
+      - name: SDK lint
+        run: make sdk-lint
+
+      - name: SDK type check
+        run: make sdk-type
+
+  sdk-release-guard:
+    needs: [sdk-light-matrix, sdk-lint-type]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Release guard (check mode)
+        run: bash scripts/dev/release_sdk.sh check
+
+      - name: Publish guard summary
+        run: |
+          VERSION="$(uv run --project sdk/python --extra dev python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          payload = tomllib.loads(Path("sdk/python/pyproject.toml").read_text(encoding="utf-8"))
+          print(payload["project"]["version"])
+          PY
+          )"
+          echo "SDK version validated: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload SDK dist artifacts
         uses: actions/upload-artifact@v4
