@@ -2,6 +2,9 @@
 
 This runbook publishes the standalone Python SDK located at `sdk/python`.
 
+For CI profile definitions (light matrix, release guard, local parity), see:
+`docs/sdk/CI_PROFILES.md`.
+
 ## Package scope
 
 - Distribution: `querylake-sdk`

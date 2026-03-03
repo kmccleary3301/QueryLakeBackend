@@ -164,6 +164,7 @@ print(rows[:3])
 - SDK bulk ingest reference: `docs/sdk/BULK_INGEST_REFERENCE.md`
 - SDK API reference: `docs/sdk/API_REFERENCE.md`
 - SDK PyPI release runbook: `docs/sdk/PYPI_RELEASE.md`
+- SDK CI profiles/publish policy: `docs/sdk/CI_PROFILES.md`
 - SDK runnable examples: `examples/sdk/`
 - Route and unification docs: `docs/unification/`
 - Contributor guide: `CONTRIBUTING.md`

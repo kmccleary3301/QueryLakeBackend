@@ -16,6 +16,8 @@
   - `docs/sdk/API_REFERENCE.md`
 - SDK release/publish runbook:
   - `docs/sdk/PYPI_RELEASE.md`
+- SDK CI profiles and publish policy:
+  - `docs/sdk/CI_PROFILES.md`
 
 ## Core architecture and unification docs
 

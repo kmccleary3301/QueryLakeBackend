@@ -50,8 +50,45 @@ This plan tracks the end-to-end work required to make QueryLake easier for devel
 - [x] Run SDK tests.
 - [x] Build SDK distribution artifacts.
 
+### Phase 7: Bulk ingest durability
+
+- [x] Add resumable checkpointed directory ingest for large corpus uploads.
+- [x] Add deterministic upload selection hashing and checkpoint snapshots.
+- [x] Add dry-run preflight outputs for ingestion planning.
+
+### Phase 8: Ingest reproducibility controls
+
+- [x] Add content-hash dedupe controls (none/per-run/collection/global).
+- [x] Add idempotency strategies and prefix controls.
+- [x] Add strict ingest profiles and profile-file overrides.
+
+### Phase 9: CI profile hardening
+
+- [x] Split SDK checks into light Python-version matrix + single-pass lint/type.
+- [x] Gate release checks on matrix + lint/type pass.
+- [x] Keep wheel build/metadata guard in release-check path.
+
+### Phase 10: Publish safety rails
+
+- [x] Add explicit publish guard script for target/version/ref constraints.
+- [x] Enforce guard in `sdk_publish` workflow.
+- [x] Integrate guard into local `release_sdk.sh` target flows.
+- [x] Add automated tests for guard behavior.
+
+### Phase 11: Docs IA and migration path
+
+- [x] Add dedicated CI profiles and publish policy documentation.
+- [x] Update release runbook to include guard workflow and branch/tag policy.
+- [x] Add make target for explicit publish guard local validation.
+
+### Phase 12: Consolidation
+
+- [ ] Run full local gate suite (`sdk`, docs, unification, retrieval smoke).
+- [ ] Publish final completion summary with current state and next headroom items.
+
 ## Outcomes
 
 - QueryLake now has a dedicated lightweight SDK package with a practical CLI path.
 - Backend setup is now scriptable and reproducible with explicit make targets.
 - Docs are structured for both first-time developers and advanced RAG researchers.
+- CI and release workflows now enforce explicit publish safety rules for PyPI/TestPyPI.
