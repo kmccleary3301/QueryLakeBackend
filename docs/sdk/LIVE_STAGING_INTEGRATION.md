@@ -24,6 +24,9 @@ Set these in GitHub repository vars/secrets:
 - `vars.QUERYLAKE_LIVE_TEST_COLLECTION_ID` (required for search and optional write smoke)
 - `vars.QUERYLAKE_LIVE_TEST_QUERY` (optional; defaults in test)
 - `vars.QUERYLAKE_LIVE_ALLOW_NON_STAGING` (optional; `1` to bypass host safety gate)
+- `vars.QUERYLAKE_LIVE_TIMEOUT_SECONDS` (optional; defaults to `20`)
+- `vars.QUERYLAKE_LIVE_RETRY_ATTEMPTS` (optional; defaults to `3`)
+- `vars.QUERYLAKE_LIVE_RETRY_DELAY_SECONDS` (optional; defaults to `1`)
 
 Manual input:
 
@@ -61,6 +64,7 @@ Enforces:
 - Nightly run in read-only mode.
 - Write-path runs only on manual dispatch with explicit `allow_write=true`.
 - Any failure should include junit artifact and step summary for triage.
+- Integration tests emit `live_metrics.jsonl` with per-operation latency and retry outcomes.
 
 ## Next extension points
 
@@ -84,7 +88,7 @@ Enforces:
 
 4. Transient staging/API instability during nightly/manual runs.
    - symptom: intermittent integration failure
-   - mitigation: retain `junit.xml` + artifact diagnostics and use explicit rerun triage policy
+   - mitigation: bounded retry/backoff in integration tests + retain `junit.xml` and `live_metrics.jsonl` artifacts for triage
 
 5. Repository-level live vars/secrets absent on branch validation runs.
    - symptom: preflight fails with `QUERYLAKE_LIVE_BASE_URL is required` before tests start
