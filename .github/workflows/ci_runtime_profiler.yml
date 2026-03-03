@@ -90,14 +90,7 @@ jobs:
               --max-p95-regression-pct "${MAX_P95}" \
               --max-compute-regression-pct "${MAX_COMPUTE}" \
               "${EXTRA_ARGS[@]}" | tee "${{ steps.profile.outputs.out_dir }}/delta_gate.json"
-            DELTA_STATUS="$(python - <<'PY'
-            import json
-            from pathlib import Path
-            path = Path("${{ steps.profile.outputs.out_dir }}/delta_gate.json")
-            data = json.loads(path.read_text(encoding="utf-8"))
-            print(data.get("status", "n/a"))
-            PY
-            )"
+            DELTA_STATUS="$(python -c 'import json; from pathlib import Path; p=Path("${{ steps.profile.outputs.out_dir }}/delta_gate.json"); print(json.loads(p.read_text(encoding="utf-8")).get("status","n/a"))')"
             echo "delta_status=${DELTA_STATUS}" >> "$GITHUB_OUTPUT"
             echo "delta_max_p95=${MAX_P95}" >> "$GITHUB_OUTPUT"
             echo "delta_max_compute=${MAX_COMPUTE}" >> "$GITHUB_OUTPUT"

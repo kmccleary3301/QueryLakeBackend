@@ -7,7 +7,10 @@ import argparse
 import json
 import re
 import sys
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python <3.11 fallback.
+    import tomli as tomllib  # type: ignore[no-redef]
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
