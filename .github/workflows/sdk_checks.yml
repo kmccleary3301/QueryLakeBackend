@@ -9,6 +9,9 @@ on:
       - "scripts/dev/verify_sdk_wheel.py"
       - "scripts/dev/verify_sdk_publish_guard.py"
       - "scripts/dev/prepare_sdk_dryrun_version.py"
+      - "scripts/dev/ci_runtime_profile.py"
+      - "scripts/dev/ci_runtime_delta.py"
+      - "scripts/dev/live_integration_preflight.py"
       - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
@@ -18,6 +21,8 @@ on:
       - ".github/workflows/sdk_checks.yml"
       - ".github/workflows/sdk_publish.yml"
       - ".github/workflows/sdk_publish_dryrun.yml"
+      - ".github/workflows/ci_runtime_profiler.yml"
+      - ".github/workflows/sdk_live_integration.yml"
   push:
     branches: ["main"]
     paths:
@@ -26,6 +31,9 @@ on:
       - "scripts/dev/verify_sdk_wheel.py"
       - "scripts/dev/verify_sdk_publish_guard.py"
       - "scripts/dev/prepare_sdk_dryrun_version.py"
+      - "scripts/dev/ci_runtime_profile.py"
+      - "scripts/dev/ci_runtime_delta.py"
+      - "scripts/dev/live_integration_preflight.py"
       - "scripts/dev/release_sdk.sh"
       - "docs/sdk/**"
       - "docs/setup/**"
@@ -35,6 +43,8 @@ on:
       - ".github/workflows/sdk_checks.yml"
       - ".github/workflows/sdk_publish.yml"
       - ".github/workflows/sdk_publish_dryrun.yml"
+      - ".github/workflows/ci_runtime_profiler.yml"
+      - ".github/workflows/sdk_live_integration.yml"
 
 concurrency:
   group: sdk-checks-${{ github.ref }}

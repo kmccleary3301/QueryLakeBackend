@@ -52,6 +52,9 @@ packages = ["src/querylake_sdk"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "integration_live: tests that run against a live QueryLake staging environment",
+]
 
 [tool.ruff]
 target-version = "py310"

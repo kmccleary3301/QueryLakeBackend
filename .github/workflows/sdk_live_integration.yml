@@ -1,0 +1,73 @@
+name: SDK Live Integration (Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_write:
+        description: "Allow write-path integration checks (upload/delete)"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "55 7 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  live-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      QUERYLAKE_LIVE_ENABLE: "1"
+      QUERYLAKE_LIVE_BASE_URL: ${{ vars.QUERYLAKE_LIVE_BASE_URL }}
+      QUERYLAKE_LIVE_OAUTH2: ${{ secrets.QUERYLAKE_LIVE_OAUTH2 }}
+      QUERYLAKE_LIVE_API_KEY: ${{ secrets.QUERYLAKE_LIVE_API_KEY }}
+      QUERYLAKE_LIVE_TEST_COLLECTION_ID: ${{ vars.QUERYLAKE_LIVE_TEST_COLLECTION_ID }}
+      QUERYLAKE_LIVE_TEST_QUERY: ${{ vars.QUERYLAKE_LIVE_TEST_QUERY }}
+      QUERYLAKE_LIVE_ALLOW_NON_STAGING: ${{ vars.QUERYLAKE_LIVE_ALLOW_NON_STAGING }}
+      QUERYLAKE_LIVE_ALLOW_WRITE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_write == 'true' && '1' || '0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Preflight live environment contract
+        id: preflight
+        run: python scripts/dev/live_integration_preflight.py
+
+      - name: Run live integration tests
+        run: |
+          mkdir -p docs_tmp/RAG/ci/live_integration
+          uv run --project sdk/python --extra dev pytest \
+            sdk/python/tests/integration \
+            -q \
+            -m integration_live \
+            --junitxml=docs_tmp/RAG/ci/live_integration/junit.xml
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## SDK Live Integration";
+            echo "";
+            echo "- Base URL host: \`${{ steps.preflight.outputs.hostname || 'n/a' }}\`";
+            echo "- Run namespace: \`${{ steps.preflight.outputs.run_namespace || 'n/a' }}\`";
+            echo "- Write checks enabled: \`${{ env.QUERYLAKE_LIVE_ALLOW_WRITE }}\`";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-live-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs_tmp/RAG/ci/live_integration/**
+          if-no-files-found: ignore
+          retention-days: 14

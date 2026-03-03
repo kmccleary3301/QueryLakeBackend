@@ -22,6 +22,8 @@
   - `docs/sdk/TESTPYPI_DRYRUN.md`
 - CI performance policy and profiling:
   - `docs/sdk/CI_PERFORMANCE_POLICY.md`
+- Live staging integration contract:
+  - `docs/sdk/LIVE_STAGING_INTEGRATION.md`
 
 ## Core architecture and unification docs
 

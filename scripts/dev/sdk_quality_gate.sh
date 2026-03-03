@@ -18,7 +18,7 @@ run_type() {
 
 run_test() {
   echo "[sdk-quality] test (pytest)"
-  uv run --project sdk/python --extra dev pytest sdk/python/tests -q
+  uv run --project sdk/python --extra dev pytest sdk/python/tests -q -m "not integration_live"
 }
 
 case "${MODE}" in

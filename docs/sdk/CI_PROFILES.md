@@ -60,6 +60,15 @@ Workflow: `.github/workflows/ci_runtime_profiler.yml`
 - writes JSON + markdown artifacts
 - optionally computes a delta against committed baseline
 
+### 6) Live staging integration profile (`sdk_live_integration.yml`)
+
+Workflow: `.github/workflows/sdk_live_integration.yml`
+
+- runs nightly + manual
+- enforces preflight environment contract before execution
+- defaults to read-only checks
+- optional manual write-path smoke with explicit enable switch
+
 ## Publish policy
 
 Workflow: `.github/workflows/sdk_publish.yml`
