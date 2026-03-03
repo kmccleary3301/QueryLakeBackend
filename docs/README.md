@@ -20,6 +20,8 @@
   - `docs/sdk/CI_PROFILES.md`
 - SDK TestPyPI dry-run runbook:
   - `docs/sdk/TESTPYPI_DRYRUN.md`
+- CI performance policy and profiling:
+  - `docs/sdk/CI_PERFORMANCE_POLICY.md`
 
 ## Core architecture and unification docs
 

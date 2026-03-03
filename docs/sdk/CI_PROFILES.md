@@ -51,6 +51,15 @@ Workflow: `.github/workflows/sdk_publish_dryrun.yml`
 - uploads to TestPyPI
 - verifies clean install/import/CLI/offline demo
 
+### 5) Runtime profiling/governance profile (`ci_runtime_profiler.yml`)
+
+Workflow: `.github/workflows/ci_runtime_profiler.yml`
+
+- runs daily + manual
+- builds 7-day runtime/cost profile from Actions run metadata
+- writes JSON + markdown artifacts
+- optionally computes a delta against committed baseline
+
 ## Publish policy
 
 Workflow: `.github/workflows/sdk_publish.yml`

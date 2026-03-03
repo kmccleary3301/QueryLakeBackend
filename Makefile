@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard sdk-dryrun-version
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke ci-runtime-profile ci-runtime-delta sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard sdk-dryrun-version
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -47,6 +47,33 @@ ci-retrieval-smoke:
 	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_preflight.sh smoke
 	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_eval.sh smoke
 	CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/local/make_smoke uv run --no-project bash scripts/ci_retrieval_parity.sh smoke
+
+ci-runtime-profile:
+	@if [[ -z "$(REPO)" ]]; then \
+		echo "usage: make ci-runtime-profile REPO=owner/repo [DAYS=7] [MAX_RUNS=1000] [OUT_DIR=docs_tmp/RAG/ci/runtime_profile/local]"; \
+		exit 2; \
+	fi
+	@OUT_DIR="$(if $(OUT_DIR),$(OUT_DIR),docs_tmp/RAG/ci/runtime_profile/local)"; \
+	DAYS="$(if $(DAYS),$(DAYS),7)"; \
+	MAX_RUNS="$(if $(MAX_RUNS),$(MAX_RUNS),1000)"; \
+	mkdir -p "$$OUT_DIR"; \
+	uv run --no-project python scripts/dev/ci_runtime_profile.py \
+		--repo "$(REPO)" \
+		--days "$$DAYS" \
+		--max-runs "$$MAX_RUNS" \
+		--out-json "$$OUT_DIR/profile.json" \
+		--out-md "$$OUT_DIR/profile.md"
+
+ci-runtime-delta:
+	@if [[ -z "$(BEFORE)" || -z "$(AFTER)" ]]; then \
+		echo "usage: make ci-runtime-delta BEFORE=path/to/before.json AFTER=path/to/after.json [OUT=docs_tmp/RAG/ci/runtime_profile/local/delta.md]"; \
+		exit 2; \
+	fi
+	@OUT="$(if $(OUT),$(OUT),docs_tmp/RAG/ci/runtime_profile/local/delta.md)"; \
+	uv run --no-project python scripts/dev/ci_runtime_delta.py \
+		--before-json "$(BEFORE)" \
+		--after-json "$(AFTER)" \
+		--out-md "$$OUT"
 
 sdk-install-dev:
 	uv run --project sdk/python pip install -e sdk/python

@@ -1,0 +1,88 @@
+name: CI Runtime Profiler
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Lookback window in days"
+        required: true
+        default: "7"
+      max_runs:
+        description: "Maximum runs to inspect"
+        required: true
+        default: "1000"
+  schedule:
+    - cron: "40 7 * * *"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build runtime profile
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          DAYS="${{ github.event.inputs.days || '7' }}"
+          MAX_RUNS="${{ github.event.inputs.max_runs || '1000' }}"
+          TS="$(date -u +%Y%m%d-%H%M%S)"
+          OUT_DIR="docs_tmp/RAG/ci/runtime_profile/${TS}"
+          mkdir -p "${OUT_DIR}"
+          python scripts/dev/ci_runtime_profile.py \
+            --repo "${{ github.repository }}" \
+            --days "${DAYS}" \
+            --max-runs "${MAX_RUNS}" \
+            --out-json "${OUT_DIR}/profile.json" \
+            --out-md "${OUT_DIR}/profile.md"
+          cp "${OUT_DIR}/profile.json" "${OUT_DIR}/latest.json"
+          cp "${OUT_DIR}/profile.md" "${OUT_DIR}/latest.md"
+          echo "out_dir=${OUT_DIR}" >> "$GITHUB_OUTPUT"
+        id: profile
+
+      - name: Optional delta from committed baseline
+        run: |
+          BASELINE="docs_tmp/RAG/ci/runtime_profile/baseline/latest.json"
+          CURRENT="${{ steps.profile.outputs.out_dir }}/profile.json"
+          if [[ -f "${BASELINE}" ]]; then
+            python scripts/dev/ci_runtime_delta.py \
+              --before-json "${BASELINE}" \
+              --after-json "${CURRENT}" \
+              --out-md "${{ steps.profile.outputs.out_dir }}/delta.md" \
+              --max-p95-regression-pct 15 \
+              --max-compute-regression-pct 20
+          else
+            echo "No baseline at ${BASELINE}; skipping delta."
+          fi
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## CI Runtime Profiler";
+            echo "";
+            echo "- Repository: \`${{ github.repository }}\`";
+            echo "- Output dir: \`${{ steps.profile.outputs.out_dir }}\`";
+            echo "- Profile report: \`${{ steps.profile.outputs.out_dir }}/profile.md\`";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload profiler artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-runtime-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.profile.outputs.out_dir }}/profile.json
+            ${{ steps.profile.outputs.out_dir }}/profile.md
+            ${{ steps.profile.outputs.out_dir }}/delta.md
+          if-no-files-found: ignore
+          retention-days: 21
