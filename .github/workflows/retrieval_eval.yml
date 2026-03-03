@@ -2,8 +2,44 @@ name: Retrieval Eval
 
 on:
   pull_request:
+    paths:
+      - "QueryLake/api/search.py"
+      - "QueryLake/api/web_search.py"
+      - "QueryLake/api/collections.py"
+      - "QueryLake/api/custom_model_functions/multi_search.py"
+      - "QueryLake/api/custom_model_functions/self_guided_search.py"
+      - "QueryLake/runtime/retrieval_*.py"
+      - "QueryLake/runtime/search_budgeting.py"
+      - "QueryLake/runtime/ingestion_*.py"
+      - "QueryLake/typing/retrieval_primitives.py"
+      - "QueryLake/misc_functions/paradedb_query_parser.py"
+      - "QueryLake/vector_database/**"
+      - "scripts/ci_retrieval_*.sh"
+      - "scripts/ci_retrieval_summary.py"
+      - "tests/test_retrieval_*.py"
+      - "tests/test_bcas_phase2_scripts.py"
+      - "tests/test_paradedb_query_parser.py"
+      - ".github/workflows/retrieval_eval.yml"
   push:
     branches: ["main"]
+    paths:
+      - "QueryLake/api/search.py"
+      - "QueryLake/api/web_search.py"
+      - "QueryLake/api/collections.py"
+      - "QueryLake/api/custom_model_functions/multi_search.py"
+      - "QueryLake/api/custom_model_functions/self_guided_search.py"
+      - "QueryLake/runtime/retrieval_*.py"
+      - "QueryLake/runtime/search_budgeting.py"
+      - "QueryLake/runtime/ingestion_*.py"
+      - "QueryLake/typing/retrieval_primitives.py"
+      - "QueryLake/misc_functions/paradedb_query_parser.py"
+      - "QueryLake/vector_database/**"
+      - "scripts/ci_retrieval_*.sh"
+      - "scripts/ci_retrieval_summary.py"
+      - "tests/test_retrieval_*.py"
+      - "tests/test_bcas_phase2_scripts.py"
+      - "tests/test_paradedb_query_parser.py"
+      - ".github/workflows/retrieval_eval.yml"
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -17,6 +53,10 @@ on:
           - smoke
           - nightly
           - heavy
+
+concurrency:
+  group: retrieval-eval-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pr_fast:
@@ -32,6 +72,12 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            sdk/python/pyproject.toml
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/pr_fast_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (smoke)
@@ -68,6 +114,12 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            sdk/python/pyproject.toml
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/nightly_medium_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (nightly)
@@ -102,6 +154,12 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            sdk/python/pyproject.toml
       - name: Configure output directory
         run: echo "CI_RETRIEVAL_OUT_DIR=docs_tmp/RAG/ci/${{ github.run_id }}/heavy_self_hosted_${{ github.run_attempt }}" >> "$GITHUB_ENV"
       - name: Retrieval preflight (heavy)

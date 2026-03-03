@@ -21,6 +21,7 @@ DEFAULT_WORKFLOWS = [
     "SDK Checks",
     "SDK Publish",
     "SDK Publish Dry-Run (TestPyPI)",
+    "SDK Live Integration (Staging)",
     "Docs Checks",
     "Unification Checks",
     "Retrieval Eval",
@@ -234,7 +235,10 @@ def main() -> int:
     try:
         if args.input_runs_json:
             payload = json.loads(Path(args.input_runs_json).read_text(encoding="utf-8"))
-            raw_runs = payload.get("workflow_runs", payload)
+            if isinstance(payload, dict):
+                raw_runs = payload.get("workflow_runs", payload)
+            else:
+                raw_runs = payload
             if not isinstance(raw_runs, list):
                 raise ValueError("`--input-runs-json` must contain a list or {\"workflow_runs\": [...]} payload.")
         else:

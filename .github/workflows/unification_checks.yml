@@ -3,7 +3,23 @@ name: Unification Checks
 on:
   push:
     branches: ["main"]
+    paths:
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "sdk/python/pyproject.toml"
+      - "scripts/ci_unification_checks.sh"
+      - ".github/workflows/unification_checks.yml"
   pull_request:
+    paths:
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "sdk/python/pyproject.toml"
+      - "scripts/ci_unification_checks.sh"
+      - ".github/workflows/unification_checks.yml"
+
+concurrency:
+  group: unification-checks-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify-pins:
@@ -14,5 +30,11 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            sdk/python/pyproject.toml
       - name: Verify compat pins
         run: uv run --no-project bash scripts/ci_unification_checks.sh

@@ -11,6 +11,19 @@ on:
         description: "Maximum runs to inspect"
         required: true
         default: "1000"
+      max_p95_regression_pct:
+        description: "Allowed overall p95 runtime regression (%)"
+        required: true
+        default: "15"
+      max_compute_regression_pct:
+        description: "Allowed overall compute-minute regression (%)"
+        required: true
+        default: "20"
+      fail_on_regression:
+        description: "Fail workflow when delta gate fails"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "40 7 * * *"
 
@@ -52,18 +65,46 @@ jobs:
         id: profile
 
       - name: Optional delta from committed baseline
+        id: delta
         run: |
           BASELINE="docs_tmp/RAG/ci/runtime_profile/baseline/latest.json"
           CURRENT="${{ steps.profile.outputs.out_dir }}/profile.json"
           if [[ -f "${BASELINE}" ]]; then
+            MAX_P95="${{ github.event.inputs.max_p95_regression_pct || '15' }}"
+            MAX_COMPUTE="${{ github.event.inputs.max_compute_regression_pct || '20' }}"
+            FAIL_ON_REGRESSION="false"
+            if [[ "${{ github.event_name }}" == "schedule" ]]; then
+              FAIL_ON_REGRESSION="true"
+            fi
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.fail_on_regression || 'false' }}" == "true" ]]; then
+              FAIL_ON_REGRESSION="true"
+            fi
+            EXTRA_ARGS=()
+            if [[ "${FAIL_ON_REGRESSION}" == "true" ]]; then
+              EXTRA_ARGS+=(--fail-on-regression)
+            fi
             python scripts/dev/ci_runtime_delta.py \
               --before-json "${BASELINE}" \
               --after-json "${CURRENT}" \
               --out-md "${{ steps.profile.outputs.out_dir }}/delta.md" \
-              --max-p95-regression-pct 15 \
-              --max-compute-regression-pct 20
+              --max-p95-regression-pct "${MAX_P95}" \
+              --max-compute-regression-pct "${MAX_COMPUTE}" \
+              "${EXTRA_ARGS[@]}" | tee "${{ steps.profile.outputs.out_dir }}/delta_gate.json"
+            DELTA_STATUS="$(python - <<'PY'
+            import json
+            from pathlib import Path
+            path = Path("${{ steps.profile.outputs.out_dir }}/delta_gate.json")
+            data = json.loads(path.read_text(encoding="utf-8"))
+            print(data.get("status", "n/a"))
+            PY
+            )"
+            echo "delta_status=${DELTA_STATUS}" >> "$GITHUB_OUTPUT"
+            echo "delta_max_p95=${MAX_P95}" >> "$GITHUB_OUTPUT"
+            echo "delta_max_compute=${MAX_COMPUTE}" >> "$GITHUB_OUTPUT"
+            echo "delta_fail_on_regression=${FAIL_ON_REGRESSION}" >> "$GITHUB_OUTPUT"
           else
             echo "No baseline at ${BASELINE}; skipping delta."
+            echo "delta_status=baseline_missing" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish summary
@@ -74,6 +115,9 @@ jobs:
             echo "- Repository: \`${{ github.repository }}\`";
             echo "- Output dir: \`${{ steps.profile.outputs.out_dir }}\`";
             echo "- Profile report: \`${{ steps.profile.outputs.out_dir }}/profile.md\`";
+            echo "- Delta gate status: \`${{ steps.delta.outputs.delta_status || 'baseline_missing' }}\`";
+            echo "- Delta thresholds (p95/compute): \`${{ steps.delta.outputs.delta_max_p95 || 'n/a' }}% / ${{ steps.delta.outputs.delta_max_compute || 'n/a' }}%\`";
+            echo "- Delta fail-on-regression: \`${{ steps.delta.outputs.delta_fail_on_regression || 'false' }}\`";
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload profiler artifacts
@@ -84,5 +128,6 @@ jobs:
             ${{ steps.profile.outputs.out_dir }}/profile.json
             ${{ steps.profile.outputs.out_dir }}/profile.md
             ${{ steps.profile.outputs.out_dir }}/delta.md
+            ${{ steps.profile.outputs.out_dir }}/delta_gate.json
           if-no-files-found: ignore
           retention-days: 21

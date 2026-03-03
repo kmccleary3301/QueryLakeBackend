@@ -24,6 +24,10 @@ on:
       - "Makefile"
       - ".github/workflows/docs_checks.yml"
 
+concurrency:
+  group: docs-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docs-checks:
     runs-on: ubuntu-latest
@@ -38,6 +42,11 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
 
       - name: Run docs checks
         run: make ci-docs

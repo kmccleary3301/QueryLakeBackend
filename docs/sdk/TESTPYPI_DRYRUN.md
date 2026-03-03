@@ -51,6 +51,16 @@ It also emits a GitHub step summary with published version and package URL.
 
 ## Failure and recovery guide
 
+### Triage matrix
+
+| Failure signature | Detection point | Immediate action | Escalation path |
+| --- | --- | --- | --- |
+| `Dry-run publish is restricted to main unless allow_non_main=true.` | `Enforce branch policy` step | Re-run from `main` or set `allow_non_main=true` for intentional non-main trial | none |
+| `Version ... already present on testpypi` | `Validate publish guard` step | Re-dispatch workflow to mint new `dev` suffix | none |
+| `invalid-publisher` from `gh-action-pypi-publish` | `Publish to TestPyPI` step | Fix trusted publisher binding in TestPyPI project settings | platform maintainer |
+| install/import/CLI failure after publish | `Verify install from TestPyPI` step | Inspect artifacts and rerun after package fix | SDK owner |
+| index timeout/network issues | publish or install step | Retry run; if repeated disable schedule temporarily | platform maintainer |
+
 ### Case 1: Branch policy failure
 
 Symptom:
@@ -85,6 +95,54 @@ Symptom:
 Action:
 - rerun workflow.
 - if repeated, temporarily disable scheduled runs and open infra issue.
+
+## Operator recovery playbook
+
+### Branch-policy reject
+
+```bash
+gh workflow run sdk_publish_dryrun.yml --ref main -f allow_non_main=false
+```
+
+### Intentional non-main validation
+
+```bash
+gh workflow run sdk_publish_dryrun.yml --ref <branch> -f allow_non_main=true
+```
+
+### Guard-only validation (local)
+
+```bash
+make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main
+```
+
+### Trusted publisher failure remediation checklist
+
+1. Confirm GitHub environment is exactly `testpypi`.
+2. Confirm TestPyPI trusted publisher matches:
+   - repository: `kmccleary3301/QueryLakeBackend`
+   - workflow file: `.github/workflows/sdk_publish_dryrun.yml`
+   - branch/ref policy expected by TestPyPI
+   - environment claim: `testpypi`
+3. Re-run dry-run workflow and confirm publish stage progresses.
+
+### Fast evidence capture for a run
+
+```bash
+RUN_ID=<actions_run_id>
+gh run view "$RUN_ID" --json databaseId,name,event,headBranch,status,conclusion,createdAt,updatedAt,url
+gh run view "$RUN_ID" --log > docs_tmp/RAG/ci/sdk_publish_dryrun/run_${RUN_ID}.log
+```
+
+## Promotion handoff to production PyPI
+
+Dry-run completion is required but not sufficient for production release. Before `sdk_publish.yml` to `pypi`:
+
+1. Dry-run evidence bundle present (run URL + log + artifact summary).
+2. Trusted publisher wiring verified on both TestPyPI and PyPI environments.
+3. Release version is stable semver (`X.Y.Z`) and not pre-release.
+4. `main` or matching `refs/tags/vX.Y.Z` ref policy is satisfied.
+5. Final `scripts/ci_sdk_checks.sh` result is green on release commit.
 
 ## Local helper commands
 

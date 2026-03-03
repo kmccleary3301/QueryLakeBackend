@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sdk-live-integration-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   live-integration:
     runs-on: ubuntu-latest
@@ -38,6 +42,10 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            sdk/python/pyproject.toml
 
       - name: Preflight live environment contract
         id: preflight

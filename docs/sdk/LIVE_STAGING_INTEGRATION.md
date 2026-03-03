@@ -67,3 +67,21 @@ Enforces:
 - Add collection lifecycle checks (create/modify/list + cleanup) once dedicated test tenant policy is finalized.
 - Add lane-specific retrieval parity assertions tied to known seeded corpus.
 - Add run-level latency SLO thresholds and flaky-test tracking.
+
+## Observed failure modes and mitigations (2026-03-03)
+
+1. Missing credentials or base URL in workflow environment.
+   - symptom: preflight exits before tests
+   - mitigation: required vars/secrets contract, fail-closed before test execution
+
+2. Non-staging host accidentally targeted.
+   - symptom: preflight rejects host unless override is explicitly enabled
+   - mitigation: keep `QUERYLAKE_LIVE_ALLOW_NON_STAGING` unset by default
+
+3. Write-path run requested without test collection id.
+   - symptom: preflight hard-fails in write mode
+   - mitigation: require `QUERYLAKE_LIVE_TEST_COLLECTION_ID` whenever `allow_write=true`
+
+4. Transient staging/API instability during nightly/manual runs.
+   - symptom: intermittent integration failure
+   - mitigation: retain `junit.xml` + artifact diagnostics and use explicit rerun triage policy
