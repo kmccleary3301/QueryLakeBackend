@@ -120,7 +120,7 @@ make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main
 
 1. Confirm GitHub environment is exactly `testpypi`.
 2. Confirm TestPyPI trusted publisher matches:
-   - repository: `kmccleary3301/QueryLakeBackend`
+   - repository: `kmccleary3301/QueryLake`
    - workflow file: `.github/workflows/sdk_publish_dryrun.yml`
    - branch/ref policy expected by TestPyPI
    - environment claim: `testpypi`

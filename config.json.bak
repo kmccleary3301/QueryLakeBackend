@@ -18,7 +18,7 @@
             "source": "Qwen/Qwen2-VL-7B-Instruct-AWQ",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-AWQ",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2-VL-7B-Instruct-AWQ/snapshots/6ec2560b0afc3a618d4acc9b8e2967d1642f463d",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--Qwen--Qwen2-VL-7B-Instruct-AWQ/snapshots/6ec2560b0afc3a618d4acc9b8e2967d1642f463d",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -62,7 +62,7 @@
             "source": "Qwen/Qwen2.5-VL-3B-Instruct-AWQ",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct-AWQ",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2.5-VL-3B-Instruct-AWQ/snapshots/e7b623934290c5a4da0ee3c6e1e57bfb6b5abbf2",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--Qwen--Qwen2.5-VL-3B-Instruct-AWQ/snapshots/e7b623934290c5a4da0ee3c6e1e57bfb6b5abbf2",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -106,7 +106,7 @@
             "source": "Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--Qwen--Qwen2.5-VL-7B-Instruct-AWQ/snapshots/536a35794df8831aa814970ee8f89eff577e7718",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--Qwen--Qwen2.5-VL-7B-Instruct-AWQ/snapshots/536a35794df8831aa814970ee8f89eff577e7718",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -150,7 +150,7 @@
             "source": "liuhaotian/llava-v1.6-mistral-7b",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--liuhaotian--llava-v1.6-mistral-7b/snapshots/f13b6254afb9d96a82e6f568d7a01101923b3ed9",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--liuhaotian--llava-v1.6-mistral-7b/snapshots/f13b6254afb9d96a82e6f568d7a01101923b3ed9",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -194,7 +194,7 @@
             "source": "AIDC-AI/Ovis2-1B",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-1B",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-1B/snapshots/b5c50bc2836fd46a6cd0feb39269eeb5968fac1d",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--AIDC-AI--Ovis2-1B/snapshots/b5c50bc2836fd46a6cd0feb39269eeb5968fac1d",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -239,7 +239,7 @@
             "source": "AIDC-AI/Ovis2-2B",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-2B",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-2B/snapshots/f9b8be00c5b0b02549b88b5d6e01f116f492b909",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--AIDC-AI--Ovis2-2B/snapshots/f9b8be00c5b0b02549b88b5d6e01f116f492b909",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -284,7 +284,7 @@
             "source": "AIDC-AI/Ovis2-4B",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-4B",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-4B/snapshots/f8aef0fc14a4ac019e7bf471b2fdbab73be55bfd",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--AIDC-AI--Ovis2-4B/snapshots/f8aef0fc14a4ac019e7bf471b2fdbab73be55bfd",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -329,7 +329,7 @@
             "source": "AIDC-AI/Ovis2-8B",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-8B",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-8B/snapshots/d0e09dbe6ce98dc788491976d3c69a539012d44f",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--AIDC-AI--Ovis2-8B/snapshots/d0e09dbe6ce98dc788491976d3c69a539012d44f",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -374,7 +374,7 @@
             "source": "AIDC-AI/Ovis2-16B",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/AIDC-AI/Ovis2-16B",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--AIDC-AI--Ovis2-16B/snapshots/9c6c34a4ad7bd5df95af7c851fe15cffa74ee806",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--AIDC-AI--Ovis2-16B/snapshots/9c6c34a4ad7bd5df95af7c851fe15cffa74ee806",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -419,7 +419,7 @@
             "source": "allenai/Molmo-7B-D-0924",
             "engine": "vllm",
             "modelcard": "https://huggingface.co/allenai/Molmo-7B-D-0924",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--allenai--Molmo-7B-D-0924/snapshots/ac032b93b84a7f10c9578ec59f9f20ee9a8990a2",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--allenai--Molmo-7B-D-0924/snapshots/ac032b93b84a7f10c9578ec59f9f20ee9a8990a2",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -464,7 +464,7 @@
             "source": "ISTA-DASLab/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
             "engine": "vllm",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--ISTA-DASLab--Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf/snapshots/1f847893e24975c9aef4033a5d2ab36ed0bff784",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--ISTA-DASLab--Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf/snapshots/1f847893e24975c9aef4033a5d2ab36ed0bff784",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -508,7 +508,7 @@
             "source": "ISTA-DASLab/Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16",
             "engine": "vllm",
             "modelcard": "https://ai.meta.com/blog/meta-llama-3-1/",
-            "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--ISTA-DASLab--Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16/snapshots/d98577b240ab51fccb1dbe3575d7c9dab6ad887c",
+            "system_path": "/shared_folders/querylake_server/QueryLake/models/models--ISTA-DASLab--Meta-Llama-3.1-70B-Instruct-AQLM-PV-2Bit-1x16/snapshots/d98577b240ab51fccb1dbe3575d7c9dab6ad887c",
             "default_parameters": {
                 "max_tokens": 4096,
                 "temperature": 0.5,
@@ -576,7 +576,7 @@
                 "name": "BAAI M2 Reranker",
                 "id": "bge-reranker-v2-m3",
                 "source": "BAAI/bge-reranker-v2-m3",
-                "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--BAAI--bge-reranker-v2-m3/snapshots/953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+                "system_path": "/shared_folders/querylake_server/QueryLake/models/models--BAAI--bge-reranker-v2-m3/snapshots/953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
                 "deployment_config": {
                     "vram_required": 3931,
                     "ray_actor_options": {
@@ -598,7 +598,7 @@
                 "name": "BAAI M2 Embedding",
                 "id": "bge-m3",
                 "source": "BAAI/bge-m3",
-                "system_path": "/shared_folders/querylake_server/QueryLakeBackend/models/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181",
+                "system_path": "/shared_folders/querylake_server/QueryLake/models/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181",
                 "deployment_config": {
                     "vram_required": 1965,
                     "ray_actor_options": {

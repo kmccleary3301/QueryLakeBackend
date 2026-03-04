@@ -1,7 +1,7 @@
 # Unification Compatibility Matrix
 
 | Component | Repo | Pin Type | Current Pin | Notes |
-| QueryLake | QueryLakeBackend | git commit | 2d17442aa8cae9c2df0a55b37690b7608ec396f6 | master integration point |
+| QueryLake | QueryLake | git commit | 2d17442aa8cae9c2df0a55b37690b7608ec396f6 | canonical monorepo |
 | BreadBoard | ray_testing/ray_SCE | git commit | 10a097254224fa520434c934d8c0e63b6f4c8d60 | local dev snapshot |
 | Hermes | ray_testing/hermes | git commit | 70861b36ccbe3ac310427793bff59bba404558bf | local dev snapshot |
 

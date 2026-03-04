@@ -39,10 +39,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/QueryLake/QueryLake"
-Documentation = "https://github.com/QueryLake/QueryLakeBackend/tree/main/docs"
-Source = "https://github.com/QueryLake/QueryLakeBackend"
-Issues = "https://github.com/QueryLake/QueryLakeBackend/issues"
+Homepage = "https://github.com/kmccleary3301/QueryLake"
+Documentation = "https://github.com/kmccleary3301/QueryLake/tree/main/docs"
+Source = "https://github.com/kmccleary3301/QueryLake"
+Issues = "https://github.com/kmccleary3301/QueryLake/issues"
 
 [project.scripts]
 querylake = "querylake_sdk.cli:main"

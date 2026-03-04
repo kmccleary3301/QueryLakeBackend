@@ -9,7 +9,7 @@ from io import BytesIO
 from urllib import request
 from markdownify import markdownify as md
 import re
-# pdf_loader = PyPDFium2Loader("/home/user/python_projects/3035/QueryLakeBackend/user_db/pdf_ium_tmp")
+# pdf_loader = PyPDFium2Loader("/home/user/python_projects/3035/QueryLake/user_db/pdf_ium_tmp")
 
 
 

@@ -12,7 +12,7 @@ This setup path is optimized for backend contributors and RAG researchers.
 
 ```bash
 git clone <repo-url>
-cd QueryLakeBackend
+cd QueryLake
 cp .env.example .env
 make bootstrap
 ```
