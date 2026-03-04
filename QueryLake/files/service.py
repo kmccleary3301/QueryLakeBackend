@@ -514,7 +514,7 @@ class FilesRuntimeService:
         f = T.file(
             logical_name=logical_name,
             created_at=time.time(),
-            created_by=getattr(auth, "username", None),
+            created_by=username,
             collection_id=collection_id,
         )
         self.db.add(f)
