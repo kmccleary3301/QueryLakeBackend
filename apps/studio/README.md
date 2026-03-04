@@ -4,7 +4,7 @@ This repository is **deprecated**.
 
 Frontend development has moved to the main QueryLake repository:
 
-- https://github.com/kmccleary3301/QueryLakeBackend
+- https://github.com/kmccleary3301/QueryLake
 
 ## Status
 
