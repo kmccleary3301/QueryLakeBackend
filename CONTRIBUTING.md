@@ -1,4 +1,4 @@
-# Contributing to QueryLakeBackend
+# Contributing to QueryLake
 
 This repository supports two main development tracks:
 
