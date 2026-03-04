@@ -24,9 +24,19 @@ It is designed to be:
 | `server.py` | FastAPI + Ray Serve entrypoint |
 | `QueryLake/api/` | Core platform function APIs |
 | `QueryLake/runtime/` | Retrieval/runtime orchestration primitives |
+| `apps/studio/` | QueryLake Studio frontend (imported from `QueryLakeStudio`) |
 | `scripts/` | Eval, stress, rollout, and ops tooling |
 | `sdk/python/` | Standalone `querylake-sdk` Python package (PyPI target) |
 | `docs/` | Architecture, setup, SDK, release docs |
+
+## Repository topology and migration status
+
+- **Current canonical backend/runtime repo**: `kmccleary3301/QueryLakeBackend`
+- **Frontend repo rename**: `kmccleary3301/QueryLake` -> `kmccleary3301/QueryLakeStudio`
+- **Frontend development status**: `QueryLakeStudio` is deprecated as a standalone repo.
+- **Monorepo location for frontend code**: `apps/studio/` in this repository.
+
+Migration reference: `docs/unification/repo_migration.md`
 
 ## 5-minute local quickstart (API-only)
 
