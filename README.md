@@ -1,12 +1,18 @@
-# QueryLake
+# QueryLakeStudio (Deprecated)
 
-This is the frontend for QueryLake.
-It is written in NextJS with ShadCN UI.
-It was made with the ShadCN website repository as a template.
-You must have node installed to run it.
-Run the following commands to set up a conda environment.
+This repository is **deprecated**.
 
-```
-npm install
-npm run dev
-```
+Frontend development has moved to the main QueryLake repository:
+
+- https://github.com/kmccleary3301/QueryLakeBackend
+
+## Status
+
+- This repo is kept for historical reference only.
+- New features and fixes should be implemented in the main repository.
+
+## Migration note
+
+If you have automation or local remotes pointing to the old frontend repo name (`QueryLake`), update them to:
+
+- `https://github.com/kmccleary3301/QueryLakeStudio`
