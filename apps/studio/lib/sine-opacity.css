@@ -1,0 +1,21 @@
+@keyframes oscillateOpacity {
+  0%   { opacity: 0.2; }
+  50%  { opacity: 0.4; }
+  100% { opacity: 0.2; }
+}
+
+.sine-opacity {
+  animation: oscillateOpacity 1.5s infinite;
+  filter: grayscale(100%);
+}
+
+@keyframes oscillateOpacityMed {
+  0%   { opacity: 0.5; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 0.5; }
+}
+
+.sine-opacity-med {
+  animation: oscillateOpacityMed 1.5s infinite;
+  filter: grayscale(100%);
+}
