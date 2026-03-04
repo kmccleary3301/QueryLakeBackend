@@ -6,7 +6,14 @@ bootstrap:
 	./scripts/dev/bootstrap.sh
 
 up-db:
-	docker compose -f docker-compose-only-db.yml up -d
+	@if docker ps --format '{{.Names}}' | grep -qx 'querylake_db'; then \
+		echo "[up-db] querylake_db already running; reusing existing container."; \
+	elif docker ps -a --format '{{.Names}}' | grep -qx 'querylake_db'; then \
+		echo "[up-db] querylake_db exists but is stopped; starting container."; \
+		docker start querylake_db >/dev/null; \
+	else \
+		docker compose -f docker-compose-only-db.yml up -d; \
+	fi
 
 down-db:
 	docker compose -f docker-compose-only-db.yml down
