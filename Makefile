@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke ci-runtime-profile ci-runtime-delta sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard sdk-dryrun-version
+.PHONY: bootstrap up-db down-db up-redis down-redis run run-api-only health test ci-docs ci-unification ci-retrieval-smoke ci-runtime-profile ci-runtime-delta ci-legacy-path-guard sdk-install-dev sdk-precommit-install sdk-precommit-run sdk-lint sdk-type sdk-test sdk-build sdk-ci sdk-smoke sdk-release-check sdk-release-testpypi sdk-release-pypi sdk-publish-guard sdk-dryrun-version
 
 bootstrap:
 	./scripts/dev/bootstrap.sh
@@ -96,6 +96,9 @@ ci-runtime-delta:
 		--before-json "$(BEFORE)" \
 		--after-json "$(AFTER)" \
 		--out-md "$$OUT"
+
+ci-legacy-path-guard:
+	bash scripts/ci_guard_legacy_querylakebackend_refs.sh
 
 sdk-install-dev:
 	uv run --project sdk/python pip install -e sdk/python
