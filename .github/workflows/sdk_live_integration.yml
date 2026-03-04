@@ -8,11 +8,13 @@ on:
         required: false
         default: false
         type: boolean
-  schedule:
-    - cron: "55 7 * * *"
 
 permissions:
   contents: read
+
+concurrency:
+  group: sdk-live-integration-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   live-integration:
@@ -26,6 +28,12 @@ jobs:
       QUERYLAKE_LIVE_TEST_COLLECTION_ID: ${{ vars.QUERYLAKE_LIVE_TEST_COLLECTION_ID }}
       QUERYLAKE_LIVE_TEST_QUERY: ${{ vars.QUERYLAKE_LIVE_TEST_QUERY }}
       QUERYLAKE_LIVE_ALLOW_NON_STAGING: ${{ vars.QUERYLAKE_LIVE_ALLOW_NON_STAGING }}
+      QUERYLAKE_LIVE_TIMEOUT_SECONDS: ${{ vars.QUERYLAKE_LIVE_TIMEOUT_SECONDS }}
+      QUERYLAKE_LIVE_RETRY_ATTEMPTS: ${{ vars.QUERYLAKE_LIVE_RETRY_ATTEMPTS }}
+      QUERYLAKE_LIVE_RETRY_DELAY_SECONDS: ${{ vars.QUERYLAKE_LIVE_RETRY_DELAY_SECONDS }}
+      QUERYLAKE_LIVE_STRICT_EXPECTATIONS: ${{ vars.QUERYLAKE_LIVE_STRICT_EXPECTATIONS }}
+      QUERYLAKE_LIVE_QUERY_CASES_PATH: ${{ vars.QUERYLAKE_LIVE_QUERY_CASES_PATH }}
+      QUERYLAKE_LIVE_DIAGNOSTICS_DIR: docs_tmp/RAG/ci/live_integration
       QUERYLAKE_LIVE_ALLOW_WRITE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_write == 'true' && '1' || '0' }}
     steps:
       - name: Checkout
@@ -38,12 +46,18 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            sdk/python/pyproject.toml
 
       - name: Preflight live environment contract
         id: preflight
         run: python scripts/dev/live_integration_preflight.py
 
       - name: Run live integration tests
+        env:
+          QUERYLAKE_LIVE_RUN_NAMESPACE: ${{ steps.preflight.outputs.run_namespace }}
         run: |
           mkdir -p docs_tmp/RAG/ci/live_integration
           uv run --project sdk/python --extra dev pytest \

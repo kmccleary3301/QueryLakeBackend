@@ -34,11 +34,14 @@ This executes the same checks used in CI release guard:
 
 Workflow: `.github/workflows/sdk_checks.yml`
 
-- `sdk-light-matrix`: `make sdk-test` on Python `3.10`, `3.11`, `3.12`
 - `sdk-lint-type`: `make sdk-lint` + `make sdk-type` on Python `3.12`
-- `sdk-release-guard`: runs `scripts/dev/release_sdk.sh check` after both jobs pass
+- `sdk-light-matrix`: `make sdk-test` on Python `3.10`, `3.11`, `3.12` (tests-only matrix)
+- `sdk-release-guard`: guard script contract + single package build + `twine check` + wheel verification
 
-The matrix validates interpreter compatibility while avoiding duplicated lint/type cost.
+This layout removes duplicated full-quality runs while preserving all gates:
+- lint/type runs once
+- tests run per-Python
+- build/metadata/wheel checks run once
 
 ### 4) TestPyPI dry-run publish profile (`sdk_publish_dryrun.yml`)
 
@@ -64,10 +67,62 @@ Workflow: `.github/workflows/ci_runtime_profiler.yml`
 
 Workflow: `.github/workflows/sdk_live_integration.yml`
 
-- runs nightly + manual
+- runs manual only
 - enforces preflight environment contract before execution
 - defaults to read-only checks
 - optional manual write-path smoke with explicit enable switch
+- explicitly non-blocking for merge CI (release-confidence lane only)
+
+## Trigger and cost governance
+
+### Trigger policy
+
+- `sdk_checks.yml`:
+  - runs on PR/push for SDK-relevant paths only
+  - provides default quality gate signal
+  - applies uv cache keyed by SDK dependency file
+- `sdk_publish_dryrun.yml`:
+  - nightly + manual dispatch
+  - restricted to `main` by default (explicit non-main override available for trials)
+  - applies uv cache keyed by SDK dependency file
+- `sdk_live_integration.yml`:
+  - manual read-only by default
+  - manual write-path only when `allow_write=true`
+  - applies uv cache keyed by SDK dependency file
+- `retrieval_eval.yml`:
+  - PR/push triggers are path-filtered to retrieval/search/ingestion surfaces
+  - heavy profile remains dispatch-only
+- `ci_runtime_profiler.yml`:
+  - nightly + manual
+  - used for governance trend and regression detection
+  - supports configurable p95/compute regression thresholds and optional fail-on-regression
+
+### Weekly runtime/cost budget targets
+
+- `sdk_checks.yml`: target median <= 8 min, p95 <= 12 min
+- `sdk_publish_dryrun.yml`: target median <= 15 min, p95 <= 20 min
+- `sdk_live_integration.yml`: target median <= 12 min, p95 <= 18 min
+- aggregate SDK CI compute budget: <= 550 runner-minutes/week
+
+### Escalation policy
+
+Escalate to maintainer review when any of the following occurs for two consecutive days:
+
+1. p95 runtime regression > 15% versus baseline.
+2. workflow failure-rate > 10% for non-code reasons (infra/index/auth).
+3. weekly compute budget exceeded by > 20%.
+
+Required remediation output:
+
+- root-cause summary
+- reverted/adjusted workflow plan
+- expected rollback and verification window
+
+### Required-check stance
+
+- Merge-required quality gates: `sdk_checks.yml` (lint/type/test/release-guard) and policy checks tied to code quality.
+- Optional confidence lanes: `sdk_live_integration.yml` (manual live staging), retrieval heavy/nightly suites.
+- Rationale: avoid coupling PR throughput to external staging/network/secret availability while preserving a strong pre-release validation path.
 
 ## Publish policy
 
