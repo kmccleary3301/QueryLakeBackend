@@ -86,6 +86,53 @@ Action:
 - rerun workflow.
 - if repeated, temporarily disable scheduled runs and open infra issue.
 
+## Operator recovery playbook
+
+### Branch-policy reject
+
+```bash
+gh workflow run sdk_publish_dryrun.yml --ref main -f allow_non_main=false
+```
+
+### Intentional non-main validation
+
+```bash
+gh workflow run sdk_publish_dryrun.yml --ref <branch> -f allow_non_main=true
+```
+
+### Guard-only validation (local)
+
+```bash
+make sdk-publish-guard TARGET=testpypi GITHUB_REF=refs/heads/main
+```
+
+### Trusted publisher failure remediation checklist
+
+1. Confirm GitHub environment is exactly `testpypi`.
+2. Confirm TestPyPI trusted publisher matches:
+   - repository: `kmccleary3301/QueryLake`
+   - workflow file: `.github/workflows/sdk_publish_dryrun.yml`
+   - branch/ref policy expected by TestPyPI
+   - environment claim: `testpypi`
+3. Re-run dry-run workflow and confirm publish stage progresses.
+
+### Fast evidence capture for a run
+
+```bash
+RUN_ID=<actions_run_id>
+gh run view "$RUN_ID" --json databaseId,name,event,headBranch,status,conclusion,createdAt,updatedAt,url
+gh run view "$RUN_ID" --log > docs_tmp/RAG/ci/sdk_publish_dryrun/run_${RUN_ID}.log
+```
+
+## Promotion handoff to production PyPI
+
+Dry-run completion is required but not sufficient for production release. Before `sdk_publish.yml` to `pypi`:
+
+1. Dry-run evidence bundle present (run URL + log + artifact summary).
+2. Trusted publisher wiring verified on both TestPyPI and PyPI environments.
+3. Release version is stable semver (`X.Y.Z`) and not pre-release.
+4. `main` or matching `refs/tags/vX.Y.Z` ref policy is satisfied.
+5. Final `scripts/ci_sdk_checks.sh` result is green on release commit.
 ## Local helper commands
 
 ```bash
