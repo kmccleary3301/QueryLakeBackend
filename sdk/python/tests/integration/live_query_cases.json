@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "description": "Canonical live-integration retrieval cases for seeded test corpus.",
+  "documents": [
+    {
+      "doc_id": "seed_boiler_pressure",
+      "filename": "boiler_pressure_limits.txt",
+      "content": "Boiler pressure limits guidance: maintain safe pressure envelopes and inspect relief valves before operation."
+    },
+    {
+      "doc_id": "seed_mineral_oil",
+      "filename": "mineral_oil_procedures.txt",
+      "content": "Mineral oil procedures include sampling protocols, contamination checks, and standardized maintenance records."
+    },
+    {
+      "doc_id": "seed_flue_gas",
+      "filename": "flue_gas_analysis.txt",
+      "content": "Flue gas analysis guides describe oxygen and CO2 measurement workflows for combustion tuning."
+    }
+  ],
+  "cases": [
+    {
+      "name": "boiler_pressure_limits",
+      "query": "boiler pressure limits",
+      "min_rows": 1,
+      "expected_terms_any": ["boiler", "pressure"]
+    },
+    {
+      "name": "mineral_oil_procedures",
+      "query": "mineral oil procedures",
+      "min_rows": 1,
+      "expected_terms_any": ["mineral", "oil"]
+    },
+    {
+      "name": "flue_gas_analysis_guides",
+      "query": "flue gas analysis guides",
+      "min_rows": 1,
+      "expected_terms_any": ["flue", "gas"]
+    }
+  ]
+}

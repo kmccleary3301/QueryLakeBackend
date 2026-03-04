@@ -13,6 +13,20 @@ from urllib.parse import urlparse
 
 
 SAFE_HOST_HINTS = ("staging", "dev", "localhost", "127.0.0.1")
+PLACEHOLDER_SUBSTRINGS = (
+    "changeme",
+    "replace",
+    "placeholder",
+    "example",
+    "dummy",
+    "todo",
+    "<token>",
+    "<key>",
+    "<secret>",
+    "your_",
+    "xxx",
+    "test-token",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +38,17 @@ def parse_args() -> argparse.Namespace:
 def fail(message: str) -> int:
     print(f"[live-preflight] FAILED: {message}", file=sys.stderr)
     return 1
+
+
+def _looks_placeholder(value: str) -> bool:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return False
+    if normalized in {"none", "null", "unset"}:
+        return True
+    if normalized.startswith("${") and normalized.endswith("}"):
+        return True
+    return any(token in normalized for token in PLACEHOLDER_SUBSTRINGS)
 
 
 def main() -> int:
@@ -39,8 +64,19 @@ def main() -> int:
         return fail("QUERYLAKE_LIVE_BASE_URL is required.")
     if not oauth2 and not api_key:
         return fail("Either QUERYLAKE_LIVE_OAUTH2 or QUERYLAKE_LIVE_API_KEY is required.")
+    if _looks_placeholder(base_url):
+        return fail("QUERYLAKE_LIVE_BASE_URL looks like a placeholder value.")
+    if oauth2 and _looks_placeholder(oauth2):
+        return fail("QUERYLAKE_LIVE_OAUTH2 looks like a placeholder value.")
+    if api_key and _looks_placeholder(api_key):
+        return fail("QUERYLAKE_LIVE_API_KEY looks like a placeholder value.")
 
-    hostname = (urlparse(base_url).hostname or "").lower()
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"}:
+        return fail("QUERYLAKE_LIVE_BASE_URL must include http:// or https:// scheme.")
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return fail("QUERYLAKE_LIVE_BASE_URL must include a valid hostname.")
     if not allow_non_staging and hostname and not any(hint in hostname for hint in SAFE_HOST_HINTS):
         return fail(
             "Refusing to run against non-staging host. "
@@ -58,6 +94,8 @@ def main() -> int:
         "allow_non_staging": allow_non_staging,
         "allow_write": allow_write,
         "write_collection_id_set": bool(write_collection),
+        "strict_expectations": (os.getenv("QUERYLAKE_LIVE_STRICT_EXPECTATIONS") or "").strip() == "1",
+        "query_cases_path": (os.getenv("QUERYLAKE_LIVE_QUERY_CASES_PATH") or "").strip(),
         "run_namespace": run_namespace,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
