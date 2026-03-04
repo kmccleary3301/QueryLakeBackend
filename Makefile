@@ -16,13 +16,28 @@ up-db:
 	fi
 
 down-db:
-	docker compose -f docker-compose-only-db.yml down
+	@if docker ps -a --format '{{.Names}}' | grep -qx 'querylake_db'; then \
+		docker compose -f docker-compose-only-db.yml down; \
+	else \
+		echo "[down-db] querylake_db not present; nothing to do."; \
+	fi
 
 up-redis:
-	docker compose -f docker-compose-redis.yml up -d
+	@if docker ps --format '{{.Names}}' | grep -qx 'querylake_redis'; then \
+		echo "[up-redis] querylake_redis already running; reusing existing container."; \
+	elif docker ps -a --format '{{.Names}}' | grep -qx 'querylake_redis'; then \
+		echo "[up-redis] querylake_redis exists but is stopped; starting container."; \
+		docker start querylake_redis >/dev/null; \
+	else \
+		docker compose -f docker-compose-redis.yml up -d; \
+	fi
 
 down-redis:
-	docker compose -f docker-compose-redis.yml down
+	@if docker ps -a --format '{{.Names}}' | grep -qx 'querylake_redis'; then \
+		docker compose -f docker-compose-redis.yml down; \
+	else \
+		echo "[down-redis] querylake_redis not present; nothing to do."; \
+	fi
 
 run:
 	uv run start_querylake.py
