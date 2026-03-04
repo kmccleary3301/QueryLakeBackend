@@ -13,6 +13,9 @@ This migration consolidates QueryLake development around the backend repository 
 - Frontend code imported into backend repository:
   - path: `apps/studio/`
   - method: `git subtree` (history-preserving)
+- Backend repository renamed:
+  - from `kmccleary3301/QueryLakeBackend`
+  - to `kmccleary3301/QueryLake`
 
 ## Why this migration
 
@@ -53,10 +56,7 @@ git subtree add --prefix=apps/studio studio/master -m "monorepo: import QueryLak
 - `QueryLakeStudio` remains available as an archive/deprecation pointer.
 - CI, release notes, and docs should treat backend repo as the canonical development surface.
 
-## Follow-up (optional)
+## Current naming state
 
-- Rename backend repository to `QueryLake` after migration stabilizes.
-- Keep organization naming clear:
-  - `QueryLake` (canonical monorepo)
-  - `QueryLakeStudio` (deprecated archive)
-
+- `QueryLake`: canonical monorepo (backend + SDK + studio at `apps/studio`)
+- `QueryLakeStudio`: deprecated archive/deprecation pointer

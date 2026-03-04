@@ -31,7 +31,7 @@ It is designed to be:
 
 ## Repository topology and migration status
 
-- **Current canonical backend/runtime repo**: `kmccleary3301/QueryLakeBackend`
+- **Current canonical backend/runtime repo**: `kmccleary3301/QueryLake`
 - **Frontend repo rename**: `kmccleary3301/QueryLake` -> `kmccleary3301/QueryLakeStudio`
 - **Frontend development status**: `QueryLakeStudio` is deprecated as a standalone repo.
 - **Monorepo location for frontend code**: `apps/studio/` in this repository.
