@@ -40,6 +40,7 @@ Migration reference: `docs/unification/repo_migration.md`
 ## 5-minute local quickstart (API-only)
 
 API-only mode is the fastest setup for developers and RAG researchers.
+Use the canonical repository path `QueryLake`; the old backend-named local alias is deprecated and only exists temporarily as a compatibility symlink during the retirement window in `docs/unification/symlink_retirement_runbook.md`.
 
 ### 1) Bootstrap environment
 

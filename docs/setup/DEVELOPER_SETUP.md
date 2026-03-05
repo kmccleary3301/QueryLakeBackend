@@ -10,6 +10,9 @@ This setup path is optimized for backend contributors and RAG researchers.
 
 ## 1) Clone and bootstrap
 
+Use the canonical local directory name `QueryLake`.
+The old backend-named local alias is deprecated and is only retained temporarily as a compatibility symlink during the retirement window documented in `docs/unification/symlink_retirement_runbook.md`.
+
 ```bash
 git clone <repo-url>
 cd QueryLake
