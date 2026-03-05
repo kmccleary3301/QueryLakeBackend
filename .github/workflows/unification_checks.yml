@@ -5,8 +5,12 @@ on:
     branches: ["main"]
   pull_request:
 
+concurrency:
+  group: unification-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify-pins:
+  verify-unification:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,5 +18,11 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v4
-      - name: Verify compat pins
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            sdk/python/pyproject.toml
+      - name: Verify unification checks
         run: uv run --no-project bash scripts/ci_unification_checks.sh
