@@ -484,3 +484,40 @@ def test_search_bm25_segment_requires_feature_flag(monkeypatch):
         assert False, "expected feature-flag assertion for segment retrieval"
     except AssertionError as exc:
         assert "segment retrieval is disabled" in str(exc)
+
+
+def test_search_file_chunks_wildcard_statement_uses_created_at_sort(monkeypatch):
+    class DummyDB:
+        pass
+
+    monkeypatch.setattr(search_api, "get_user", lambda database, auth: (SimpleNamespace(), SimpleNamespace(username="tester")))
+
+    statement = search_api.search_file_chunks(
+        database=DummyDB(),
+        auth={"username": "tester", "password_prehash": "x"},
+        query="*",
+        return_statement=True,
+    )
+
+    assert "ORDER BY created_at DESC" in statement
+    assert "paradedb.parse" not in statement
+    assert "WHERE f.created_by = 'tester'" in statement
+
+
+def test_search_file_chunks_wildcard_respects_explicit_sort(monkeypatch):
+    class DummyDB:
+        pass
+
+    monkeypatch.setattr(search_api, "get_user", lambda database, auth: (SimpleNamespace(), SimpleNamespace(username="tester")))
+
+    statement = search_api.search_file_chunks(
+        database=DummyDB(),
+        auth={"username": "tester", "password_prehash": "x"},
+        query="*",
+        sort_by="created_at",
+        sort_dir="ASC",
+        return_statement=True,
+    )
+
+    assert "ORDER BY created_at ASC" in statement
+    assert "paradedb.parse" not in statement

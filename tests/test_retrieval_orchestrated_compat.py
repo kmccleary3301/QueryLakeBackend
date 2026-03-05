@@ -362,3 +362,103 @@ def test_search_file_chunks_orchestrated_path_emits_stage_trace(monkeypatch):
     assert result["results"][0]["id"] == "fc_1"
     assert logged["kwargs"]["pipeline_id"] == "orchestrated.search_file_chunks"
     assert "stage_trace" in logged["kwargs"]["md"]
+
+
+def test_search_file_chunks_orchestrated_direct_wrapper_avoids_duplicate_kwargs(monkeypatch):
+    db = _DummyDB()
+    monkeypatch.setattr(search_api, "get_user", lambda database, auth: (SimpleNamespace(), SimpleNamespace(username="tester")))
+
+    pipeline = RetrievalPipelineSpec(
+        pipeline_id="orchestrated.search_file_chunks",
+        version="v1",
+        stages=[RetrievalPipelineStage(stage_id="file_bm25", primitive_id="FileChunkBM25RetrieverSQL")],
+    )
+    monkeypatch.setattr(
+        search_api,
+        "_resolve_route_pipeline",
+        lambda *args, **kwargs: (pipeline, {"source": "test"}),
+    )
+
+    original_search_file_chunks = search_api.search_file_chunks
+
+    def _stub_direct_stage_call(**kwargs):
+        # This stub must be called by the nested wrapper without duplicate kwargs errors.
+        assert kwargs.get("_direct_stage_call") is True
+        assert kwargs.get("_skip_observability") is True
+        return {
+            "results": [
+                {
+                    "id": "fc_wrapped_1",
+                    "text": "wrapped text",
+                    "md": {"source": "stub"},
+                    "created_at": 42.0,
+                    "file_version_id": "fv_wrapped_1",
+                    "bm25_score": 0.91,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(search_api, "search_file_chunks", _stub_direct_stage_call)
+
+    class _TriggerRetriever:
+        def __init__(self, fn):
+            self._fn = fn
+
+        async def retrieve(self, request):
+            payload = self._fn(
+                database=db,
+                auth={"username": "tester", "password_prehash": "x"},
+                query=request.query_text,
+                limit=1,
+                offset=0,
+                sort_by="created_at",
+                sort_dir="DESC",
+                _direct_stage_call=True,
+                _skip_observability=True,
+            )
+            rows = payload.get("results", [])
+            return [
+                RetrievalCandidate(
+                    content_id=str(rows[0]["id"]),
+                    text=rows[0]["text"],
+                    metadata={
+                        "md": rows[0]["md"],
+                        "created_at": rows[0]["created_at"],
+                        "file_version_id": rows[0]["file_version_id"],
+                    },
+                    stage_scores={"bm25_score": float(rows[0]["bm25_score"])},
+                    stage_ranks={"bm25": 1},
+                    provenance=["bm25"],
+                )
+            ]
+
+    def _fake_build_retrievers_for_pipeline(*, search_file_chunks_fn=None, **kwargs):
+        return {"file_bm25": _TriggerRetriever(search_file_chunks_fn)}
+
+    monkeypatch.setattr(search_api, "_build_retrievers_for_pipeline", _fake_build_retrievers_for_pipeline)
+
+    async def _fake_run(self, **kwargs):
+        retriever = kwargs["retrievers"]["file_bm25"]
+        candidates = await retriever.retrieve(kwargs["request"])
+        return RetrievalExecutionResult(
+            pipeline_id="orchestrated.search_file_chunks",
+            pipeline_version="v1",
+            candidates=candidates,
+            traces=[RetrievalStageTrace(stage="retrieve:file_bm25", duration_ms=1.0)],
+            metadata={},
+        )
+
+    monkeypatch.setattr(search_api.PipelineOrchestrator, "run", _fake_run)
+    monkeypatch.setattr(search_api.metrics, "record_retrieval", lambda **kwargs: None)
+    monkeypatch.setattr(search_api, "log_retrieval_run", lambda *args, **kwargs: None)
+
+    result = original_search_file_chunks(
+        database=db,
+        auth={"username": "tester", "password_prehash": "x"},
+        query="compressor fault",
+        limit=5,
+        offset=0,
+    )
+
+    assert "results" in result and len(result["results"]) == 1
+    assert result["results"][0]["id"] == "fc_wrapped_1"

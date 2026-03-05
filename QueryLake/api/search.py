@@ -2690,11 +2690,10 @@ def search_file_chunks(
             )
 
             def _direct_file_chunks(**kwargs):
-                return search_file_chunks(
-                    **kwargs,
-                    _direct_stage_call=True,
-                    _skip_observability=True,
-                )
+                direct_kwargs = dict(kwargs)
+                direct_kwargs["_direct_stage_call"] = True
+                direct_kwargs["_skip_observability"] = True
+                return search_file_chunks(**direct_kwargs)
 
             run_result = _run_async_sync(
                 PipelineOrchestrator().run(
@@ -2779,8 +2778,11 @@ def search_file_chunks(
 
     formatted_query, _ = parse_search(query, FILE_FIELDS, catch_all_fields=["text"])
 
-    score_field = "paradedb.score(fc.id) AS score, " if formatted_query != "()" else ""
-    assert not (sort_by == "score" and formatted_query == "()"), "Cannot sort by score if no query is specified"
+    query_is_empty = (formatted_query == "()")
+    if query_is_empty and sort_by == "score":
+        # For wildcard/empty queries there is no BM25 score; use recency ordering.
+        sort_by = "created_at"
+    score_field = "paradedb.score(fc.id) AS score, " if not query_is_empty else ""
     assert sort_by in FILE_FIELDS or sort_by == "score", f"sort_by must be one of {FILE_FIELDS} or 'score'"
     assert sort_dir in ["DESC", "ASC"], "sort_dir must be 'DESC' or 'ASC'"
 
@@ -2789,29 +2791,28 @@ def search_file_chunks(
     else:
         order_by_field = f"ORDER BY {sort_by} {sort_dir}" + (", fc.id ASC" if sort_by != "id" else "")
 
-    parse_field = formatted_query if formatted_query != "()" else "()"
+    where_clause = "f.created_by = :username"
+    if not query_is_empty:
+        where_clause = f"{where_clause} AND fc.id @@@ paradedb.parse('{formatted_query}')"
 
-    STMT = text(f"""
+    STMT = text(
+        f"""
     SELECT fc.id, {score_field}fc.id, fc.text, fc.md, fc.created_at, fc.file_version_id
     FROM {FileChunkTable.__tablename__} fc
     JOIN {FileVersionTable.__tablename__} fv ON fc.file_version_id = fv.id
     JOIN {FileTable.__tablename__} f ON fv.file_id = f.id
-    WHERE f.created_by = :username
-      AND fc.id @@@ paradedb.parse('{parse_field}')
+    WHERE {where_clause}
     {order_by_field}
     LIMIT :limit
     OFFSET :offset;
-    """).bindparams(
-        username=username,
-        limit=limit,
-        offset=offset,
-    )
+    """
+    ).bindparams(username=username, limit=limit, offset=offset)
 
     if return_statement:
         return str(STMT.compile(compile_kwargs={"literal_binds": True}))
 
     try:
-        subset_start = 1 if formatted_query == "()" else 2
+        subset_start = 1 if query_is_empty else 2
         rows = list(database.exec(STMT))
         results = []
         for row in rows:
@@ -2824,7 +2825,7 @@ def search_file_chunks(
                     "md": row[idx + 2],
                     "created_at": float(row[idx + 3]),
                     "file_version_id": row[idx + 4],
-                    **({"bm25_score": float(row[1])} if formatted_query != "()" else {}),
+                    **({"bm25_score": float(row[1])} if not query_is_empty else {}),
                 }
             )
         if not _skip_observability:
