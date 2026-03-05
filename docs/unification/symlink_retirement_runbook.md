@@ -44,6 +44,33 @@ The goal is to finish repository naming unification without breaking local autom
    - Remove symlink from shared environment hosts.
    - Run smoke checks from canonical path only.
 
+## T0 Checkpoint Record
+
+- T0 date: `2026-03-05`
+- Owner: `QueryLake maintainer (repo unification lead)`
+- Status: `active`
+
+### Evidence (merged changes)
+
+- QueryLake legacy-name CI guard + runbook linkage:
+  - PR: `https://github.com/kmccleary3301/QueryLake/pull/8`
+  - Merge commit: `4eb59ecf560fa2ae0dc47398e7ed1f22290f17e7`
+- QueryLake README topology restoration (post-merge correction):
+  - PR: `https://github.com/kmccleary3301/QueryLake/pull/9`
+  - Merge commit: `c742880e62581b0bd2731cfe7236517aa8e5c604`
+- Breadboard downstream legacy-name guard:
+  - PR: `https://github.com/kmccleary3301/breadboard/pull/20`
+  - Merge commit: `0aff24f9f41c6fd532503f24b78f7b09fbdfb60f`
+- Hermes downstream legacy-name guard (active `first_commit` line):
+  - PR: `https://github.com/kmccleary3301/Hermes/pull/1`
+  - Merge commit: `f3e963d6835a9aa9c875168b7b3e3dcf160aca41`
+
+### Next dated checkpoints
+
+- `2026-03-19` (`T0 + 14d`): strict enforcement review + violation sweep
+- `2026-04-04` (`T0 + 30d`): remove alias from setup/bootstrap instructions
+- `2026-04-19` (`T0 + 45d`): host-level symlink retirement cutover
+
 ## Execution Checklist
 
 1. Verify symlink status:
