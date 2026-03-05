@@ -60,3 +60,12 @@ git subtree add --prefix=apps/studio studio/master -m "monorepo: import QueryLak
 
 - `QueryLake`: canonical monorepo (backend + SDK + studio at `apps/studio`)
 - `QueryLakeStudio`: deprecated archive/deprecation pointer
+
+## Local path transition status
+
+- Canonical local path:
+  - `/shared_folders/querylake_server/QueryLake`
+- Deprecated compatibility alias:
+  - `/shared_folders/querylake_server/QueryLakeBackend`
+- Retirement policy:
+  - `docs/unification/symlink_retirement_runbook.md`
