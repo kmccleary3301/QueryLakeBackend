@@ -34,6 +34,7 @@
 - Program control and compatibility:
   - `docs/unification/program_control.md`
   - `docs/unification/compat_matrix.md`
+  - `docs/unification/symlink_retirement_runbook.md`
 
 ## Specialized docs
 

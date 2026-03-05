@@ -24,3 +24,5 @@
 - Model catalog endpoints (`/v1/models`, `/v1/models/{id}`) implemented in QueryLake.
 - Umbrella autoscaling knobs exposed via env vars and unit-tested.
 - CI guardrail workflow added for compat pins.
+- Legacy path alias retirement runbook documented:
+  - `docs/unification/symlink_retirement_runbook.md`

@@ -20,3 +20,7 @@ Keep QueryLake, BreadBoard, and Hermes aligned without forcing a monorepo.
 - Fail CI if any pin is `<set>` or empty
 - Optional helper: `scripts/ci_unification_checks.sh`
 - GitHub Actions workflow: `.github/workflows/unification_checks.yml`
+
+## Related Migration Control
+- Legacy local-path alias retirement:
+  - `docs/unification/symlink_retirement_runbook.md`
