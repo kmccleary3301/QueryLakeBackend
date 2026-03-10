@@ -1,5 +1,19 @@
 # Live Staging Integration Plan and Contract
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![SDK Live Integration](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_live_integration.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_live_integration.yml)
+
+Contract and safety policy for running SDK integration tests against a live QueryLake deployment.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers, release operators, and engineers validating staging behavior |
+| Use this when | Use this when preparing or running manual live integration checks against a staging environment. |
+| Prerequisites | A staging deployment, GitHub environment variables/secrets, and understanding of read-only vs write-path safety controls. |
+| Related docs | [`CI_PROFILES.md`](CI_PROFILES.md), [`PYPI_RELEASE.md`](PYPI_RELEASE.md) |
+| Status | 🟢 maintained integration contract |
+
 This document defines prerequisites, safety controls, and execution policy for live SDK integration tests.
 
 ## Purpose

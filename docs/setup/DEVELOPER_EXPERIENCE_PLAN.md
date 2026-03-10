@@ -1,6 +1,17 @@
 # QueryLake Developer Experience Plan (SDK + Setup + Docs)
 
-This plan tracks the end-to-end work required to make QueryLake easier for developers and researchers, especially for RAG workflows.
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+
+Structured plan for making QueryLake easier to install, use, package, and extend for developers and researchers.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers, SDK owners, developer-experience contributors |
+| Use this when | Use this when you need the scope, phase breakdown, and remaining closeout work for the current DX overhaul. |
+| Prerequisites | General familiarity with QueryLake setup pain points, SDK work, and docs/release goals. |
+| Related docs | [`DEVELOPER_SETUP.md`](DEVELOPER_SETUP.md), [`../sdk/SDK_QUICKSTART.md`](../sdk/SDK_QUICKSTART.md), [`../README.md`](../README.md) |
+| Status | 🟡 active plan with minor closeout items |
 
 ## Goals
 

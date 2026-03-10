@@ -1,5 +1,18 @@
 # QueryLake SDK API Reference (Python)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+
+Method-level reference for the Python SDK and CLI command surface.
+
+| Field | Value |
+|---|---|
+| Audience | SDK users, maintainers, and developers writing integration code |
+| Use this when | Use this when you already know the basic workflow and need method names, return-shape expectations, or CLI coverage details. |
+| Prerequisites | Familiarity with the SDK quickstart and core QueryLake auth/search concepts. |
+| Related docs | [`SDK_QUICKSTART.md`](SDK_QUICKSTART.md), [`BULK_INGEST_REFERENCE.md`](BULK_INGEST_REFERENCE.md) |
+| Status | 🟢 maintained reference |
+
 ## Client classes
 
 | Class | Use case |

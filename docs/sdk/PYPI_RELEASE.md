@@ -1,5 +1,19 @@
 # PyPI Release Runbook (querylake-sdk)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![SDK Publish Dry-Run](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml)
+
+Runbook for publishing `querylake-sdk` from this repository to TestPyPI or PyPI.
+
+| Field | Value |
+|---|---|
+| Audience | Release managers and maintainers publishing the SDK |
+| Use this when | Use this when bumping versions, validating release readiness, or performing an actual publish. |
+| Prerequisites | A green SDK CI state and familiarity with the guarded publish workflows. |
+| Related docs | [`CI_PROFILES.md`](CI_PROFILES.md), [`TESTPYPI_DRYRUN.md`](TESTPYPI_DRYRUN.md) |
+| Status | 🟢 maintained release runbook |
+
 This runbook publishes the standalone Python SDK located at `sdk/python`.
 
 For CI profile definitions (light matrix, release guard, local parity), see:

@@ -1,5 +1,18 @@
 # Billing / Usage Accounting (Draft)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Usage-accounting and optional billing notes for keeping QueryLake private-first while preserving future ledger/billing hooks.
+
+| Field | Value |
+|---|---|
+| Audience | Backend/platform maintainers, operators, future billing/usage owners |
+| Use this when | Use this when you need to understand what request-level usage data should be captured now so billing can remain optional later. |
+| Prerequisites | Basic familiarity with QueryLake inference/retrieval request paths and logging. |
+| Related docs | [`observability_v1.md`](observability_v1.md), [`program_control.md`](program_control.md) |
+| Status | 🔵 draft future-proofing note |
+
 ## Goals
 - Private-first, billing optional
 - Usage accounting consistent across providers

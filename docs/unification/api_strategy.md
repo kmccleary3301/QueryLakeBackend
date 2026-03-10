@@ -1,5 +1,18 @@
 # API Strategy (Draft)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Current route and compatibility strategy for preserving stable ingress while the internal kernel surface evolves.
+
+| Field | Value |
+|---|---|
+| Audience | Backend maintainers, API surface owners, SDK/runtime integrators |
+| Use this when | Use this when you are changing public routes, adding v2 kernel/plugin prefixes, or deciding whether a legacy endpoint should freeze or move. |
+| Prerequisites | Familiarity with current QueryLake HTTP routes and the repo-level unification effort. |
+| Related docs | [`route_prefixes.md`](route_prefixes.md), [`repo_migration.md`](repo_migration.md), [`../sdk/API_REFERENCE.md`](../sdk/API_REFERENCE.md) |
+| Status | 🔵 draft strategy note |
+
 ## Decision
 - Freeze legacy endpoints where practical.
 - Provide compatibility shims for new ingress routes.

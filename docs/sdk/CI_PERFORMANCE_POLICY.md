@@ -1,5 +1,19 @@
 # CI Performance Policy (SDK + Core Workflows)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![CI Runtime Profiler](https://github.com/kmccleary3301/QueryLake/actions/workflows/ci_runtime_profiler.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/ci_runtime_profiler.yml)
+
+Governance policy for CI runtime, cost, and regression thresholds across SDK-adjacent workflows.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers and CI/operators responsible for keeping validation useful without wasting runner time |
+| Use this when | Use this when adding CI steps, evaluating runtime regressions, or reviewing workflow cost/performance drift. |
+| Prerequisites | Familiarity with the SDK CI profiles and the GitHub Actions workflow set. |
+| Related docs | [`CI_PROFILES.md`](CI_PROFILES.md) |
+| Status | 🟢 maintained policy document |
+
 This document defines how QueryLake measures and governs CI runtime/cost for SDK and related workflows.
 
 ## Scope

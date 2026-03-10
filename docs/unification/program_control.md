@@ -1,5 +1,18 @@
 # Unification Program Control
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Owner, cadence, escalation, and release-gating control surface for the broader unification program.
+
+| Field | Value |
+|---|---|
+| Audience | Project leads, release maintainers, downstream integration owners |
+| Use this when | Use this when deciding who owns a unification decision, what gates must pass, or how issues should escalate. |
+| Prerequisites | Awareness of the unification workstream and downstream repo dependencies. |
+| Related docs | [`compat_matrix.md`](compat_matrix.md), [`repo_pinning_playbook.md`](repo_pinning_playbook.md), [`unification_done_bar.md`](unification_done_bar.md) |
+| Status | 🟢 active control document |
+
 ## Owner + Cadence
 - Owner: QueryLake lead (designated by project lead)
 - Cadence: weekly sync + monthly milestone review

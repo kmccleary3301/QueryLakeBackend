@@ -1,5 +1,19 @@
 # Repository Migration: Frontend Rename + Monorepo Import
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+[![Legacy Path Guard](https://github.com/kmccleary3301/QueryLake/actions/workflows/legacy_path_guard.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/legacy_path_guard.yml)
+
+Canonical record of the frontend rename, monorepo import, and local path naming transition to the `QueryLake` repo identity.
+
+| Field | Value |
+|---|---|
+| Audience | Contributors, release maintainers, downstream repo maintainers |
+| Use this when | Use this when you need the definitive repo-name/path history or need to explain why `QueryLake` is the canonical monorepo. |
+| Prerequisites | Basic familiarity with the old `QueryLakeBackend` / `QueryLakeStudio` split. |
+| Related docs | [`symlink_retirement_runbook.md`](symlink_retirement_runbook.md), [`repo_pinning_playbook.md`](repo_pinning_playbook.md), [`../setup/DEVELOPER_SETUP.md`](../setup/DEVELOPER_SETUP.md) |
+| Status | 🟢 active migration record |
+
 ## Summary
 
 This migration consolidates QueryLake development around the backend repository while preserving frontend history.

@@ -1,5 +1,18 @@
 # Repo Pinning Playbook
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Operational playbook for keeping QueryLake and downstream repos aligned by commit-pinned compatibility checks instead of a forced monorepo.
+
+| Field | Value |
+|---|---|
+| Audience | Release maintainers, CI owners, downstream integration maintainers |
+| Use this when | Use this when updating downstream pins or validating that a QueryLake change remains compatible with Breadboard and Hermes. |
+| Prerequisites | Access to downstream repos and the compatibility matrix. |
+| Related docs | [`compat_matrix.md`](compat_matrix.md), [`program_control.md`](program_control.md), [`symlink_retirement_runbook.md`](symlink_retirement_runbook.md) |
+| Status | 🟢 active playbook |
+
 ## Goal
 Keep QueryLake, BreadBoard, and Hermes aligned without forcing a monorepo.
 

@@ -1,5 +1,18 @@
 # Hermes Redis Integration (Draft)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Redis-backed Hermes queue and retry model notes for the QueryLake/Hermes integration boundary.
+
+| Field | Value |
+|---|---|
+| Audience | Hermes maintainers, infra operators, backend integrators |
+| Use this when | Use this when you are validating Hermes job persistence, retry behavior, or shared Redis deployment expectations. |
+| Prerequisites | Basic familiarity with Hermes crawl jobs and QueryLake Redis-backed components. |
+| Related docs | [`observability_v1.md`](observability_v1.md), [`node_cloud_plan.md`](node_cloud_plan.md), [`program_control.md`](program_control.md) |
+| Status | 🔵 draft integration note |
+
 ## Goals
 - Reliable crawl job persistence
 - Distributed queues for workers

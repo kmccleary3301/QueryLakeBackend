@@ -1,5 +1,19 @@
 # QueryLake RAG Research Playbook
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![Retrieval Eval](https://github.com/kmccleary3301/QueryLake/actions/workflows/retrieval_eval.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/retrieval_eval.yml)
+
+Practical playbook for running repeatable RAG and retrieval experiments with QueryLake.
+
+| Field | Value |
+|---|---|
+| Audience | Retrieval researchers, search engineers, and backend developers tuning ingest/search behavior |
+| Use this when | Use this when you are sweeping ingest profiles, comparing lane mixes, or validating retrieval controls against a stable corpus. |
+| Prerequisites | SDK/CLI familiarity and a backend with retrieval surfaces enabled. |
+| Related docs | [`BULK_INGEST_REFERENCE.md`](BULK_INGEST_REFERENCE.md), [`API_REFERENCE.md`](API_REFERENCE.md) |
+| Status | 🟢 maintained research playbook |
+
 This guide is a practical reference for running repeatable RAG experiments with QueryLake.
 
 It is designed for:

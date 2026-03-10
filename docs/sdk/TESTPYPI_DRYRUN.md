@@ -1,5 +1,19 @@
 # TestPyPI Dry-Run Publish Runbook
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![SDK Publish Dry-Run](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml)
+
+Runbook for guarded TestPyPI rehearsal publishes of `querylake-sdk`.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers validating the publish path before a real release |
+| Use this when | Use this when you want full release-path verification without touching production PyPI. |
+| Prerequisites | Working GitHub Actions trusted publisher wiring and a valid SDK version baseline. |
+| Related docs | [`PYPI_RELEASE.md`](PYPI_RELEASE.md), [`CI_PROFILES.md`](CI_PROFILES.md) |
+| Status | 🟢 maintained dry-run runbook |
+
 This runbook covers guarded dry-run publishing of `querylake-sdk` to TestPyPI.
 
 ## Purpose

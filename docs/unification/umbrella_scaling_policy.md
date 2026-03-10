@@ -1,5 +1,18 @@
 # Umbrella Scaling Policy (Draft)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Autoscaling and placement guidance for the Umbrella/control-plane layer so it does not starve inference workloads.
+
+| Field | Value |
+|---|---|
+| Audience | Infra owners, runtime maintainers, performance reviewers |
+| Use this when | Use this when tuning Serve replicas, queue limits, placement, or rollback settings for the Umbrella layer. |
+| Prerequisites | Familiarity with Ray Serve deployment shape and current QueryLake runtime topology. |
+| Related docs | [`node_cloud_plan.md`](node_cloud_plan.md), [`observability_v1.md`](observability_v1.md), [`program_control.md`](program_control.md) |
+| Status | 🔵 draft scaling policy |
+
 ## Goals
 - Support multi‑replica Umbrella deployments without starving GPU workloads.
 - Preserve VRAM‑aware scheduling and avoid overcommit.

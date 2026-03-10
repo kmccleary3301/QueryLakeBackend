@@ -1,5 +1,18 @@
 # QueryLake SDK Quickstart
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+
+Fastest path from zero to a working QueryLake SDK workflow.
+
+| Field | Value |
+|---|---|
+| Audience | SDK consumers, backend evaluators, first-time QueryLake users |
+| Use this when | Use this when you want to prove local auth, upload, and hybrid search work before reading deeper reference docs. |
+| Prerequisites | A reachable QueryLake backend and credentials for a local or staging environment. |
+| Related docs | [`API_REFERENCE.md`](API_REFERENCE.md), [`RAG_RESEARCH_PLAYBOOK.md`](RAG_RESEARCH_PLAYBOOK.md), [`BULK_INGEST_REFERENCE.md`](BULK_INGEST_REFERENCE.md) |
+| Status | 🟢 maintained quickstart |
+
 This guide is the fastest way to go from zero to a working QueryLake RAG workflow.
 
 For contributors validating packaging quality locally, run:

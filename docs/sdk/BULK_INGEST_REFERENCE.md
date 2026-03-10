@@ -1,5 +1,18 @@
 # QueryLake Bulk Ingest Reference
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+
+Reference for repeatable large-scale ingestion through the CLI and Python SDK.
+
+| Field | Value |
+|---|---|
+| Audience | RAG researchers, operators, and engineers ingesting non-trivial corpora |
+| Use this when | Use this when you need selection artifacts, dry-run planning, checkpoints, resumable uploads, and dedupe/idempotency controls. |
+| Prerequisites | A working QueryLake environment and familiarity with the basic `rag upload` / collection workflow. |
+| Related docs | [`SDK_QUICKSTART.md`](SDK_QUICKSTART.md), [`RAG_RESEARCH_PLAYBOOK.md`](RAG_RESEARCH_PLAYBOOK.md) |
+| Status | 🟢 maintained operational reference |
+
 This reference covers the two standardized bulk-ingest paths:
 
 - CLI: `querylake rag upload-dir`

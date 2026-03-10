@@ -1,5 +1,19 @@
 # Legacy Path Symlink Retirement Runbook
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+[![Legacy Path Guard](https://github.com/kmccleary3301/QueryLake/actions/workflows/legacy_path_guard.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/legacy_path_guard.yml)
+
+Safe retirement process for the deprecated local `QueryLakeBackend` compatibility alias while preserving rollback clarity.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers, CI owners, local environment operators |
+| Use this when | Use this when checking retirement criteria, dated checkpoints, cutover steps, or rollback commands for the legacy local symlink. |
+| Prerequisites | Awareness of the repo/path migration and the current shared-host setup. |
+| Related docs | [`repo_migration.md`](repo_migration.md), [`repo_pinning_playbook.md`](repo_pinning_playbook.md), [`../setup/DEVELOPER_SETUP.md`](../setup/DEVELOPER_SETUP.md) |
+| Status | 🟢 active runbook |
+
 ## Purpose
 
 Define a safe, explicit process to retire the legacy local path alias:

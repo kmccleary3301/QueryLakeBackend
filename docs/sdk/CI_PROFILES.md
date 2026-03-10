@@ -1,5 +1,19 @@
 # SDK CI Profiles and Publish Policy
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![SDK Publish Dry-Run](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_publish_dryrun.yml)
+
+Defines the standard CI profiles, guardrails, and release policy for `querylake-sdk`.
+
+| Field | Value |
+|---|---|
+| Audience | Maintainers, release managers, and engineers modifying CI or publish policy |
+| Use this when | Use this when changing SDK CI, release requirements, branch policy, or runtime/cost governance. |
+| Prerequisites | Basic familiarity with the SDK package layout and GitHub Actions workflows. |
+| Related docs | [`PYPI_RELEASE.md`](PYPI_RELEASE.md), [`TESTPYPI_DRYRUN.md`](TESTPYPI_DRYRUN.md), [`CI_PERFORMANCE_POLICY.md`](CI_PERFORMANCE_POLICY.md) |
+| Status | 🟢 maintained policy document |
+
 This document defines the standard CI profiles and release guardrails for `querylake-sdk`.
 
 ## CI profiles

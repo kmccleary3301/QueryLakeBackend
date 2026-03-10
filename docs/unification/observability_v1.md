@@ -1,5 +1,18 @@
 # Observability v1 (Draft)
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Baseline metrics, logs, events, dashboards, and alerts expected for the first unification release.
+
+| Field | Value |
+|---|---|
+| Audience | Operators, infra owners, backend maintainers |
+| Use this when | Use this when instrumenting HTTP/runtime paths or checking what the minimum supported observability surface should be. |
+| Prerequisites | Familiarity with QueryLake request handling, runtime events, and deployment operations. |
+| Related docs | [`billing_future_proofing.md`](billing_future_proofing.md), [`umbrella_scaling_policy.md`](umbrella_scaling_policy.md), [`program_control.md`](program_control.md) |
+| Status | 🔵 draft observability baseline |
+
 ## Metrics
 - requests_total{route,status}
 - request_latency_seconds_bucket{route}

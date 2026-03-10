@@ -1,6 +1,18 @@
 # QueryLake Developer Setup
 
-This setup path is optimized for backend contributors and RAG researchers.
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![SDK Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/sdk_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Canonical local setup path for backend contributors and RAG researchers working inside the monorepo.
+
+| Field | Value |
+|---|---|
+| Audience | Backend contributors, local operators, RAG researchers, SDK contributors |
+| Use this when | Use this when bringing up QueryLake locally, bootstrapping Docker dependencies, or validating local SDK/backend workflows. |
+| Prerequisites | Python 3.12, `uv`, Docker, and access to this repository. |
+| Related docs | [`DEVELOPER_EXPERIENCE_PLAN.md`](DEVELOPER_EXPERIENCE_PLAN.md), [`../sdk/SDK_QUICKSTART.md`](../sdk/SDK_QUICKSTART.md), [`../unification/symlink_retirement_runbook.md`](../unification/symlink_retirement_runbook.md) |
+| Status | 🟢 maintained setup guide |
 
 ## Prerequisites
 

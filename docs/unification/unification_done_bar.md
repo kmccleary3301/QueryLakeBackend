@@ -1,5 +1,18 @@
 # Unification Done Bar
 
+[![Docs Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/docs_checks.yml)
+[![Unification Checks](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml/badge.svg)](https://github.com/kmccleary3301/QueryLake/actions/workflows/unification_checks.yml)
+
+Milestone bar and completion criteria for the v1 unification release.
+
+| Field | Value |
+|---|---|
+| Audience | Project leads, release maintainers, downstream integration owners |
+| Use this when | Use this when checking what counts as 75 percent complete vs the actual v1 done bar. |
+| Prerequisites | General awareness of the unification program workstreams. |
+| Related docs | [`program_control.md`](program_control.md), [`compat_matrix.md`](compat_matrix.md), [`repo_pinning_playbook.md`](repo_pinning_playbook.md) |
+| Status | 🟢 active status tracker |
+
 ## 75% Milestone (foundation complete)
 - Contract docs A–F updated with schemas + semantics
 - API strategy + v2 compatibility shims present
